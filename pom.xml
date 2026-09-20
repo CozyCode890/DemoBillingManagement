@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ===================================================================
+   pom.xml -- KHÔNG BẮT BUỘC.
+  ===================================================================
+   Project này chạy được bằng javac thuần (xem run.ps1). File này chỉ
+   dành cho bạn nào muốn mở bằng IntelliJ IDEA / Eclipse / NetBeans:
+   IDE sẽ tự tải driver MySQL về, không cần chạy setup.ps1.
+
+   Mở IntelliJ -> File -> Open -> chọn thư mục này -> nó nhận ra pom.xml.
+   Sau đó chạy lớp billing.Main.
+
+   Lưu ý: tôi để <sourceDirectory>src</sourceDirectory> vì project dùng
+   cấu trúc thư mục đơn giản, không theo chuẩn src/main/java của Maven.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.demo</groupId>
+    <artifactId>retail-billing</artifactId>
+    <version>1.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- Driver JDBC cho MySQL: cầu nối giữa Java và MySQL -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.4.0</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <sourceDirectory>src</sourceDirectory>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>billing.Main</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

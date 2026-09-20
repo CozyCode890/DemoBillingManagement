@@ -1,0 +1,27 @@
+# Ket qua bien dich -- sinh lai duoc bang run.ps1
+out/
+*.class
+target/
+
+# Driver JDBC -- 2.4 MB, tai lai duoc bang setup.ps1
+lib/*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+nbproject/
+
+# He dieu hanh
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# LUU Y: config.properties duoc commit vi day la project hoc tap va
+# mat khau chi la 'root' tren database localhost.
+# Trong du an that, KHONG BAO GIO commit file chua mat khau --
+# hay bo dong duoi day vao .gitignore va commit config.properties.example:
+# config.properties
