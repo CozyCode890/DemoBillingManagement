@@ -138,6 +138,7 @@ Mọi câu lệnh app đã gửi xuống MySQL, kèm thời gian chạy và số
 | 1 | [docs/01-NORMALIZATION.md](docs/01-NORMALIZATION.md) | **Chuẩn hóa là cái gì** — giải thích từ đầu bằng chính schema này |
 | 2 | [docs/02-JDBC.md](docs/02-JDBC.md) | **Java nói chuyện với MySQL ra sao** — 6 bước JDBC, PreparedStatement, transaction, BigDecimal |
 | 3 | [docs/03-SCHEMA.md](docs/03-SCHEMA.md) | Giải thích từng bảng và 3 điểm khó của đề bài |
+| 4 | [docs/04-CODE-LEARNING-GUIDE.md](docs/04-CODE-LEARNING-GUIDE.md) | **Hướng dẫn học code toàn diện (Frontend & Backend)** — Flow đọc code, cạm bẫy, đường vòng và đối chiếu Spring/React |
 
 ---
 
@@ -174,7 +175,7 @@ DemoBillingManagement/
 │   ├── 02_seed.sql         <- dữ liệu mẫu (ngày tháng tự tính theo hôm nay)
 │   └── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
 │
-├── docs/                   <- 3 tài liệu giải thích
+├── docs/                   <- 4 tài liệu giải thích
 │
 └── src/billing/
     ├── Main.java           <- điểm khởi động
