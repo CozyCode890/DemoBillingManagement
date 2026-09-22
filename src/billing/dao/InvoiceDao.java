@@ -198,6 +198,115 @@ public class InvoiceDao {
     public QueryResult invoiceReturns(String invoiceId) {
         return QueryResult.call("{call sp_get_invoice_returns(?)}", invoiceId);
     }
-}
 
+
+    // =================================================================
+    //  PHẦN 3 -- THAO TÁC SỬA / XÓA TRỰC TIẾP TRONG DATABASE (DAO)
+    //  (Lưu ý: Không kiểm tra quyền ở đây, quyền được kiểm soát tại UI)
+    // =================================================================
+
+    /**
+     * Xóa hoàn toàn một hóa đơn và toàn bộ dữ liệu phụ thuộc trong database.
+     * Sử dụng thủ tục sp_delete_invoice().
+     */
+    public void deleteInvoice(String invoiceId) {
+        String sql = "{call sp_delete_invoice(?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.setString(1, invoiceId);
+            cs.executeUpdate();
+
+            SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 1);
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Loi khi xoa hoa don " + invoiceId + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Cập nhật thông tin phần đầu hóa đơn (Header).
+     * Sử dụng thủ tục sp_update_invoice_header().
+     */
+    public void updateInvoiceHeader(String invoiceId, LocalDate date, LocalTime time,
+                                    String status, String counterId, String cashierId, String customerId) {
+        String sql = "{call sp_update_invoice_header(?, ?, ?, ?, ?, ?, ?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.setString(1, invoiceId);
+            cs.setDate(2, Date.valueOf(date));
+            cs.setTime(3, Time.valueOf(time));
+            cs.setString(4, status);
+            cs.setString(5, counterId);
+            cs.setString(6, cashierId);
+            if (customerId == null || customerId.trim().isEmpty()) {
+                cs.setNull(7, Types.VARCHAR);
+            } else {
+                cs.setString(7, customerId.trim());
+            }
+
+            cs.executeUpdate();
+            SqlLog.add(sql, new Object[]{invoiceId, date, time, status, counterId, cashierId, customerId},
+                       System.currentTimeMillis() - t0, 1);
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Loi khi cap nhat hoa don " + invoiceId + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Cập nhật một dòng hàng trong hóa đơn.
+     * Sử dụng thủ tục sp_update_invoice_line().
+     */
+    public void updateInvoiceLine(String invoiceId, int lineNumber, String barcode,
+                                  BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount) {
+        String sql = "{call sp_update_invoice_line(?, ?, ?, ?, ?, ?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.setString(1, invoiceId);
+            cs.setInt(2, lineNumber);
+            cs.setString(3, barcode);
+            cs.setBigDecimal(4, quantity);
+            cs.setBigDecimal(5, unitPrice);
+            cs.setBigDecimal(6, discount);
+
+            cs.executeUpdate();
+            SqlLog.add(sql, new Object[]{invoiceId, lineNumber, barcode, quantity, unitPrice, discount},
+                       System.currentTimeMillis() - t0, 1);
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Loi khi cap nhat dong hang " + lineNumber + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Xóa một dòng hàng trong hóa đơn.
+     * Sử dụng thủ tục sp_delete_invoice_line().
+     */
+    public void deleteInvoiceLine(String invoiceId, int lineNumber) {
+        String sql = "{call sp_delete_invoice_line(?, ?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.setString(1, invoiceId);
+            cs.setInt(2, lineNumber);
+
+            cs.executeUpdate();
+            SqlLog.add(sql, new Object[]{invoiceId, lineNumber}, System.currentTimeMillis() - t0, 1);
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Loi khi xoa dong hang " + lineNumber + ": " + e.getMessage(), e);
+        }
+    }
+}
 

@@ -248,7 +248,16 @@ INSERT INTO EWallet_Payment (Payment_ID, Wallet_provider, Transaction_Ref) VALUE
 ('PAY-0015', 'MoMo',     'MOMO-TXN-000004');
 
 
+-- ---------------------------------------------------------------------
+-- Tài khoản đăng nhập mặc định: cashier và manager
+-- ---------------------------------------------------------------------
+INSERT INTO Account (Username, Password, Role, Full_Name) VALUES
+('cashier', 'cashier', 'cashier', 'Nhan Vien Thu Ngan'),
+('manager', 'manager', 'manager', 'Quan Ly He Thong');
+
+
 SELECT 'Da nap du lieu mau!' AS ket_qua,
        (SELECT COUNT(*) FROM Invoice)      AS so_hoa_don,
        (SELECT COUNT(*) FROM Invoice_Line) AS so_dong,
-       (SELECT COUNT(*) FROM Product)      AS so_san_pham;
+       (SELECT COUNT(*) FROM Product)      AS so_san_pham,
+       (SELECT COUNT(*) FROM Account)      AS so_tai_khoan;

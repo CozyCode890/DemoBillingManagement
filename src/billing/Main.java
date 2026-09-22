@@ -1,6 +1,7 @@
 package billing;
 
 import billing.db.Db;
+import billing.ui.LoginDialog;
 import billing.ui.MainWindow;
 
 import javax.swing.*;
@@ -11,6 +12,7 @@ import javax.swing.*;
  * ====================================================================
  *  Việc đầu tiên: thử kết nối MySQL. Nếu hỏng thì báo lỗi rõ ràng ngay
  *  thay vì để app mở ra rồi mỗi nút bấm lại văng một exception khó hiểu.
+ *  Sau khi kết nối thành công: Hiển thị màn hình Đăng nhập (LoginDialog).
  */
 public class Main {
 
@@ -41,7 +43,16 @@ public class Main {
             return;
         }
 
-        // Swing yêu cầu mọi thao tác giao diện chạy trên "Event Dispatch Thread".
-        SwingUtilities.invokeLater(() -> new MainWindow().setVisible(true));
+        // Mở màn hình Đăng nhập trước khi vào Cửa sổ chính
+        SwingUtilities.invokeLater(() -> {
+            LoginDialog login = new LoginDialog(null);
+            login.setVisible(true);
+
+            // Chỉ mở MainWindow khi đăng nhập thành công
+            if (login.isSucceeded()) {
+                new MainWindow().setVisible(true);
+            }
+        });
     }
 }
+

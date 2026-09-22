@@ -41,6 +41,12 @@ DROP PROCEDURE IF EXISTS sp_create_invoice_header;
 DROP PROCEDURE IF EXISTS sp_add_invoice_line;
 DROP PROCEDURE IF EXISTS sp_add_payment;
 
+DROP PROCEDURE IF EXISTS sp_authenticate_account;
+DROP PROCEDURE IF EXISTS sp_delete_invoice;
+DROP PROCEDURE IF EXISTS sp_update_invoice_header;
+DROP PROCEDURE IF EXISTS sp_update_invoice_line;
+DROP PROCEDURE IF EXISTS sp_delete_invoice_line;
+
 DELIMITER $$
 
 -- =====================================================================
@@ -508,6 +514,134 @@ BEGIN
     END IF;
 END$$
 
+
+-- =====================================================================
+-- PHẦN 5: THỦ TỤC XÁC THỰC TÀI KHOẢN & SỬA/XÓA TRỰC TIẾP DATABASE
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 5.1 sp_authenticate_account: Kiểm tra đăng nhập
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_authenticate_account(
+    IN p_username VARCHAR(50),
+    IN p_password VARCHAR(100)
+)
+BEGIN
+    SELECT Username, Role, Full_Name
+    FROM   Account
+    WHERE  Username = p_username
+      AND  Password = p_password;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 5.2 sp_delete_invoice: Xóa an toàn hóa đơn và các quan hệ khóa ngoại
+--     Thứ tự xóa bắt buộc theo quan hệ cha - con:
+--     1. Return (bảng con của Invoice_Line)
+--     2. Cash_Payment / Card_Payment / EWallet_Payment (bảng con của Payment)
+--     3. Payment (bảng con của Invoice)
+--     4. Invoice_Line (bảng con của Invoice)
+--     5. Invoice (bảng cha)
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_delete_invoice(
+    IN p_invoice_id VARCHAR(30)
+)
+BEGIN
+    -- 1. Xóa các lượt trả hàng thuộc các dòng của hóa đơn này
+    DELETE FROM `Return`
+    WHERE Invoice_ID = p_invoice_id;
+
+    -- 2. Xóa các chi tiết phương thức thanh toán bảng con
+    DELETE FROM Cash_Payment
+    WHERE Payment_ID IN (SELECT Payment_ID FROM Payment WHERE Invoice_ID = p_invoice_id);
+
+    DELETE FROM Card_Payment
+    WHERE Payment_ID IN (SELECT Payment_ID FROM Payment WHERE Invoice_ID = p_invoice_id);
+
+    DELETE FROM EWallet_Payment
+    WHERE Payment_ID IN (SELECT Payment_ID FROM Payment WHERE Invoice_ID = p_invoice_id);
+
+    -- 3. Xóa các lượt thanh toán chính
+    DELETE FROM Payment
+    WHERE Invoice_ID = p_invoice_id;
+
+    -- 4. Xóa các dòng hàng
+    DELETE FROM Invoice_Line
+    WHERE Invoice_ID = p_invoice_id;
+
+    -- 5. Xóa phần đầu hóa đơn
+    DELETE FROM Invoice
+    WHERE Invoice_ID = p_invoice_id;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 5.3 sp_update_invoice_header: Chỉnh sửa thông tin chung của hóa đơn
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_update_invoice_header(
+    IN p_invoice_id  VARCHAR(30),
+    IN p_date        DATE,
+    IN p_time        TIME,
+    IN p_status      ENUM('OPEN','PAID','VOIDED'),
+    IN p_counter_id  VARCHAR(10),
+    IN p_cashier_id  VARCHAR(10),
+    IN p_customer_id VARCHAR(15)
+)
+BEGIN
+    UPDATE Invoice
+    SET    `Date`      = p_date,
+           `Time`      = p_time,
+           Status      = p_status,
+           Counter_ID  = p_counter_id,
+           Cashier_ID  = p_cashier_id,
+           Customer_ID = p_customer_id
+    WHERE  Invoice_ID  = p_invoice_id;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 5.4 sp_update_invoice_line: Chỉnh sửa dòng hàng trong hóa đơn
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_update_invoice_line(
+    IN p_invoice_id  VARCHAR(30),
+    IN p_line_number INT,
+    IN p_barcode     VARCHAR(20),
+    IN p_quantity    DECIMAL(10,3),
+    IN p_unit_price  DECIMAL(12,2),
+    IN p_discount    DECIMAL(12,2)
+)
+BEGIN
+    UPDATE Invoice_Line
+    SET    Barcode    = p_barcode,
+           Quantity   = p_quantity,
+           Unit_Price = p_unit_price,
+           Discount   = p_discount
+    WHERE  Invoice_ID  = p_invoice_id
+      AND  Line_Number = p_line_number;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 5.5 sp_delete_invoice_line: Xóa 1 dòng hàng cụ thể trong hóa đơn
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_delete_invoice_line(
+    IN p_invoice_id  VARCHAR(30),
+    IN p_line_number INT
+)
+BEGIN
+    -- Xóa lượt trả hàng tham chiếu đến dòng này nếu có
+    DELETE FROM `Return`
+    WHERE Invoice_ID = p_invoice_id
+      AND Line_Number = p_line_number;
+
+    -- Xóa dòng hàng
+    DELETE FROM Invoice_Line
+    WHERE Invoice_ID = p_invoice_id
+      AND Line_Number = p_line_number;
+END$$
+
+
 DELIMITER ;
 
 SELECT 'Cac ham va thu tuc SQL (04_routines.sql) da tao thanh cong!' AS ket_qua;
+

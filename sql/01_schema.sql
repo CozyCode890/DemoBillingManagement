@@ -243,4 +243,16 @@ CREATE TABLE EWallet_Payment (
 ) ENGINE=InnoDB;
 
 
-SELECT 'Schema da tao xong! 15 bang.' AS ket_qua;
+-- ---------------------------------------------------------------------
+-- 16. Account -- Bảng lưu tài khoản người dùng và phân quyền hệ thống
+-- ---------------------------------------------------------------------
+CREATE TABLE Account (
+    Username   VARCHAR(50)  NOT NULL,
+    Password   VARCHAR(100) NOT NULL,
+    Role       ENUM('cashier', 'manager') NOT NULL,
+    Full_Name  VARCHAR(100) NULL,
+    PRIMARY KEY (Username)
+) ENGINE=InnoDB;
+
+
+SELECT 'Schema da tao xong! 16 bang (bao gom Account).' AS ket_qua;
