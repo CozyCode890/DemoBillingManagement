@@ -173,15 +173,16 @@ DemoBillingManagement/
 ├── sql/
 │   ├── 01_schema.sql       <- 15 bảng, có comment từng bảng
 │   ├── 02_seed.sql         <- dữ liệu mẫu (ngày tháng tự tính theo hôm nay)
-│   └── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
+│   ├── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
+│   └── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
 │
-├── docs/                   <- 4 tài liệu giải thích
+├── docs/                   <- 5 tài liệu giải thích (có quy chuẩn chung Java & SQL)
 │
 └── src/billing/
     ├── Main.java           <- điểm khởi động
-    ├── db/                 <- tầng kết nối: Db, QueryResult, SqlLog
+    ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
     ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
-    ├── dao/                <- MỌI CÂU SQL nằm ở đây
+    ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
     └── ui/                 <- giao diện Swing, không có SQL
 ```
 

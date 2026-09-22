@@ -54,8 +54,9 @@ function Invoke-SqlFile($path, $label) {
     }
 }
 
-Invoke-SqlFile '.\sql\01_schema.sql' 'Buoc 1/2: tao 15 bang'
-Invoke-SqlFile '.\sql\02_seed.sql'   'Buoc 2/2: nap du lieu mau'
+Invoke-SqlFile '.\sql\01_schema.sql'   'Buoc 1/3: tao 15 bang'
+Invoke-SqlFile '.\sql\02_seed.sql'     'Buoc 2/3: nap du lieu mau'
+Invoke-SqlFile '.\sql\04_routines.sql' 'Buoc 3/3: tao cac ham va thu tuc SQL'
 
 $env:MYSQL_PWD = $null
 

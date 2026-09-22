@@ -289,3 +289,4 @@ Lợi ích:
 
 - [01-NORMALIZATION.md](01-NORMALIZATION.md) — vì sao database lại chia nhiều bảng như vậy
 - [03-SCHEMA.md](03-SCHEMA.md) — giải thích từng bảng
+- [05-SQL-JAVA-CONVENTION.md](05-SQL-JAVA-CONVENTION.md) — quy chuẩn phân chia và giao tiếp giữa Dev Java và Dev SQL

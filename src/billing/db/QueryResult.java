@@ -1,5 +1,6 @@
 package billing.db;
 
+import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -82,6 +83,56 @@ public class QueryResult {
         }
 
         SqlLog.add(sql, params, System.currentTimeMillis() - t0, qr.rows.size());
+        return qr;
+    }
+
+    /**
+     * ================================================================
+     *  call -- Thực thi Stored Procedure bằng CallableStatement
+     * ================================================================
+     *  Đây là cách chuẩn mực để Java Backend gọi các thủ tục do SQL Dev viết.
+     *  Cú pháp chuẩn JDBC:
+     *      "{call sp_ten_thu_tuc()}"  hoặc  "{call sp_ten_thu_tuc(?, ?)}"
+     *
+     *  CallableStatement kế thừa từ PreparedStatement, nhưng chuyên dùng
+     *  cho việc gọi các Procedure/Function đã được biên dịch sẵn trên CSDL.
+     *
+     *  @param callSql câu gọi thủ tục dạng "{call sp_...(?)}" hoặc "CALL sp_...(?)"
+     *  @param params  các tham số IN truyền vào các dấu ?
+     */
+    public static QueryResult call(String callSql, Object... params) {
+        long t0 = System.currentTimeMillis();
+        QueryResult qr = new QueryResult();
+
+        try (Connection conn = Db.getConnection();
+             CallableStatement cs = conn.prepareCall(callSql)) {
+
+            for (int i = 0; i < params.length; i++) {
+                cs.setObject(i + 1, params[i]);
+            }
+
+            try (ResultSet rs = cs.executeQuery()) {
+                ResultSetMetaData md = rs.getMetaData();
+                int n = md.getColumnCount();
+                for (int i = 1; i <= n; i++) {
+                    qr.columns.add(md.getColumnLabel(i));
+                }
+
+                while (rs.next()) {
+                    Object[] row = new Object[n];
+                    for (int i = 1; i <= n; i++) {
+                        row[i - 1] = rs.getObject(i);
+                    }
+                    qr.rows.add(row);
+                }
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Loi goi thu tuc SQL: " + e.getMessage()
+                                     + "\n\nCau lenh:\n" + callSql, e);
+        }
+
+        SqlLog.add(callSql, params, System.currentTimeMillis() - t0, qr.rows.size());
         return qr;
     }
 

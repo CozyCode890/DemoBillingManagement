@@ -12,30 +12,25 @@ import java.util.List;
  */
 public class LookupDao {
 
-    /** Danh sách quầy, kèm địa chỉ cửa hàng (nhờ JOIN sang Shop). */
+    /** Danh sách quầy, kèm địa chỉ cửa hàng (gọi Stored Procedure: sp_lookup_counters). */
     public List<IdName> counters() {
-        QueryResult qr = QueryResult.run(
-                "SELECT c.Counter_ID, CONCAT(s.Shop_ID, ' - ', s.Address) AS Mo_ta " +
-                "FROM   Counter c " +
-                "JOIN   Shop    s ON s.Shop_ID = c.Shop_ID " +
-                "ORDER BY c.Counter_ID");
+        QueryResult qr = QueryResult.call("{call sp_lookup_counters()}");
         return toIdNames(qr);
     }
 
+    /** Danh sách thu ngân (gọi Stored Procedure: sp_lookup_cashiers). */
     public List<IdName> cashiers() {
-        QueryResult qr = QueryResult.run(
-                "SELECT Cashier_ID, Name FROM Cashier ORDER BY Cashier_ID");
+        QueryResult qr = QueryResult.call("{call sp_lookup_cashiers()}");
         return toIdNames(qr);
     }
 
     /**
-     * Danh sách khách hàng. Phần tử đầu tiên là "khách vãng lai"
-     * (id = null) vì cột Customer_ID trên bảng Invoice cho phép NULL.
+     * Danh sách khách hàng (gọi Stored Procedure: sp_lookup_customers).
+     * Phần tử đầu tiên là "khách vãng lai" (id = null) vì cột Customer_ID
+     * trên bảng Invoice cho phép NULL.
      */
     public List<IdName> customers() {
-        QueryResult qr = QueryResult.run(
-                "SELECT Customer_ID, CONCAT(Name, ' - ', Phone) AS Mo_ta " +
-                "FROM   Customer ORDER BY Customer_ID");
+        QueryResult qr = QueryResult.call("{call sp_lookup_customers()}");
         List<IdName> list = new ArrayList<>();
         list.add(new IdName(null, "(khach vang lai - khong luu)"));
         list.addAll(toIdNames(qr));
