@@ -10,25 +10,26 @@ Không Maven, không Spring, không Hibernate — chỉ `javac`, `java` và JDBC
 
 ## Chạy app
 
-**Mọi thứ đã được cài và kiểm thử sẵn trên máy bạn.** Mỗi lần muốn dùng app, mở **hai** cửa sổ PowerShell:
+### Cách 1: Dùng GUI Quản Lý Môi Trường (Khuyên dùng - 1 Click)
+- **Trên Windows:** Bấm đúp chuột vào file `Setup.bat` ở thư mục gốc (hoặc `SetupApp.jar`).
+- **Trên macOS:** Bấm đúp chuột vào file `Setup.command` ở thư mục gốc (hoặc chạy `java -jar SetupApp.jar`).
 
-Cửa sổ 1 — bật MySQL (để nguyên, đừng đóng):
+> Giao diện Swing sẽ mở lên ngay lập tức với 3 tab trực quan giúp bạn: Cài đặt môi trường, bật/tắt MySQL Server, biên dịch mã nguồn và quản trị Database chỉ bằng 1 cú click chuột.
 
-```bash
-powershell -ExecutionPolicy Bypass -File .\mysql-start.ps1
-```
+### Cách 2: Dùng dòng lệnh (Terminal)
+- **Trên Windows (PowerShell):**
+  - Cài đặt driver: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\setup.ps1`
+  - Bật MySQL: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\mysql-start.ps1`
+  - Nạp DB: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\sql-create-db.ps1`
+  - Chạy app: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\run.ps1`
+  - Tắt MySQL: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\mysql-stop.ps1`
 
-Cửa sổ 2 — chạy app:
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\run.ps1
-```
-
-Tắt MySQL khi xong:
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\mysql-stop.ps1
-```
+- **Trên macOS / Linux (Bash):**
+  - Cài đặt môi trường (hỗ trợ Homebrew): `./scripts/bash/setup.sh`
+  - Bật MySQL: `./scripts/bash/mysql-start.sh`
+  - Nạp DB: `./scripts/bash/sql-create-db.sh`
+  - Chạy app: `./scripts/bash/run.sh`
+  - Tắt MySQL: `./scripts/bash/mysql-stop.sh`
 
 ### Môi trường đã cài sẵn
 
@@ -163,12 +164,20 @@ Nếu bạn muốn hiểu cơ chế, đọc đúng thứ tự dưới đây, m�
 DemoBillingManagement/
 ├── README.md               <- bạn đang đọc file này
 ├── config.properties       <- sửa mật khẩu MySQL ở đây
-├── mysql-start.ps1         <- bật MySQL (chạy trước khi mở app)
-├── mysql-stop.ps1          <- tắt MySQL
-├── setup.ps1               <- tải driver JDBC
-├── db-setup.ps1            <- tạo lại database + nạp dữ liệu mẫu
-├── run.ps1                 <- biên dịch và chạy app
+├── SetupApp.jar            <- File chạy portable GUI đa nền tảng
+├── Setup.bat               <- Bấm đúp chạy GUI trên Windows
+├── Setup.command           <- Bấm đúp chạy GUI trên macOS
 ├── pom.xml                 <- chỉ cần nếu bạn mở bằng IntelliJ/Eclipse
+│
+├── scripts/                <- Thư mục chứa toàn bộ script vận hành
+│   ├── ps1/                <- Script PowerShell cho Windows
+│   │   ├── setup.ps1, mysql-start.ps1, mysql-stop.ps1
+│   │   ├── run.ps1, billing-stop.ps1, db-setup.ps1
+│   │   └── sql-*.ps1, build-setup.ps1
+│   └── bash/               <- Script Bash cho macOS (Homebrew) & Linux
+│       ├── setup.sh, mysql-start.sh, mysql-stop.sh
+│       ├── run.sh, billing-stop.sh, db-setup.sh
+│       └── sql-*.sh, build-setup.sh
 │
 ├── sql/
 │   ├── 01_schema.sql       <- 15 bảng, có comment từng bảng
@@ -176,10 +185,10 @@ DemoBillingManagement/
 │   ├── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
 │   └── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
 │
-├── docs/                   <- 5 tài liệu giải thích (có quy chuẩn chung Java & SQL)
+├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
 │
 └── src/billing/
-    ├── Main.java           <- điểm khởi động
+    ├── Main.java           <- điểm khởi động ứng dụng bán hàng
     ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
     ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
     ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
@@ -206,12 +215,12 @@ Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`,
 
 | Thông báo | Cách xử lý |
 |---|---|
-| `Communications link failure` | **Lỗi hay gặp nhất.** MySQL chưa bật — chạy `.\mysql-start.ps1` ở cửa sổ khác |
+| `Communications link failure` | **Lỗi hay gặp nhất.** MySQL chưa bật — mở GUI bấm "Chạy SQL Server" hoặc chạy script `mysql-start` |
 | `javac` / `java` không phải lệnh nhận dạng được | Chưa mở lại terminal sau khi cài JDK |
-| `No suitable driver found` | Thiếu jar trong `lib\` — chạy `.\setup.ps1` |
-| `Access denied for user 'root'@'localhost'` | Sai mật khẩu trong `config.properties` (phải là `root`) |
-| `Unknown database 'retail_billing'` | Chưa chạy `.\db-setup.ps1` |
-| App mở ra nhưng bảng trống | Chưa nạp `02_seed.sql` |
+| `No suitable driver found` | Thiếu jar trong `lib\` — chạy script `setup` (hoặc bấm "Cài đặt môi trường" trong GUI) |
+| `Access denied for user 'root'@'localhost'` | Sai mật khẩu trong `config.properties` (mặc định là `root`) |
+| `Unknown database 'retail_billing'` | Chưa chạy script `sql-create-db` / `db-setup` |
+| App mở ra nhưng bảng trống | Chưa nạp `02_seed.sql` (bấm "Tạo dữ liệu mẫu" trong GUI) |
 
 Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
 

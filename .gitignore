@@ -25,3 +25,6 @@ desktop.ini
 # Trong du an that, KHONG BAO GIO commit file chua mat khau --
 # hay bo dong duoi day vao .gitignore va commit config.properties.example:
 # config.properties
+
+# Source code cua setup tool (khong commit len git)
+src/envsetup/

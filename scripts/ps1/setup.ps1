@@ -10,12 +10,13 @@
 # =====================================================================
 
 $ErrorActionPreference = 'Stop'
-Set-Location $PSScriptRoot
+$projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location $projectRoot
 
 $version = '8.4.0'
 $jarName = "mysql-connector-j-$version.jar"
 $url     = "https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/$version/$jarName"
-$dest    = Join-Path $PSScriptRoot "lib\$jarName"
+$dest    = Join-Path $projectRoot "lib\$jarName"
 
 if (-not (Test-Path '.\lib')) { New-Item -ItemType Directory '.\lib' | Out-Null }
 
@@ -48,11 +49,11 @@ if ($mysql) {
     if (Get-Process mysqld -ErrorAction SilentlyContinue) {
         Write-Host "[OK] Server MySQL dang chay." -ForegroundColor Green
     } else {
-        Write-Host "[!!] Server chua chay. Mo cua so khac va chay: .\mysql-start.ps1" -ForegroundColor Yellow
+        Write-Host "[!!] Server chua chay. Chay .\scripts\ps1\mysql-start.ps1 hoac dung Setup.bat" -ForegroundColor Yellow
     }
 } else {
     Write-Host "[!!] Chua thay MySQL. Xem muc 'Cai lai tu dau' trong README.md" -ForegroundColor Yellow
 }
 
 Write-Host ""
-Write-Host "Buoc tiep theo:  .\mysql-start.ps1  ->  .\db-setup.ps1  ->  .\run.ps1" -ForegroundColor Cyan
+Write-Host "Buoc tiep theo:  .\scripts\ps1\mysql-start.ps1  ->  .\scripts\ps1\sql-create-db.ps1  ->  .\scripts\ps1\run.ps1" -ForegroundColor Cyan

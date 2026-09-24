@@ -5,6 +5,10 @@
 #  nốt dữ liệu trong bộ nhớ xuống đĩa trước khi thoát.
 # =====================================================================
 
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location $projectRoot
+
 $base = Join-Path $env:USERPROFILE 'mysql8\mysql-8.0.45-winx64'
 
 if (-not (Get-Process mysqld -ErrorAction SilentlyContinue)) {

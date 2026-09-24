@@ -5,11 +5,12 @@
 #  Nếu bạn đã có database trùng tên thì nó sẽ bị XÓA TRẮNG.
 #  Các database khác trên máy không bị ảnh hưởng.
 #
-#  Yêu cầu: MySQL phải đang chạy (mở cửa sổ khác chạy .\mysql-start.ps1)
+#  Yêu cầu: MySQL phải đang chạy (mở cửa sổ khác chạy .\scripts\ps1\mysql-start.ps1)
 # =====================================================================
 
 $ErrorActionPreference = 'Stop'
-Set-Location $PSScriptRoot
+$projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Set-Location $projectRoot
 
 # --- Tim mysql.exe ----------------------------------------------------
 $candidates = @(
@@ -28,7 +29,7 @@ Write-Host "Dung: $mysql" -ForegroundColor DarkGray
 # --- Kiem tra server da chay chua ------------------------------------
 if (-not (Get-Process mysqld -ErrorAction SilentlyContinue)) {
     Write-Host "MySQL chua chay. Mo mot cua so PowerShell khac va chay:" -ForegroundColor Red
-    Write-Host "    .\mysql-start.ps1" -ForegroundColor Yellow
+    Write-Host "    .\scripts\ps1\mysql-start.ps1" -ForegroundColor Yellow
     exit 1
 }
 
@@ -40,7 +41,6 @@ $pw = Read-Host "Mat khau (Enter = root)"
 if ([string]::IsNullOrWhiteSpace($pw)) { $pw = 'root' }
 
 # Dua mat khau qua bien moi truong MYSQL_PWD thay vi tham so -p<pass>.
-# Ly do: tham so dong lenh hien ra trong Task Manager, bien moi truong thi khong.
 $env:MYSQL_PWD = $pw
 
 function Invoke-SqlFile($path, $label) {
@@ -62,4 +62,4 @@ $env:MYSQL_PWD = $null
 
 Write-Host ""
 Write-Host "[OK] Database 'retail_billing' da san sang." -ForegroundColor Green
-Write-Host "Kiem tra lai dong db.password trong config.properties truoc khi chay .\run.ps1" -ForegroundColor Yellow
+Write-Host "Kiem tra lai dong db.password trong config.properties truoc khi chay .\scripts\ps1\run.ps1" -ForegroundColor Yellow
