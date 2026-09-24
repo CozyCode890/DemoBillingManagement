@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 #  db-setup.ps1 -- tạo database + nạp dữ liệu mẫu
 # ---------------------------------------------------------------------
 #  CẢNH BÁO: file 01_schema.sql bắt đầu bằng DROP DATABASE retail_billing.
@@ -63,3 +63,5 @@ $env:MYSQL_PWD = $null
 Write-Host ""
 Write-Host "[OK] Database 'retail_billing' da san sang." -ForegroundColor Green
 Write-Host "Kiem tra lai dong db.password trong config.properties truoc khi chay .\scripts\ps1\run.ps1" -ForegroundColor Yellow
+
+exit 0

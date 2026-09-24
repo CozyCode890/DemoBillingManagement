@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 #  setup.ps1 -- tải thư viện driver MySQL cho Java (chỉ cần chạy 1 lần)
 # ---------------------------------------------------------------------
 #  Tải về:  mysql-connector-j-8.4.0.jar   (~2.4 MB)
@@ -57,3 +57,5 @@ if ($mysql) {
 
 Write-Host ""
 Write-Host "Buoc tiep theo:  .\scripts\ps1\mysql-start.ps1  ->  .\scripts\ps1\sql-create-db.ps1  ->  .\scripts\ps1\run.ps1" -ForegroundColor Cyan
+
+exit 0

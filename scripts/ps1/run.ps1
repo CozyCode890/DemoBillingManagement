@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 #  run.ps1 -- Biên dịch rồi chạy ứng dụng Java
 # ---------------------------------------------------------------------
 #  Hỗ trợ linh hoạt:
@@ -95,3 +95,4 @@ Write-Host "[OK] Biên dịch xong vào out\" -ForegroundColor Green
 # --- 5. Khởi chạy -----------------------------------------------------
 Write-Host "Đang khởi động app ($mainClass)..." -ForegroundColor Cyan
 & java "-Dfile.encoding=UTF-8" -cp "out;lib\*" $mainClass
+exit $LASTEXITCODE
