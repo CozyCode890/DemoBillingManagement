@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 #  billing-stop.ps1 -- Dừng an toàn tiến trình Java của ứng dụng
 # =====================================================================
 
@@ -34,3 +34,5 @@ if ($procs) {
 } else {
     Write-Host "Khong co tien trinh ung dung nao dang chay." -ForegroundColor DarkGray
 }
+
+exit 0

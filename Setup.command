@@ -4,7 +4,7 @@
 #  Người dùng click đúp vào file này trong Finder để mở GUI Setup App.
 # =====================================================================
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 
 # Nạp môi trường Homebrew (Apple Silicon & Intel)
 if [ -x "/opt/homebrew/bin/brew" ]; then
@@ -20,6 +20,20 @@ if [ -z "$JAVA_HOME" ] && [ -x "/usr/libexec/java_home" ]; then
         export JAVA_HOME="$JH"
         export PATH="$JAVA_HOME/bin:$PATH"
     fi
+fi
+
+if [ ! -f "SetupApp.jar" ]; then
+    echo "[LOI] Khong tim thay SetupApp.jar ben canh Setup.command."
+    echo "      Dong goi lai bang: bash scripts/bash/build-setup.sh"
+    read -r -p "Nhan Enter de dong..." _
+    exit 1
+fi
+
+if ! command -v java >/dev/null 2>&1; then
+    echo "[LOI] Khong tim thay Java tren may nay."
+    echo "      Cai JDK 21 bang: brew install --cask temurin@21"
+    read -r -p "Nhan Enter de dong..." _
+    exit 1
 fi
 
 # Chạy SetupApp.jar

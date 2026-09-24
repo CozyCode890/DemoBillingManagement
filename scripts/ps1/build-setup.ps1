@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $projectRoot
 
@@ -28,3 +28,5 @@ if ($LASTEXITCODE -ne 0) {
 
 Remove-Item -Recurse -Force $outDir
 Write-Host "[OK] Da tao thanh cong SetupApp.jar tai thu muc goc." -ForegroundColor Green
+
+exit 0

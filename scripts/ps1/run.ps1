@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 #  run.ps1 -- Biên dịch rồi chạy ứng dụng Java
 # ---------------------------------------------------------------------
 #  Hỗ trợ linh hoạt:
@@ -80,10 +80,15 @@ if (Test-Path $outDir) {
 
 # Dùng đường dẫn tương đối để tránh lỗi ký tự đặc biệt / dấu tiếng Việt
 $sources = Join-Path $env:TEMP 'billing-sources.txt'
-$javaFiles | ForEach-Object {
+$sourceLines = $javaFiles | ForEach-Object {
     $rel = $_.FullName.Substring($projectRoot.Length).TrimStart('\', '/') -replace '\\', '/'
     "`"$rel`""
-} | Set-Content -Path $sources -Encoding UTF8
+}
+
+# Ghi UTF-8 KHONG BOM: Set-Content -Encoding UTF8 cua Windows PowerShell 5.1
+# them BOM vao dau file, javac doc BOM nhu mot phan cua ten file dau tien
+# roi bao loi: file not found: ?src/billing/Main.java
+[System.IO.File]::WriteAllLines($sources, [string[]]$sourceLines, (New-Object System.Text.UTF8Encoding $false))
 
 & javac -encoding UTF-8 -d out -cp "lib\*" "@$sources"
 if ($LASTEXITCODE -ne 0) {
@@ -95,3 +100,4 @@ Write-Host "[OK] Biên dịch xong vào out\" -ForegroundColor Green
 # --- 5. Khởi chạy -----------------------------------------------------
 Write-Host "Đang khởi động app ($mainClass)..." -ForegroundColor Cyan
 & java "-Dfile.encoding=UTF-8" -cp "out;lib\*" $mainClass
+exit $LASTEXITCODE
