@@ -61,8 +61,7 @@ public class MainWindow extends JFrame {
                 ? user.getFullName() + "  [Vai tro: " + user.getRole().toUpperCase() + "]"
                 : "(Chua dang nhap)";
 
-        JLabel lbInfo = new JLabel("  Ket noi: " + Db.getUser() + " @ " + Db.getUrl()
-                + "   |   Nguoi dung: " + userInfo);
+        JLabel lbInfo = new JLabel("  Nguoi dung: " + userInfo);
         lbInfo.setFont(new Font("Consolas", Font.PLAIN, 12));
         lbInfo.setForeground(new Color(60, 60, 60));
         lbInfo.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
