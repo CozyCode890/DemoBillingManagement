@@ -264,7 +264,7 @@ public class NewInvoicePanel extends JPanel {
         totals.add(lbLeft);
         totals.add(lbTotal);
 
-        JButton btSave = new JButton("LUU HOA DON  (INSERT + COMMIT)");
+        JButton btSave = new JButton("XUẤT HÓA ĐƠN  (INSERT + COMMIT)");
         btSave.setFont(Ui.BOLD);
         btSave.setBackground(new Color(25, 118, 210));
         btSave.setForeground(Color.WHITE);
