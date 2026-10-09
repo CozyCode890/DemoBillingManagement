@@ -33,16 +33,13 @@ public class MainWindow extends JFrame {
         NewInvoicePanel newInvoice = new NewInvoicePanel(viewPanel::reload);
 
         tabs.addTab("1. Lap hoa don",  newInvoice);
-        tabs.addTab("2. Xem hoa don (Database)",  viewPanel);
-        tabs.addTab("3. Bao cao",      new ReportPanel());
-        tabs.addTab("4. Nhat ky SQL",  logPanel);
-        tabs.addTab("5. Tra cứu dữ liệu",  searchPanel);
+        tabs.addTab("2. Tra cứu dữ liệu",  searchPanel);
+        tabs.addTab("3. Xem hoa don (Database)",  viewPanel);
+        tabs.addTab("4. Bao cao",      new ReportPanel());
 
-        // Mỗi lần chuyển sang tab nhật ký thì làm mới nội dung.
+        // Mỗi lần chuyển sang tab xem hoa đơn thì cập nhật quyền.
         tabs.addChangeListener(e -> {
-            if (tabs.getSelectedComponent() == logPanel) {
-                logPanel.refresh();
-            } else if (tabs.getSelectedComponent() == viewPanel) {
+            if (tabs.getSelectedComponent() == viewPanel) {
                 viewPanel.applyRolePermissions();
             }
         });

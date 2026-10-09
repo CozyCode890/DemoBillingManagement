@@ -166,16 +166,16 @@ public class InvoiceViewPanel extends JPanel {
         DecimalFormatSymbols sym = new DecimalFormatSymbols(Locale.US);
         sym.setGroupingSeparator('.');
         sym.setDecimalSeparator(',');
-        CURRENCY_FORMAT = new DecimalFormat("#,##0.00", sym);
+        CURRENCY_FORMAT = new DecimalFormat("#,##0", sym);
         INTEGER_FORMAT = new DecimalFormat("#,##0", sym);
     }
 
     private String formatCurrency(Object value) {
         if (value == null) {
-            return "0,00 đ";
+            return "0đ";
         }
         if (value instanceof Number) {
-            return CURRENCY_FORMAT.format(((Number) value).doubleValue()) + " đ";
+            return CURRENCY_FORMAT.format(((Number) value).doubleValue()) + "đ";
         }
         return value.toString();
     }
@@ -939,47 +939,32 @@ public class InvoiceViewPanel extends JPanel {
                     return;
                 }
 
-                // Tính lại tổng tiền trả lại để đảm bảo chính xác
-                BigDecimal totalRefund = BigDecimal.ZERO;
+                // Tính lại tổng tiền trả lại để đảm bảo chính xác (sử dụng dữ liệu thô)
+                double totalRefundDouble = 0;
                 for (int i = 0; i < returnModel.getRowCount(); i++) {
-                    String amountStr = returnModel.getValueAt(i, 6).toString(); // Cột Thanh_tien_tra
-                    try {
-                        // Chuyển đổi từ định dạng "1,234,567 d" thành số
-                        String cleanAmount = amountStr.replaceAll("[^\\d.]", "");
-                        if (!cleanAmount.isEmpty()) {
-                            totalRefund = totalRefund.add(new BigDecimal(cleanAmount));
+                    String productName = returnModel.getValueAt(i, 1).toString();
+                    int returnQuantity = Integer.parseInt(returnModel.getValueAt(i, 2).toString());
+
+                    // Tìm thông tin sản phẩm trong danh sách gốc để lấy đơn giá và giảm giá
+                    InvoiceLineData originalLineData = null;
+                    for (InvoiceLineData line : availableLines) {
+                        if (line.getProductName().equals(productName)) {
+                            originalLineData = line;
+                            break;
                         }
-                    } catch (Exception ex) {
-                        // Bỏ qua nếu không parse được
+                    }
+
+                    if (originalLineData != null) {
+                        double unitPrice = originalLineData.getUnitPrice();
+                        double discount = originalLineData.getDiscount();
+                        double unitPriceAfterDiscount = unitPrice - discount;
+                        totalRefundDouble += returnQuantity * unitPriceAfterDiscount;
                     }
                 }
 
-                double totalRefundDouble = 0;
-        // Tính lại tổng tiền trả lại để đảm bảo chính xác (sử dụng dữ liệu thô)
-        for (int i = 0; i < returnModel.getRowCount(); i++) {
-            String productName = returnModel.getValueAt(i, 1).toString();
-            int returnQuantity = Integer.parseInt(returnModel.getValueAt(i, 2).toString());
-
-            // Tìm thông tin sản phẩm trong danh sách gốc để lấy đơn giá và giảm giá
-            InvoiceLineData originalLineData = null;
-            for (InvoiceLineData line : availableLines) {
-                if (line.getProductName().equals(productName)) {
-                    originalLineData = line;
-                    break;
-                }
-            }
-
-            if (originalLineData != null) {
-                double unitPrice = originalLineData.getUnitPrice();
-                double discount = originalLineData.getDiscount();
-                double unitPriceAfterDiscount = unitPrice - discount;
-                totalRefundDouble += returnQuantity * unitPriceAfterDiscount;
-            }
-        }
-
-        int choice = JOptionPane.showConfirmDialog(returnDialog,
+                int choice = JOptionPane.showConfirmDialog(returnDialog,
                             "Ban co chac chan muon xu ly tra hang voi tong so tien hoan lai la "
-                                    + formatCurrency(totalRefund) + " khong?",
+                                    + formatCurrency(totalRefundDouble) + " khong?",
                             "Xac nhan xu ly tra hang", JOptionPane.YES_NO_OPTION);
 
                 if (choice == JOptionPane.YES_OPTION) {
@@ -1041,6 +1026,12 @@ public class InvoiceViewPanel extends JPanel {
                         Account currentUser = UserSession.getCurrentUser();
                         if (currentUser != null) {
                             supervisorId = currentUser.getUsername();
+                        }
+
+                        // Tính tổng tiền hoán trả từ danh sách trả hàng
+                        BigDecimal totalRefund = BigDecimal.ZERO;
+                        for (ReturnItem item : returnList) {
+                            totalRefund = totalRefund.add(BigDecimal.valueOf(item.getAmountRefunded()));
                         }
 
                         // Gọi DAO để lưu trả hàng
@@ -1107,16 +1098,14 @@ public class InvoiceViewPanel extends JPanel {
      * @param totalAmountLabel Nhãn hiển thị tổng tiền
      */
     private void updateTotalRefundLabel(DefaultTableModel returnModel, JLabel totalAmountLabel) {
-        double totalRefund = 0;
+        long totalRefund = 0;
         // Tính tổng tiền hoàn từ các mục trong bảng trả hàng
         for (int i = 0; i < returnModel.getRowCount(); i++) {
             String amountStr = returnModel.getValueAt(i, 6).toString(); // Cột Thanh_tien_tra
             try {
-                // Chuyển đổi từ định dạng "1,234,567 đ" thành số
-                String cleanAmount = amountStr.replaceAll("[^\\d.]", "");
-                if (!cleanAmount.isEmpty()) {
-                    totalRefund += Double.parseDouble(cleanAmount);
-                }
+                // Sử dụng hàm parseVNCurrency để xử lý đúng định dạng tiền Việt Nam
+                double amount = parseVNCurrency(amountStr);
+                totalRefund += (long) Math.round(amount);
             } catch (Exception ex) {
                 // Bỏ qua nếu không parse được
             }
