@@ -176,6 +176,8 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `fn_get_product_price` | FUNCTION | `p_barcode`, `p_date` | Lấy đơn giá tại ngày bán | `ProductDao.priceOn()` |
 | `fn_next_invoice_id` | FUNCTION | *(không)* | Tự sinh mã hóa đơn `INV-xxxx` | `InvoiceDao.nextInvoiceId()` |
 | `fn_next_payment_id` | FUNCTION | *(không)* | Tự sinh mã thanh toán `PAY-xxxx` | SQL & Java |
+| `fn_return_refund` | FUNCTION | `p_invoice_id`, `p_line_number`, `p_quantity` | **Bản duy nhất** của công thức tiền hoàn: `ROUND(n / Q * T, 2)`. Java không được tự tính | `InvoiceDao.returnRefund()` |
+| `fn_next_return_id` | FUNCTION | `p_invoice_id`, `p_line_number` | Số thứ tự lượt trả kế tiếp **trong một dòng** (không phải `AUTO_INCREMENT`) | *(chỉ SQL -- `sp_add_return` gọi)* |
 | `sp_lookup_counters` | PROCEDURE | *(không)* | Danh sách quầy tính tiền | `LookupDao.counters()` |
 | `sp_lookup_cashiers` | PROCEDURE | *(không)* | Danh sách thu ngân | `LookupDao.cashiers()` |
 | `sp_lookup_customers` | PROCEDURE | *(không)* | Danh sách khách có thẻ | `LookupDao.customers()` |
@@ -185,7 +187,8 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_get_invoice_header` | PROCEDURE | `p_invoice_id` | Đầu hóa đơn và tổng tiền | `InvoiceDao.invoiceHeader()` |
 | `sp_get_invoice_lines` | PROCEDURE | `p_invoice_id` | Các dòng sản phẩm của hóa đơn | `InvoiceDao.invoiceLines()` |
 | `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn | `InvoiceDao.invoicePayments()` |
-| `sp_get_invoice_returns` | PROCEDURE | `p_invoice_id` | Thông tin trả hàng | `InvoiceDao.invoiceReturns()` |
+| `sp_get_invoice_returns` | PROCEDURE | `p_invoice_id` | Thông tin trả hàng (7 cột, có `Lan_tra`) | `InvoiceDao.invoiceReturns()` |
+| `sp_get_returnable_lines` | PROCEDURE | `p_invoice_id` | Các dòng của hóa đơn kèm **số lượng còn trả được** | `InvoiceDao.returnableLines()` |
 | `sp_report_daily_takings` | PROCEDURE | *(không)* | Báo cáo doanh thu 7 ngày | `ReportDao.dailyTakings()` |
 | `sp_report_price_rise` | PROCEDURE | *(không)* | Báo cáo sản phẩm tăng giá > 10% | `ReportDao.priceRise()` |
 | `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc | `ReportDao.bestCashier()` |
@@ -194,3 +197,5 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới | `InvoiceDao.createInvoice()` |
 | `sp_add_invoice_line` | PROCEDURE | `(6 tham số)` | Ghi dòng chi tiết hóa đơn | `InvoiceDao.createInvoice()` |
 | `sp_add_payment` | PROCEDURE | `(6 tham số)` | Ghi thanh toán & rẽ nhánh bảng con | `InvoiceDao.createInvoice()` |
+| `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn `VOIDED` | `InvoiceDao.processReturn()` |
+| `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |

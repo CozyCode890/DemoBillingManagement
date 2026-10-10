@@ -251,7 +251,12 @@ CREATE TABLE Account (
     Password   VARCHAR(100) NOT NULL,
     Role       ENUM('cashier', 'manager') NOT NULL,
     Full_Name  VARCHAR(100) NULL,
-    PRIMARY KEY (Username)
+    -- Nhan vien tuong ung trong bang Cashier. NULL = tai khoan khong gan voi
+    -- nhan vien nao (khi do khong duyet duoc tra hang -- xem plan/12 muc 3.3).
+    Cashier_ID VARCHAR(10)  NULL,
+    PRIMARY KEY (Username),
+    CONSTRAINT fk_account_cashier
+        FOREIGN KEY (Cashier_ID) REFERENCES Cashier (Cashier_ID)
 ) ENGINE=InnoDB;
 
 

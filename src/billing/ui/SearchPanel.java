@@ -33,12 +33,15 @@ public class SearchPanel extends JPanel {
     // Formatters for Vietnamese locale (matching tab 2)
     private static final DecimalFormat CURRENCY_FORMAT;
     private static final DecimalFormat INTEGER_FORMAT;
+    /** 1.500 -> "1,5" ; 2.000 -> "2"  (Quantity va Return_Quantity la DECIMAL(10,3)) */
+    private static final DecimalFormat QUANTITY_FORMAT;
     static {
         DecimalFormatSymbols sym = new DecimalFormatSymbols(new Locale("vi", "VN"));
         sym.setGroupingSeparator('.');
         sym.setDecimalSeparator(',');
         CURRENCY_FORMAT = new DecimalFormat("#,##0", sym);
         INTEGER_FORMAT = new DecimalFormat("#,##0", sym);
+        QUANTITY_FORMAT = new DecimalFormat("#,##0.###", sym);
     }
 
     // Dynamic filter panel with CardLayout
@@ -892,7 +895,15 @@ public class SearchPanel extends JPanel {
             return value.toString();
         }
 
-        // Treat quantity columns as integer (no currency symbol)
+        // So luong la DECIMAL(10,3) -- khong phai so nguyen (plan/12 muc 3.2).
+        // INV-0002 dong 1 ban 1,5 KG thit ba chi; lam tron thanh "2" la noi doi
+        // ve du lieu dang nam trong database.
+        String upper = columnName == null ? "" : columnName.toUpperCase();
+        if (upper.equals("QUANTITY") || upper.equals("RETURN_QUANTITY")) {
+            return formatQuantity(value);
+        }
+
+        // Treat ID-like columns as integer (no currency symbol)
         if (isQuantityColumn(columnName)) {
             return formatInteger(value);
         }
@@ -937,6 +948,14 @@ public class SearchPanel extends JPanel {
         return value.toString();
     }
 
+    /** Format as quantity: giu phan thap phan, bo cac so 0 vo nghia o cuoi */
+    private String formatQuantity(Object value) {
+        if (value instanceof Number) {
+            return QUANTITY_FORMAT.format(value);
+        }
+        return value.toString();
+    }
+
     /** Update row count label */
     private void updateRowCount() {
         int rows = table.getModel().getRowCount();
@@ -958,14 +977,19 @@ public class SearchPanel extends JPanel {
         // For other panels (default message panels), there is no state to reset.
     }
 
-    /** Helper to check if a column should be treated as a quantity (integer) rather than currency */
+    /**
+     * Helper to check if a column should be treated as a plain integer / code
+     * rather than currency.
+     *
+     * QUANTITY va RETURN_QUANTITY DA BI BO khoi danh sach nay: chung la
+     * DECIMAL(10,3) va duoc formatValue() xu ly rieng truoc khi goi vao day
+     * (plan/12 muc 5.8).
+     */
     private boolean isQuantityColumn(String columnName) {
         if (columnName == null) return false;
         String upper = columnName.toUpperCase();
-        // Common quantity columns
-        return upper.equals("RETURN_QUANTITY") ||
-               upper.equals("QUANTITY") ||
-               upper.equals("LINE_NUMBER") ||
+        // Common integer / code columns
+        return upper.equals("LINE_NUMBER") ||
                upper.equals("RETURN_ID") ||
                upper.equals("INVOICE_ID") ||
                upper.equals("PAYMENT_ID") ||

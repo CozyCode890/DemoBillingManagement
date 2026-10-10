@@ -32,19 +32,21 @@ import java.util.List;
 public class InvoiceDao {
 
     /**
-     * Lớp nội bộ để lưu trữ thông tin về một mục trả hàng
+     * Một mục trong danh sách trả hàng: dòng nào, trả bao nhiêu.
+     *
+     * KHÔNG chứa tiền hoàn -- tiền hoàn do SQL tính qua fn_return_refund
+     * (plan/12 mục 2.2). Số lượng là BigDecimal vì Return_Quantity là
+     * DECIMAL(10,3): có hoá đơn bán 1,5 KG thịt.
      */
     public static class ReturnItem {
-        private final String productName;
-        private final int lineNumber;
-        private final int returnQuantity;
-        private final double amountRefunded;
+        private final String     productName;   // chỉ để hiển thị / thông báo lỗi
+        private final int        lineNumber;
+        private final BigDecimal quantity;      // DECIMAL(10,3), không dùng double
 
-        public ReturnItem(String productName, int lineNumber, int returnQuantity, double amountRefunded) {
+        public ReturnItem(String productName, int lineNumber, BigDecimal quantity) {
             this.productName = productName;
             this.lineNumber = lineNumber;
-            this.returnQuantity = returnQuantity;
-            this.amountRefunded = amountRefunded;
+            this.quantity = quantity;
         }
 
         public String getProductName() {
@@ -55,12 +57,8 @@ public class InvoiceDao {
             return lineNumber;
         }
 
-        public int getReturnQuantity() {
-            return returnQuantity;
-        }
-
-        public double getAmountRefunded() {
-            return amountRefunded;
+        public BigDecimal getQuantity() {
+            return quantity;
         }
     }
 
@@ -233,6 +231,46 @@ public class InvoiceDao {
         return QueryResult.call("{call sp_get_invoice_returns(?)}", invoiceId);
     }
 
+    /**
+     * Các dòng còn trả được của hóa đơn: sp_get_returnable_lines(p_invoice_id).
+     * Cột SL_con_lai là thứ mà hộp thoại trả hàng cần để chặn trả vượt.
+     */
+    public QueryResult returnableLines(String invoiceId) {
+        return QueryResult.call("{call sp_get_returnable_lines(?)}", invoiceId);
+    }
+
+    /**
+     * Tiền hoàn cho một số lượng của một dòng: fn_return_refund(...).
+     *
+     * Java KHÔNG tự tính số này, dù chỉ là một phép nhân -- công thức tiền hoàn
+     * chỉ tồn tại ở một chỗ trong cả dự án, và chỗ đó là SQL (plan/12 mục 2.2).
+     * Nhờ vậy con số trên hộp thoại xác nhận bằng đúng con số hiện ra ở tab 3
+     * sau khi lưu.
+     */
+    public BigDecimal returnRefund(String invoiceId, int lineNumber, BigDecimal quantity) {
+        String sql = "{? = call fn_return_refund(?, ?, ?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.registerOutParameter(1, Types.DECIMAL);
+            cs.setString(2, invoiceId);
+            cs.setInt(3, lineNumber);
+            cs.setBigDecimal(4, quantity);
+            cs.execute();
+            BigDecimal refund = cs.getBigDecimal(1);
+
+            SqlLog.add(sql, new Object[]{invoiceId, lineNumber, quantity},
+                       System.currentTimeMillis() - t0, 1);
+            return refund == null ? BigDecimal.ZERO : refund;
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Khong tinh duoc tien hoan cho dong "
+                                       + lineNumber + ": " + e.getMessage(), e);
+        }
+    }
+
 
     // =================================================================
     //  PHẦN 3 -- THAO TÁC SỬA / XÓA TRỰC TIẾP TRONG DATABASE (DAO)
@@ -344,79 +382,120 @@ public class InvoiceDao {
     }
 
     /**
-     * Xử lý trả hàng cho hóa đơn.
-     * Lưu danh sách các sản phẩm trả hàng vào database qua transaction.
+     * ================================================================
+     *  GHI MỘT LẦN TRẢ HÀNG GỒM NHIỀU DÒNG -- TRONG MỘT TRANSACTION
+     * ================================================================
+     *  Hoặc tất cả các dòng được ghi, hoặc không dòng nào.
      *
-     * @param invoiceId Mã hóa đơn cần trả hàng
-     * @param returnList Danh sách các mục trả hàng
-     * @param supervisorId ID của người quản lý chịu trách nhiệm
-     * @return true nếu xử lý thành công, false nếu có lỗi
+     *  Hàm này KHÔNG trả boolean: lỗi thì NÉM, giống 5 hàm ghi DB còn lại của
+     *  lớp này. Bản cũ trả `false` và in nguyên nhân thật ra System.err, nên
+     *  người dùng chỉ thấy câu "that bai, thu lai sau" trong khi lỗi thật là
+     *  "sp_add_return does not exist" -- thử lại bao lâu cũng vậy.
+     *
+     *  Tiền hoàn KHÔNG được truyền vào: nó là giá trị dẫn xuất, SQL tự tính
+     *  bằng fn_return_refund (plan/12 mục 2.2).
+     *
+     * @param invoiceId            mã hóa đơn
+     * @param items                các dòng cần trả, kèm số lượng
+     * @param approvedByCashierId  mã nhân viên duyệt -- Cashier_ID, KHÔNG phải username
+     * @throws RuntimeException khi SQL từ chối. Thông điệp gốc của MySQL được
+     *         giữ lại, kể cả thông điệp của SIGNAL '45000' trong sp_add_return,
+     *         để tầng UI phân biệt được lỗi nghiệp vụ với lỗi thật.
      */
-    public boolean processReturn(String invoiceId, List<ReturnItem> returnList, String supervisorId) {
-        if (returnList == null || returnList.isEmpty()) {
-            return false;
+    public void processReturn(String invoiceId, List<ReturnItem> items, String approvedByCashierId) {
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException("Khong co dong hang nao de tra");
         }
 
-        String spReturn = "{call sp_add_return(?, ?, ?, ?, ?, ?, ?)}";
+        String spReturn = "{call sp_add_return(?, ?, ?, ?, ?)}";
 
         long t0 = System.currentTimeMillis();
         Connection conn = null;
+
+        // MỘT mốc ngày cho cả lượt trả. Bản cũ gọi LocalDate.now() trong vòng
+        // lặp: bấm lúc 23:59:59.9 thì các dòng của cùng một lượt trả rơi vào
+        // hai ngày khác nhau.
+        LocalDate today = LocalDate.now();
+
+        // Mục đang được ghi, để nhật ký SQL còn thấy được CẢ LẦN THỬ THẤT BẠI
+        // (plan/12 kịch bản #55: tab 5 phải có dòng sp_add_return rồi ROLLBACK).
+        ReturnItem current = null;
 
         try {
             conn = Db.getConnection();
             conn.setAutoCommit(false);          // ==== BẮT ĐẦU TRANSACTION ====
 
-            // Thực hiện thêm từng mục trả hàng
-            for (ReturnItem item : returnList) {
-                try (CallableStatement cs = conn.prepareCall(spReturn)) {
-                    // Tạo Return_ID tự động (sử dụng hàm hoặc để AUTO_INCREMENT)
-                    // Trong trường hợp này, chúng ta để NULL và để DB xử lý (AUTO_INCREMENT)
-                    cs.setNull(1, Types.VARCHAR); // Return_ID (sẽ được tạo tự động)
-                    cs.setString(2, invoiceId);
-                    cs.setInt(3, item.getLineNumber());
-                    cs.setDate(4, Date.valueOf(LocalDate.now())); // Return_Date
-                    cs.setInt(5, item.getReturnQuantity());
-                    cs.setBigDecimal(6, BigDecimal.valueOf(item.getAmountRefunded()));
-                    cs.setString(7, supervisorId);
-
+            // prepareCall NGOÀI vòng lặp -- chuẩn bị lại câu gọi cho từng dòng
+            // là vô ích (sp_add_payment ở trên đã làm đúng cách này).
+            try (CallableStatement cs = conn.prepareCall(spReturn)) {
+                for (ReturnItem it : items) {
+                    current = it;
+                    cs.setString(1, invoiceId);
+                    cs.setInt(2, it.getLineNumber());
+                    cs.setDate(3, Date.valueOf(today));
+                    cs.setBigDecimal(4, it.getQuantity());
+                    cs.setString(5, approvedByCashierId);
                     cs.executeUpdate();
-                    SqlLog.add(spReturn, new Object[]{
-                            "AUTO_GENERATED", invoiceId, item.getLineNumber(),
-                            LocalDate.now(), item.getReturnQuantity(),
-                            item.getAmountRefunded(), supervisorId}, 0, 1);
+
+                    SqlLog.add(spReturn, new Object[]{invoiceId, it.getLineNumber(),
+                            today, it.getQuantity(), approvedByCashierId}, 0, 1);
+                    current = null;             // dòng này đã ghi xong
                 }
             }
-
-            // Tùy chọn: Cập nhật trạng thái hóa đơn nếu cần
-            // Ví dụ: đánh dấu hóa đơn đã có trả hàng một phần
-            // String spUpdateStatus = "{call sp_update_invoice_return_status(?, ?)}";
-            // try (CallableStatement cs = conn.prepareCall(spUpdateStatus)) {
-            //     cs.setString(1, invoiceId);
-            //     cs.setString(2, "PARTIALLY_RETURNED");
-            //     cs.executeUpdate();
-            // }
 
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
             SqlLog.add("COMMIT;  -- luu thanh cong tra hang hoa don " + invoiceId,
                        null, System.currentTimeMillis() - t0, 0);
-            return true;
 
         } catch (SQLException e) {
+            // Ghi lại câu gọi vừa bị từ chối: "0 dong" cộng với dòng ROLLBACK
+            // ngay sau đó kể đủ câu chuyện cho người đọc nhật ký.
+            if (current != null) {
+                SqlLog.add(spReturn, new Object[]{invoiceId, current.getLineNumber(),
+                        today, current.getQuantity(), approvedByCashierId}, 0, 0);
+            }
             if (conn != null) {
                 try {
                     conn.rollback();
                     SqlLog.add("ROLLBACK;  -- da huy toan bo vi co loi", null, 0, 0);
                 } catch (SQLException ignore) { }
             }
-            System.err.println("Loi khi xu ly tra hang: " + e.getMessage());
-            e.printStackTrace();
-            return false;
+            // Giữ nguyên exception gốc làm cause: UI đọc getSQLState() của nó
+            // để biết đây là SIGNAL '45000' (lỗi nghiệp vụ) hay lỗi thật.
+            throw new RuntimeException("Xu ly tra hang that bai: " + e.getMessage(), e);
 
         } finally {
             if (conn != null) {
                 try { conn.setAutoCommit(true); } catch (SQLException ignore) { }
                 try { conn.close(); }            catch (SQLException ignore) { }
             }
+        }
+    }
+
+    /**
+     * Hủy một lượt trả hàng đã ghi: sp_delete_return(...).
+     *
+     * @return số dòng đã xóa (0 nghĩa là không tìm thấy lượt trả đó)
+     */
+    public int deleteReturn(String invoiceId, int lineNumber, int returnId) {
+        String sql = "{call sp_delete_return(?, ?, ?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.setString(1, invoiceId);
+            cs.setInt(2, lineNumber);
+            cs.setInt(3, returnId);
+
+            int affected = cs.executeUpdate();
+            SqlLog.add(sql, new Object[]{invoiceId, lineNumber, returnId},
+                       System.currentTimeMillis() - t0, affected);
+            return affected;
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Loi khi huy luot tra lan " + returnId
+                                       + " cua dong " + lineNumber + ": " + e.getMessage(), e);
         }
     }
 }

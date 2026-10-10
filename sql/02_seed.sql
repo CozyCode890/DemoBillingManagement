@@ -251,9 +251,11 @@ INSERT INTO EWallet_Payment (Payment_ID, Wallet_provider, Transaction_Ref) VALUE
 -- ---------------------------------------------------------------------
 -- Tài khoản đăng nhập mặc định: cashier và manager
 -- ---------------------------------------------------------------------
-INSERT INTO Account (Username, Password, Role, Full_Name) VALUES
-('cashier', 'cashier', 'cashier', 'Nhan Vien Thu Ngan'),
-('manager', 'manager', 'manager', 'Quan Ly He Thong');
+--   Cashier_ID gan tai khoan voi mot nhan vien that trong bang Cashier.
+--   Cot nay lam "nguoi duyet" khi tra hang -- xem plan/12 muc 3.3.
+INSERT INTO Account (Username, Password, Role, Full_Name, Cashier_ID) VALUES
+('cashier', 'cashier', 'cashier', 'Nhan Vien Thu Ngan', 'E02'),
+('manager', 'manager', 'manager', 'Quan Ly He Thong',   'E01');
 
 
 SELECT 'Da nap du lieu mau!' AS ket_qua,
