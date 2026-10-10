@@ -37,6 +37,31 @@ public class LookupDao {
         return list;
     }
 
+    /**
+     * Tìm khách hàng theo tiền tố số điện thoại.
+     * @param phonePrefix tiền tố số điện thoại để tìm
+     * @return danh sách khách hàng khớp (mỗi phần tử là IdName với id=Customer_ID, name="ID - Name - Phone")
+     */
+    public List<IdName> searchCustomersByPhonePrefix(String phonePrefix) {
+        if (phonePrefix == null || phonePrefix.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        String sql = "SELECT Customer_ID, Name, Phone FROM Customer WHERE Phone LIKE ?";
+        QueryResult qr = QueryResult.run(sql, phonePrefix + "%");
+        List<IdName> list = new ArrayList<>();
+
+        for (Object[] row : qr.rows) {
+            String id = String.valueOf(row[0]);
+            String name = String.valueOf(row[1]);
+            String phone = String.valueOf(row[2]);
+            String display = id + " - " + name + " - " + phone;
+            list.add(new IdName(id, display));
+        }
+
+        return list;
+    }
+
     private List<IdName> toIdNames(QueryResult qr) {
         List<IdName> list = new ArrayList<>();
         for (Object[] row : qr.rows) {

@@ -1,12 +1,16 @@
 ﻿# =====================================================================
-#  setup.ps1 -- tải thư viện driver MySQL cho Java (chỉ cần chạy 1 lần)
+#  setup.ps1 -- tải thư viện Java cần thiết (chỉ cần chạy 1 lần)
 # ---------------------------------------------------------------------
 #  Tải về:  mysql-connector-j-8.4.0.jar   (~2.4 MB)
+#           zxing-core-3.5.0.jar          (~0.6 MB)
+#           zxing-javase-3.5.0.jar        (~0.04 MB)
 #  Nguồn :  Maven Central (repo1.maven.org) -- kho thư viện Java chính thức
 #  Lưu vào: .\lib\
 #
-#  Đây là "driver JDBC": phần phiên dịch giữa Java và MySQL. Không có nó
-#  thì Java báo lỗi "No suitable driver found".
+#  Driver JDBC là phần phiên dịch giữa Java và MySQL. Không có nó thì
+#  Java báo lỗi "No suitable driver found".
+#  ZXing dùng để sinh mã QR VietQR (billing.util.VietQRHelper). Không có
+#  nó thì javac báo lỗi "package com.google.zxing does not exist".
 # =====================================================================
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +31,26 @@ if (Test-Path $dest) {
     Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
     $mb = [math]::Round((Get-Item $dest).Length / 1MB, 2)
     Write-Host "[OK] Da tai xong ($mb MB): $dest" -ForegroundColor Green
+}
+
+# --- Tai ZXing Core & Javase (sinh ma QR VietQR) ----------------------
+$zxingVersion = '3.5.0'
+foreach ($artifact in @('core', 'javase')) {
+    $zxJar  = "zxing-$artifact-$zxingVersion.jar"
+    $zxUrl  = "https://repo1.maven.org/maven2/com/google/zxing/$artifact/$zxingVersion/$artifact-$zxingVersion.jar"
+    $zxDest = Join-Path $projectRoot "lib\$zxJar"
+
+    # Chap nhan ca ten da tai truoc do khong co tien to "zxing-".
+    $existing = Get-ChildItem (Join-Path $projectRoot "lib\*$artifact-$zxingVersion.jar") -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+    if ($existing) {
+        Write-Host "[OK] Da co san: $($existing.FullName)" -ForegroundColor Green
+    } else {
+        Write-Host "Dang tai $zxJar tu Maven Central..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri $zxUrl -OutFile $zxDest -UseBasicParsing
+        $mb = [math]::Round((Get-Item $zxDest).Length / 1MB, 2)
+        Write-Host "[OK] Da tai xong ($mb MB): $zxDest" -ForegroundColor Green
+    }
 }
 
 # --- Kiem tra JDK -----------------------------------------------------

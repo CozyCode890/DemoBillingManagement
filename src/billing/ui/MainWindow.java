@@ -1,6 +1,5 @@
 package billing.ui;
 
-import billing.db.Db;
 import billing.model.Account;
 import billing.model.UserSession;
 
@@ -16,8 +15,8 @@ import java.awt.*;
  */
 public class MainWindow extends JFrame {
 
-    private final SqlLogPanel     logPanel     = new SqlLogPanel();
     private final InvoiceViewPanel viewPanel   = new InvoiceViewPanel();
+    private final SearchPanel      searchPanel   = new SearchPanel();
 
     public MainWindow() {
         super("Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8");
@@ -32,15 +31,13 @@ public class MainWindow extends JFrame {
         NewInvoicePanel newInvoice = new NewInvoicePanel(viewPanel::reload);
 
         tabs.addTab("1. Lap hoa don",  newInvoice);
-        tabs.addTab("2. Xem hoa don (Database)",  viewPanel);
-        tabs.addTab("3. Bao cao",      new ReportPanel());
-        tabs.addTab("4. Nhat ky SQL",  logPanel);
+        tabs.addTab("2. Tra cứu dữ liệu",  searchPanel);
+        tabs.addTab("3. Xem hoa don (Database)",  viewPanel);
+        tabs.addTab("4. Bao cao",      new ReportPanel());
 
-        // Mỗi lần chuyển sang tab nhật ký thì làm mới nội dung.
+        // Mỗi lần chuyển sang tab xem hoa đơn thì cập nhật quyền.
         tabs.addChangeListener(e -> {
-            if (tabs.getSelectedComponent() == logPanel) {
-                logPanel.refresh();
-            } else if (tabs.getSelectedComponent() == viewPanel) {
+            if (tabs.getSelectedComponent() == viewPanel) {
                 viewPanel.applyRolePermissions();
             }
         });
@@ -62,8 +59,7 @@ public class MainWindow extends JFrame {
                 ? user.getFullName() + "  [Vai tro: " + user.getRole().toUpperCase() + "]"
                 : "(Chua dang nhap)";
 
-        JLabel lbInfo = new JLabel("  Ket noi: " + Db.getUser() + " @ " + Db.getUrl()
-                + "   |   Nguoi dung: " + userInfo);
+        JLabel lbInfo = new JLabel("  Nguoi dung: " + userInfo);
         lbInfo.setFont(new Font("Consolas", Font.PLAIN, 12));
         lbInfo.setForeground(new Color(60, 60, 60));
         lbInfo.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));

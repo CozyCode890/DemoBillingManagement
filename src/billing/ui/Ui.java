@@ -24,10 +24,10 @@ public class Ui {
         MONEY = new DecimalFormat("#,##0", sym);
     }
 
-    /** 135100 -> "135.100 d" */
+    /** 135100 -> "135.100đ" */
     public static String money(BigDecimal v) {
-        if (v == null) return "0 d";
-        return MONEY.format(v) + " d";
+        if (v == null) return "0đ";
+        return MONEY.format(v) + "đ";
     }
 
     /** Tạo một JTable chỉ để xem (không cho sửa ô). */

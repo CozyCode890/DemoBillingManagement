@@ -6,18 +6,34 @@ import billing.dao.ProductDao;
 import billing.model.CartLine;
 import billing.model.IdName;
 import billing.model.PaymentEntry;
+import billing.util.VietQRHelper;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.event.ListSelectionEvent;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.*;
+import java.awt.font.FontRenderContext;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URL;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.nio.charset.StandardCharsets;
 
 /**
  * ====================================================================
@@ -40,11 +56,10 @@ public class NewInvoicePanel extends JPanel {
 
     private final JComboBox<IdName>  cbCounter  = new JComboBox<>();
     private final JComboBox<IdName>  cbCashier  = new JComboBox<>();
-    private final JComboBox<IdName>  cbCustomer = new JComboBox<>();
+    private final JComboBox<billing.model.Product> cbProduct = new JComboBox<>();
+    private final JTextField           tfCustomerPhone = new JTextField(16);
     private final JSpinner           spDate     =
             new JSpinner(new SpinnerDateModel(new Date(), null, null, java.util.Calendar.DAY_OF_MONTH));
-
-    private final JComboBox<billing.model.Product> cbProduct = new JComboBox<>();
     private final JTextField tfQty   = new JTextField("1", 6);
     private final JLabel     lbHint  = new JLabel(" ");
 
@@ -58,6 +73,34 @@ public class NewInvoicePanel extends JPanel {
     private final JLabel lbPaid  = new JLabel("Da thanh toan: 0 d");
     private final JLabel lbLeft  = new JLabel("Con thieu: 0 d");
 
+    // Autocomplete components for customer
+    private JList<String> customerList;
+    private DefaultListModel<String> listModel;
+    private JWindow popupWindow;
+    private IdName selectedCustomer; // Currently selected customer (null for walk-in)
+
+    // Edit quantity button
+    private final JButton btEditQty = new JButton("Chỉnh số lượng");
+
+    // Refund button
+    private final JButton btRefund = new JButton("Thối tiền");
+
+    // Track selected payment method for refund button state
+    private int selectedPaymentMethodIndex = 0; // Default to Cash
+
+    // Reference to the amount text field for refund operations
+    private JTextField tfAmountRef;
+
+    // QR code button
+    private final JButton btQr = new JButton("Tạo mã QR");
+    // Flag to ignore document events when setting text programmatically
+    private final AtomicBoolean ignoreTextChanges = new AtomicBoolean(false);
+
+    // QR code configuration (loaded from config.properties with defaults)
+    private String bankId = "MB";
+    private String accountNo = "90902241107";
+    private String accountName = "CHUNG HOC HAO";
+
     private final Runnable onSaved;
 
     public NewInvoicePanel(Runnable onSaved) {
@@ -65,11 +108,15 @@ public class NewInvoicePanel extends JPanel {
         setLayout(new BorderLayout(8, 8));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
+        loadBankConfig(); // Load QR config from properties
+
         add(buildHeader(),  BorderLayout.NORTH);
         add(buildCenter(),  BorderLayout.CENTER);
         add(buildFooter(),  BorderLayout.SOUTH);
 
         loadLookups();
+        setupCustomerAutocomplete();
+        setupCartSelectionListener();
     }
 
     // -----------------------------------------------------------------
@@ -88,7 +135,7 @@ public class NewInvoicePanel extends JPanel {
         int col = 0;
         addPair(p, g, col++, "Quay:",       cbCounter);
         addPair(p, g, col++, "Thu ngan:",   cbCashier);
-        addPair(p, g, col++, "Khach hang:", cbCustomer);
+        addPair(p, g, col++, "Khach hang:", tfCustomerPhone);
         addPair(p, g, col++, "Ngay ban:",   spDate);
 
         JLabel note = new JLabel("<html><i>Meo: doi 'Ngay ban' ve nam ngoai "
@@ -126,6 +173,11 @@ public class NewInvoicePanel extends JPanel {
         btDel.addActionListener(e -> removeSelectedLine());
         addBar.add(btDel);
 
+        // Edit quantity button
+        btEditQty.setEnabled(false); // Initially disabled
+        btEditQty.addActionListener(e -> editQuantity());
+        addBar.add(btEditQty);
+
         lbHint.setForeground(new Color(0, 110, 0));
         addBar.add(lbHint);
 
@@ -149,6 +201,8 @@ public class NewInvoicePanel extends JPanel {
         JComboBox<String> cbMethod = new JComboBox<>(new String[]{
                 "Tien mat", "The ngan hang", "Vi dien tu"});
         JTextField tfAmount = new JTextField(12);
+        // Store reference to tfAmount for use in handleRefund
+        tfAmountRef = tfAmount;
 
         pay.add(new JLabel("Phuong thuc:"));
         pay.add(cbMethod);
@@ -167,6 +221,11 @@ public class NewInvoicePanel extends JPanel {
         });
         pay.add(btAddPay);
 
+        // QR code button - initially disabled
+        btQr.setEnabled(false);
+        btQr.addActionListener(e -> handleQrPayment(cbMethod.getSelectedIndex()));
+        pay.add(btQr);
+
         JButton btRest = new JButton("Tra het bang tien mat");
         btRest.addActionListener(e -> {
             BigDecimal left = totalDue().subtract(totalPaid());
@@ -177,6 +236,21 @@ public class NewInvoicePanel extends JPanel {
         JButton btClearPay = new JButton("Xoa het thanh toan");
         btClearPay.addActionListener(e -> { payments.clear(); refreshPayTable(); });
         pay.add(btClearPay);
+
+        // Refund button
+        btRefund.setEnabled(false); // Initially disabled
+        btRefund.addActionListener(e -> handleRefund());
+        pay.add(btRefund);
+
+        // Add item listener to payment method combo box to update refund button state and QR button state
+        cbMethod.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED) {
+                selectedPaymentMethodIndex = cbMethod.getSelectedIndex();
+                updateRefundButtonState();
+                // Enable QR button only for "Vi dien tu" (index 2)
+                btQr.setEnabled(selectedPaymentMethodIndex == 2);
+            }
+        });
 
         JScrollPane spPay = new JScrollPane(tbPay);
         spPay.setPreferredSize(new Dimension(100, 90));
@@ -190,7 +264,7 @@ public class NewInvoicePanel extends JPanel {
         totals.add(lbLeft);
         totals.add(lbTotal);
 
-        JButton btSave = new JButton("LUU HOA DON  (INSERT + COMMIT)");
+        JButton btSave = new JButton("XUẤT HÓA ĐƠN  (INSERT + COMMIT)");
         btSave.setFont(Ui.BOLD);
         btSave.setBackground(new Color(25, 118, 210));
         btSave.setForeground(Color.WHITE);
@@ -213,11 +287,236 @@ public class NewInvoicePanel extends JPanel {
         try {
             for (IdName x : lookupDao.counters())  cbCounter.addItem(x);
             for (IdName x : lookupDao.cashiers())  cbCashier.addItem(x);
-            for (IdName x : lookupDao.customers()) cbCustomer.addItem(x);
             for (billing.model.Product p : productDao.findAll()) cbProduct.addItem(p);
         } catch (Exception ex) {
             Ui.error(this, ex);
         }
+    }
+
+    // -----------------------------------------------------------------
+    //  Load QR configuration from config.properties
+    // -----------------------------------------------------------------
+    private void loadBankConfig() {
+        try {
+            Properties props = new Properties();
+            props.load(getClass().getClassLoader().getResourceAsStream("config.properties"));
+            String id = props.getProperty("qr.bank.id");
+            String accNo = props.getProperty("qr.account.no");
+            String accName = props.getProperty("qr.account.name");
+            if (id != null && !id.trim().isEmpty()) bankId = id.trim();
+            if (accNo != null && !accNo.trim().isEmpty()) accountNo = accNo.trim();
+            if (accName != null && !accName.trim().isEmpty()) accountName = accName.trim();
+        } catch (Exception ex) {
+            // If any error, keep defaults
+            System.err.println("Could not load QR config, using defaults: " + ex.getMessage());
+        }
+    }
+
+    // -----------------------------------------------------------------
+    //  Setup autocomplete for customer phone input
+    // -----------------------------------------------------------------
+    private void setupCustomerAutocomplete() {
+        // Create list model and JList for popup
+        listModel = new DefaultListModel<>();
+        customerList = new JList<>(listModel);
+        customerList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        customerList.setFixedCellHeight(22);
+        customerList.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        // Create popup window
+        popupWindow = new JWindow(SwingUtilities.getWindowAncestor(this));
+        popupWindow.getContentPane().add(new JScrollPane(customerList));
+        popupWindow.setAlwaysOnTop(true);
+
+        // Add mouse listener to list for selection
+        customerList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 1) {
+                    selectCustomerFromList();
+                }
+            }
+        });
+
+        // Add key listener to list for Enter key
+        customerList.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    selectCustomerFromList();
+                }
+            }
+        });
+
+        // Add document listener to text field for autocomplete
+        tfCustomerPhone.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                updateCustomerPopup();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                updateCustomerPopup();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                updateCustomerPopup();
+            }
+        });
+
+        // Add focus listener to hide popup when losing focus
+        tfCustomerPhone.addFocusListener(new FocusListener() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                // Show popup on focus if there's text
+                if (!tfCustomerPhone.getText().trim().isEmpty()) {
+                    updateCustomerPopup();
+                }
+            }
+
+            @Override
+            public void focusLost(FocusEvent e) {
+                // Hide popup when losing focus (with small delay to allow list selection)
+                SwingUtilities.invokeLater(() -> {
+                    if (!popupWindow.isFocusOwner() &&
+                            !customerList.isFocusOwner()) {
+                        hideCustomerPopup();
+                    }
+                });
+            }
+        });
+    }
+
+    private void updateCustomerPopup() {
+        String phonePrefix = tfCustomerPhone.getText().trim();
+
+        if (phonePrefix.isEmpty()) {
+            // Clear selection and hide popup when empty
+            selectedCustomer = null;
+            hideCustomerPopup();
+            return;
+        }
+
+        // Search for matching customers
+        List<IdName> matches = lookupDao.searchCustomersByPhonePrefix(phonePrefix);
+
+        // Update list model
+        listModel.clear();
+        for (IdName customer : matches) {
+            listModel.addElement(customer.name);
+        }
+
+        // Show popup if there are matches
+        if (!matches.isEmpty()) {
+            showCustomerPopup();
+        } else {
+            hideCustomerPopup();
+            // Optionally: keep selectedCustomer as is (last valid selection)
+            // or set to null if we want to require valid selection
+            // For now, we'll keep last selection but allow clearing via empty field
+        }
+    }
+
+    private void showCustomerPopup() {
+        if (listModel.isEmpty()) return;
+
+        // Position popup below the text field
+        Point location = tfCustomerPhone.getLocationOnScreen();
+        popupWindow.setLocation(
+                location.x,
+                location.y + tfCustomerPhone.getHeight()
+        );
+
+        // Calculate width needed for popup content
+        int textFieldWidth = tfCustomerPhone.getWidth();
+        int contentWidth = calculatePopupContentWidth(customerList);
+        int popupWidth = Math.max(textFieldWidth, contentWidth) + 20; // Add 20px padding
+
+        // Size popup with calculated width, with reasonable height
+        popupWindow.setSize(
+                popupWidth,
+                Math.min(listModel.size() * 22 + 4, 200) // 22px per item + 4px padding, max 200px
+        );
+
+        popupWindow.setVisible(true);
+        customerList.requestFocusInWindow();
+    }
+
+    /**
+     * Calculates the width needed to display the longest item in a JList
+     * @param list the JList to measure
+     * @return width in pixels
+     */
+    private int calculatePopupContentWidth(JList<?> list) {
+        if (list.getModel().getSize() == 0) return 0;
+
+        FontMetrics fm = list.getFontMetrics(list.getFont());
+        int maxWidth = 0;
+
+        for (int i = 0; i < list.getModel().getSize(); i++) {
+            String text = list.getModel().getElementAt(i).toString();
+            int textWidth = fm.stringWidth(text);
+            if (textWidth > maxWidth) {
+                maxWidth = textWidth;
+            }
+        }
+
+        return maxWidth;
+    }
+
+    private void hideCustomerPopup() {
+        if (popupWindow != null) {
+            popupWindow.setVisible(false);
+        }
+    }
+
+    private void selectCustomerFromList() {
+        int selectedIndex = customerList.getSelectedIndex();
+        if (selectedIndex >= 0 && selectedIndex < listModel.size()) {
+            // Get the selected customer from our search results
+            // Note: We need to re-search to get the actual IdName objects
+            // This is not optimal but keeps the code simple for this demo
+            String phonePrefix = tfCustomerPhone.getText().trim();
+            List<IdName> matches = lookupDao.searchCustomersByPhonePrefix(phonePrefix);
+            if (selectedIndex < matches.size()) {
+                selectedCustomer = matches.get(selectedIndex);
+                tfCustomerPhone.setText(selectedCustomer.name);
+                hideCustomerPopup();
+            }
+        }
+    }
+
+
+    // -----------------------------------------------------------------
+    //  Setup selection listener for cart table to manage edit button state
+    // -----------------------------------------------------------------
+    private void setupCartSelectionListener() {
+        tbCart.getSelectionModel().addListSelectionListener((ListSelectionEvent e) -> {
+            if (e.getValueIsAdjusting()) return;
+
+            int selectedRow = tbCart.getSelectedRow();
+            boolean hasSelection = selectedRow >= 0 && selectedRow < cart.size();
+            btEditQty.setEnabled(hasSelection);
+        });
+    }
+
+    // -----------------------------------------------------------------
+    //  HELPER: Tìm CartLine trong giỏ hàng theo mã vạch sản phẩm
+    // -----------------------------------------------------------------
+    /**
+     * Tìm CartLine trong giỏ hàng theo mã vạch sản phẩm.
+     * @param barcode mã vạch sản phẩm cần tìm
+     * @return CartLine nếu tìm thấy, null nếu không tìm thấy
+     */
+    private CartLine findCartLineByBarcode(String barcode) {
+        for (CartLine line : cart) {
+            if (line.product.barcode.equals(barcode)) {
+                return line;
+            }
+        }
+        return null;
     }
 
     private LocalDate selectedDate() {
@@ -232,8 +531,12 @@ public class NewInvoicePanel extends JPanel {
     // -----------------------------------------------------------------
     private void addToCart() {
         try {
+            // Get selected product from ComboBox
             billing.model.Product p = (billing.model.Product) cbProduct.getSelectedItem();
-            if (p == null) return;
+            if (p == null) {
+                JOptionPane.showMessageDialog(this, "Vui lòng chọn một sản phẩm.");
+                return;
+            }
 
             BigDecimal qty = new BigDecimal(tfQty.getText().trim());
             if (qty.compareTo(BigDecimal.ZERO) <= 0) {
@@ -248,7 +551,7 @@ public class NewInvoicePanel extends JPanel {
             if (price == null) {
                 JOptionPane.showMessageDialog(this,
                         "San pham nay chua co gia nao co hieu luc truoc ngay "
-                        + date + ".\nHay chon ngay muon hon.");
+                                + date + ".\nHay chon ngay muon hon.");
                 return;
             }
 
@@ -264,16 +567,64 @@ public class NewInvoicePanel extends JPanel {
                 note = promo[0] + " (-" + pct.stripTrailingZeros().toPlainString() + "%)";
             }
 
-            cart.add(new CartLine(p, qty, price, discount, note));
+            // Kiểm tra xem sản phẩm đã có trong giỏ hàng chưa
+            CartLine existingLine = findCartLineByBarcode(p.barcode);
+            if (existingLine != null) {
+                // Nếu có rồi, cập nhật số lượng và giảm giá
+                existingLine.quantity = existingLine.quantity.add(qty);
+                existingLine.discount = existingLine.discount.add(discount);
+                // promoNote giữ nguyên (nên là samaenery vì cùng sản phẩm và cùng ngày)
+            } else {
+                // Nếu chưa có, thêm dòng mới
+                cart.add(new CartLine(p, qty, price, discount, note));
+            }
             refreshCartTable();
 
             lbHint.setText("Gia ngay " + date + " = " + Ui.money(price)
-                         + (note.isEmpty() ? "  (khong co KM)" : "  " + note));
+                    + (note.isEmpty() ? "  (khong co KM)" : "  " + note));
+
+            // Clear quantity field for next entry, keep product selection
+            tfQty.setText("1");
+            // cbProduct.setSelectedIndex(-1); // Clear selection - commented out to keep product selection
 
         } catch (NumberFormatException nfe) {
             JOptionPane.showMessageDialog(this, "So luong khong hop le.");
         } catch (Exception ex) {
             Ui.error(this, ex);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    //  Edit quantity of selected cart line
+    // -----------------------------------------------------------------
+    private void editQuantity() {
+        int selectedRow = tbCart.getSelectedRow();
+        if (selectedRow < 0 || selectedRow >= cart.size()) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn một dòng sản phẩm để chỉnh sửa.");
+            return;
+        }
+
+        try {
+            BigDecimal newQty = new BigDecimal(tfQty.getText().trim());
+            if (newQty.compareTo(BigDecimal.ZERO) <= 0) {
+                JOptionPane.showMessageDialog(this, "Số lượng phải lớn hơn 0.");
+                return;
+            }
+
+            // Update the quantity of the selected cart line
+            CartLine cartLine = cart.get(selectedRow);
+            cartLine.quantity = newQty;
+
+            // Refresh the display
+            refreshCartTable();
+            refreshTotals();
+
+            // Clear the quantity field after update (optional)
+            tfQty.setText("1");
+            tfQty.requestFocus();
+
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Số lượng không hợp lệ. Vui lòng nhập một số.");
         }
     }
 
@@ -303,11 +654,211 @@ public class NewInvoicePanel extends JPanel {
         }
         payments.add(new PaymentEntry(method, amount.setScale(2, RoundingMode.HALF_UP), d1, d2));
         refreshPayTable();
+        updateRefundButtonState(); // Update refund button state after adding payment
     }
 
-    // -----------------------------------------------------------------
-    //  Lưu xuống database
-    // -----------------------------------------------------------------
+    /**
+     * Thêm thanh toán với chi tiết cụ thể (dùng cho VietQR)
+     * @param methodIndex chỉ số phương thức thanh toán
+     * @param amount số tiền
+     * @param detail1 chi tiết 1 (ví dụ: nhà cung cấp ví điện tử)
+     * @param detail2 chi tiết 2 (ví dụ: mã giao dịch)
+     */
+    private void addPayment(int methodIndex, BigDecimal amount, String detail1, String detail2) {
+        String method;
+        if (methodIndex == 0) {
+            method = PaymentEntry.CASH;
+        } else if (methodIndex == 1) {
+            method = PaymentEntry.CARD;
+        } else {
+            method = PaymentEntry.EWALLET;
+        }
+        payments.add(new PaymentEntry(method, amount.setScale(2, RoundingMode.HALF_UP), detail1, detail2));
+        refreshPayTable();
+        updateRefundButtonState(); // Update refund button state after adding payment
+    }
+
+    private void handleRefund() {
+        // Only process if refund button is enabled (should be checked by caller, but double-check)
+        if (!btRefund.isEnabled()) {
+            return;
+        }
+
+        try {
+            BigDecimal refundAmt = new BigDecimal(tfAmountRef.getText().trim());
+            if (refundAmt.compareTo(BigDecimal.ZERO) <= 0) {
+                JOptionPane.showMessageDialog(this, "Số tiền thối phải lớn hơn 0.");
+                return;
+            }
+
+            // Find the last cash payment to refund from
+            int lastCashIndex = -1;
+            for (int i = payments.size() - 1; i >= 0; i--) {
+                PaymentEntry payment = payments.get(i);
+                if (payment.method.equals(PaymentEntry.CASH)) {
+                    lastCashIndex = i;
+                    break;
+                }
+            }
+
+            if (lastCashIndex == -1) {
+                JOptionPane.showMessageDialog(this, "Không tìm thấy thanh toán tiền mặt để thối.");
+                return;
+            }
+
+            PaymentEntry cashPayment = payments.get(lastCashIndex);
+            if (cashPayment.amount.compareTo(refundAmt) < 0) {
+                JOptionPane.showMessageDialog(this, "Số tiền thối vượt quá số tiền của giao dịch tiền mặt cuối cùng.");
+                return;
+            }
+
+            // Refund the amount: reduce the payment amount
+            BigDecimal newAmount = cashPayment.amount.subtract(refundAmt);
+            payments.set(lastCashIndex, new PaymentEntry(
+                    cashPayment.method,
+                    newAmount.setScale(2, RoundingMode.HALF_UP),
+                    cashPayment.detail1,
+                    cashPayment.detail2
+            ));
+
+            // Clear the amount field and set focus
+            tfAmountRef.setText("");
+            tfAmountRef.requestFocus();
+
+            // Refresh displays
+            refreshPayTable();
+            refreshTotals();
+
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Số tiền thối không hợp lệ. Vui lòng nhập một số.");
+        }
+    }
+
+    /**
+     * Xử lý thanh toán qua QR code (VietQR)
+     * @param methodIndex chỉ số của phương thức thanh toán trong cbMethod (phải là 2 cho "Vi dien tu")
+     */
+    private void handleQrPayment(int methodIndex) {
+        if (methodIndex != 2) {
+            // Not EWALLET, should not happen due to button enabling
+            return;
+        }
+
+        try {
+            String amountStr = tfAmountRef.getText().trim();
+            BigDecimal amount;
+            if (amountStr.isEmpty()) {
+                // If amount empty, use the remaining amount due
+                amount = totalDue().subtract(totalPaid());
+                if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                    JOptionPane.showMessageDialog(this, "Không còn số tiền cần thanh toán.");
+                    return;
+                }
+                // Auto-fill the amount field
+                tfAmountRef.setText(amount.setScale(0, RoundingMode.HALF_UP).toPlainString());
+            } else {
+                amount = new BigDecimal(amountStr);
+                if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                    JOptionPane.showMessageDialog(this, "Vui lòng nhập số tiền hợp lệ!");
+                    return;
+                }
+            }
+
+            // Generate transaction reference
+            String transactionRef = "TXN" + (System.currentTimeMillis() % 10000000);
+
+            // Generate QR code image using VietQRHelper
+            BufferedImage qrImg = VietQRHelper.generateQRCodeImage(
+                    amount.longValue(),
+                    transactionRef,
+                    320); // Size 320x320 as requested
+
+            // Show QR dialog
+            showQrDialog(qrImg, amount, transactionRef);
+
+            // Clear amount field after generating QR (optional)
+            tfAmountRef.setText("");
+            tfAmountRef.requestFocus();
+
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Số tiền không hợp lệ!");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Lỗi khi tạo mã QR: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Hiển thị dialog chứa mã QR và thông tin thanh toán
+     * @param qrImg Ảnh mã QR
+     * @param amount Số tiền thanh toán
+     * @param transactionRef Mã giao dịch
+     */
+    private void showQrDialog(BufferedImage qrImg, BigDecimal amount, String transactionRef) {
+        // Create dialog
+        JDialog dialog = new JDialog((Frame) null, "Thanh toán qua QR code", true);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dialog.setLayout(new BorderLayout(10, 10));
+        ((JPanel) dialog.getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Display QR image directly from BufferedImage
+        // Resize image to 300x300 for display
+        Image scaled = qrImg.getScaledInstance(300, 300, Image.SCALE_SMOOTH);
+        ImageIcon qrIcon = new ImageIcon(scaled);
+
+        JLabel qrLabel = new JLabel(qrIcon);
+        qrLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+        // Info panel
+        JPanel infoPanel = new JPanel();
+        infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
+        infoPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+
+        JLabel amountLabel = new JLabel(
+                String.format("Số tiền cần thanh toán: %,.0fđ", amount));
+        amountLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        infoPanel.add(amountLabel);
+
+        JLabel refLabel = new JLabel(
+                String.format("Nội dung CK (Transaction_ref): %s", transactionRef));
+        refLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        infoPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+        infoPanel.add(refLabel);
+
+        JLabel statusLabel = new JLabel("Trạng thái: Đang chờ khách quét mã...");
+        statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        statusLabel.setForeground(new Color(0, 100, 0));
+        infoPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+        infoPanel.add(statusLabel);
+
+        // Buttons panel
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+        JButton btnConfirm = new JButton("Xác nhận đã nhận tiền (Thành công)");
+        JButton btnCancel = new JButton("Hủy bỏ");
+
+        btnConfirm.addActionListener(e -> {
+            // Confirm payment: add to payment list as EWALLET with VietQR info
+            addPayment(2, amount.setScale(2, RoundingMode.HALF_UP),
+                    "VietQR", transactionRef);
+            dialog.dispose();
+        });
+
+        btnCancel.addActionListener(e -> {
+            dialog.dispose();
+        });
+
+        btnPanel.add(btnConfirm);
+        btnPanel.add(btnCancel);
+
+        // Assemble dialog
+        dialog.add(qrLabel, BorderLayout.CENTER);
+        dialog.add(infoPanel, BorderLayout.SOUTH);
+        dialog.add(btnPanel, BorderLayout.PAGE_END);
+
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
     private void save() {
         try {
             if (cart.isEmpty()) {
@@ -319,7 +870,7 @@ public class NewInvoicePanel extends JPanel {
             if (due.compareTo(paid) != 0) {
                 int ok = JOptionPane.showConfirmDialog(this,
                         "Tong hoa don " + Ui.money(due) + " nhung da thanh toan "
-                        + Ui.money(paid) + ".\nVan luu chu?",
+                                + Ui.money(paid) + ".\nVan luu chu?",
                         "Lech tien", JOptionPane.YES_NO_OPTION);
                 if (ok != JOptionPane.YES_OPTION) return;
             }
@@ -331,7 +882,13 @@ public class NewInvoicePanel extends JPanel {
             String invoiceId = invoiceDao.nextInvoiceId();
             IdName counter   = (IdName) cbCounter.getSelectedItem();
             IdName cashier   = (IdName) cbCashier.getSelectedItem();
-            IdName customer  = (IdName) cbCustomer.getSelectedItem();
+
+            // Determine customer: use selectedCustomer if not null, else null for walk-in
+            IdName customer = selectedCustomer;
+            // If text field is empty, definitely walk-in (null)
+            if (tfCustomerPhone.getText().trim().isEmpty()) {
+                customer = null;
+            }
 
             invoiceDao.createInvoice(
                     invoiceId,
@@ -343,11 +900,11 @@ public class NewInvoicePanel extends JPanel {
                     cart,
                     payments);
 
-            JOptionPane.showMessageDialog(this,
-                    "Da luu hoa don " + invoiceId + " voi " + cart.size() + " dong hang.\n"
-                  + "Mo tab 'Nhat ky SQL' de xem cac cau lenh vua chay.",
-                    "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+            // Show receipt popup after successful save
+            boolean receiptShown = showReceiptPopup(invoiceId, selectedDate(), LocalTime.now().withNano(0),
+                                                  counter, cashier, customer, cart, payments);
 
+            // Reset form after popup is closed (or if popup failed to show)
             cart.clear();
             payments.clear();
             refreshCartTable();
@@ -359,22 +916,214 @@ public class NewInvoicePanel extends JPanel {
         }
     }
 
+    /**
+     * Displays a modal popup showing the retail receipt for the newly saved invoice.
+     * @return true if popup was shown successfully, false otherwise
+     */
+    private boolean showReceiptPopup(String invoiceId, LocalDate date, LocalTime time,
+                                   IdName counter, IdName cashier, IdName customer,
+                                   List<CartLine> cartItems, List<PaymentEntry> payments) {
+        try {
+            JDialog receiptDialog = new JDialog((Frame) null, "HÓA ĐƠN BÁN LẺ", true);
+            receiptDialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+            receiptDialog.getContentPane().setLayout(new BorderLayout());
+
+            // Increased dialog size for better spacing
+            Dimension dialogSize = new Dimension(520, 680);
+            receiptDialog.setPreferredSize(dialogSize);
+            receiptDialog.setSize(dialogSize);
+            receiptDialog.setMinimumSize(dialogSize);
+            receiptDialog.setLocationRelativeTo(this);
+
+            // Create HTML content for the receipt - Swing HTML 3.2 compliant with refined design
+            StringBuilder htmlContent = new StringBuilder();
+            htmlContent.append("<html><body style=\"font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #333333; line-height: 1.4; padding: 10px 18px; background-color: #ffffff;\">");
+
+            // Store header (can be customized based on actual counter data)
+            String storeName = "SIÊU THỊ MINI MART";
+            String storeAddress = counter != null ?
+                    String.format("Quầy: %s - %s", counter.id, counter.name != null ? counter.name : "") :
+                    "Quầy: ?? - ??";
+
+            // Header - using dashed dividers instead of bold headers
+            htmlContent.append("<div align=\"center\">");
+            htmlContent.append("<font size=\"+2\"><b>").append(storeName).append("</b></font><br/>");
+            if (!storeAddress.isEmpty() && !storeAddress.equals("Quầy: ?? - ??") && !storeAddress.contains("??")) {
+                htmlContent.append("<font size=\"-1\" color=\"#555555\">").append(storeAddress).append("</font><br/>");
+            }
+            htmlContent.append("<font size=\"+1\"><b>HÓA ĐƠN BÁN LẺ</b></font><br/>");
+            htmlContent.append("<div style=\"border-top: 1px dashed #bbbbbb; margin: 8px 0;\"></div>");
+            htmlContent.append("</div>");
+
+            // Transaction info - using dashed dividers
+            htmlContent.append("<div style=\"margin-top: 6px;\">");
+            htmlContent.append("<div><span style=\"color: #555555;\"><b>Mã HĐ:</b> </span>").append(invoiceId).append("</div>");
+            htmlContent.append("<div><span style=\"color: #555555;\"><b>Thời gian:</b> </span>").append(date).append(" ").append(time).append("</div>");
+            htmlContent.append("<div><span style=\"color: #555555;\"><b>Thu ngân:</b> </span>").append(cashier != null ? cashier.name : "??").append("</div>");
+            String customerName = (customer != null && customer.name != null) ? customer.name : "Khách vãng lai";
+            htmlContent.append("<div><span style=\"color: #555555;\"><b>Khách hàng:</b> </span>").append(customerName).append("</div>");
+            htmlContent.append("<div style=\"border-top: 1px dashed #bbbbbb; margin: 8px 0;\"></div>");
+            htmlContent.append("</div>");
+
+            // Items table - using dashed divider instead of bold header
+            htmlContent.append("<div style=\"border-top: 1px dashed #bbbbbb; margin: 8px 0;\"></div>");
+            htmlContent.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\" style=\"font-size: 13px;\">");
+            htmlContent.append("<tr style=\"color: #666666;\">");
+            htmlContent.append("<th align=\"left\" width=\"44%\">Tên hàng</th>");
+            htmlContent.append("<th align=\"center\" width=\"10%\" nowrap>SL</th>");
+            htmlContent.append("<th align=\"right\" width=\"23%\" nowrap>Đơn giá</th>");
+            htmlContent.append("<th align=\"right\" width=\"23%\" nowrap>Thành tiền</th>");
+            htmlContent.append("</tr>");
+
+            BigDecimal totalMerchandise = BigDecimal.ZERO;
+            BigDecimal totalDiscount = BigDecimal.ZERO;
+
+            for (CartLine item : cartItems) {
+                String productName = item.product.name;
+                // Ensure product name is properly escaped for HTML and truncate if needed
+                if (productName.length() > 30) {
+                    productName = productName.substring(0, 27) + "...";
+                }
+                // Escape HTML special characters
+                productName = productName.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+
+                htmlContent.append("<tr>");
+                htmlContent.append("<td align=\"left\" style=\"color: #222222;\">").append(productName).append("</td>");
+                htmlContent.append("<td align=\"center\" nowrap style=\"color: #555555;\">").append(item.quantity.intValue()).append("</td>");
+                htmlContent.append("<td align=\"right\" nowrap style=\"color: #555555;\">").append(Ui.money(item.unitPrice)).append("</td>");
+                htmlContent.append("<td align=\"right\" nowrap style=\"font-weight: bold; color: #111111;\">").append(Ui.money(item.quantity.multiply(item.unitPrice))).append("</td>");
+                htmlContent.append("</tr>");
+
+                totalMerchandise = totalMerchandise.add(item.quantity.multiply(item.unitPrice));
+                totalDiscount = totalDiscount.add(item.discount);
+            }
+
+            htmlContent.append("</table>");
+
+            // Summary section - using dashed divider instead of bold header
+            htmlContent.append("<div style=\"border-top: 1px dashed #bbbbbb; margin: 8px 0;\"></div>");
+            htmlContent.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\" style=\"font-size: 13px;\">");
+            htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\"><b>Tổng tiền hàng:</b></span></td><td align=\"right\" nowrap><b>").append(Ui.money(totalMerchandise)).append("</b></td></tr>");
+            htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\">Giảm giá / Khuyến mại:</span></td><td align=\"right\" nowrap>").append(Ui.money(totalDiscount)).append("</td></tr>");
+            htmlContent.append("<tr><td align=\"left\"><span style=\"color: #111111;\"><b>TỔNG CỘNG:</b></span></td><td align=\"right\" nowrap><span style=\"color: #111111;\"><b>").append(Ui.money(totalMerchandise.subtract(totalDiscount))).append("</b></span></td></tr>");
+            htmlContent.append("</table>");
+
+            // Payment method section - using dashed divider instead of bold header
+            htmlContent.append("<div style=\"border-top: 1px dashed #bbbbbb; margin: 8px 0;\"></div>");
+            htmlContent.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\" style=\"font-size: 13px;\">");
+
+            String paymentMethod = "Không xác định";
+            BigDecimal cashTendered = BigDecimal.ZERO;
+            BigDecimal changeDue = BigDecimal.ZERO;
+
+            if (!payments.isEmpty()) {
+                PaymentEntry firstPayment = payments.get(0);
+                paymentMethod = firstPayment.methodLabel();
+
+                if ("Tiền mặt".equals(paymentMethod)) {
+                    cashTendered = firstPayment.amount;
+                    BigDecimal totalAmount = totalMerchandise.subtract(totalDiscount);
+                    changeDue = cashTendered.subtract(totalAmount);
+                    // Ensure changeDue is not negative (shouldn't happen with proper validation)
+                    if (changeDue.compareTo(BigDecimal.ZERO) < 0) {
+                        changeDue = BigDecimal.ZERO;
+                    }
+
+                    htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\"><b>Phương thức thanh toán:</b></span></td><td align=\"right\" nowrap>").append(paymentMethod).append("</td></tr>");
+                    htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\"><b>Tiền khách đưa:</b></span></td><td align=\"right\" nowrap>").append(Ui.money(cashTendered)).append("</td></tr>");
+                    htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\"><b>Tiền thừa thối lại:</b></span></td><td align=\"right\" nowrap>").append(Ui.money(changeDue)).append("</td></tr>");
+                } else {
+                    htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\"><b>Phương thức thanh toán:</b></span></td><td align=\"right\" nowrap>").append(paymentMethod).append("</td></tr>");
+                }
+            } else {
+                htmlContent.append("<tr><td align=\"left\"><span style=\"color: #555555;\"><b>Phương thức thanh toán:</b></span></td><td align=\"right\" nowrap>").append(paymentMethod).append("</td></tr>");
+            }
+
+            htmlContent.append("</table>");
+
+            // Footer
+            htmlContent.append("<div style=\"border-top: 1px dashed #bbbbbb; margin: 8px 0;\"></div>");
+            htmlContent.append("<div align=\"center\" style=\"margin-top: 6px;\">");
+            htmlContent.append("<font size=\"-1\" color=\"#777777\">Cảm ơn Quý khách & Hẹn gặp lại!<br/>");
+            htmlContent.append("Ngày in: ").append(date).append(" ").append(time).append("</font>");
+            htmlContent.append("</div>");
+
+            htmlContent.append("</body></html>");
+
+            // Create JTextPane with HTML content and set font
+            JTextPane receiptPane = new JTextPane();
+            receiptPane.setContentType("text/html");
+            receiptPane.setText(htmlContent.toString());
+            receiptPane.setEditable(false);
+            receiptPane.setBackground(Color.WHITE);
+            // Set the font to a modern Sans-Serif
+            receiptPane.setFont(new Font("Helvetica Neue", Font.PLAIN, 13));
+
+            // Add to scroll pane for better handling of long receipts
+            JScrollPane scrollPane = new JScrollPane(receiptPane);
+            scrollPane.setBorder(BorderFactory.createEmptyBorder());
+            if (scrollPane != null) {
+                scrollPane.setPreferredSize(new Dimension(480, 560));
+            }
+            receiptDialog.getContentPane().add(scrollPane, BorderLayout.CENTER);
+
+            // Button panel
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 15));
+            buttonPanel.setBackground(new Color(245, 245, 245));
+
+            JButton btnPrint = new JButton("In hóa đơn");
+            btnPrint.addActionListener(e -> {
+                JOptionPane.showMessageDialog(receiptDialog,
+                    "Đã gửi lệnh in hóa đơn.",
+                    "Thông báo",
+                    JOptionPane.INFORMATION_MESSAGE);
+            });
+
+            JButton btnClose = new JButton("Đóng");
+            btnClose.addActionListener(e -> receiptDialog.dispose());
+
+            buttonPanel.add(btnPrint);
+            buttonPanel.add(btnClose);
+            receiptDialog.getContentPane().add(buttonPanel, BorderLayout.SOUTH);
+
+            // Add escape key binding to close dialog
+            receiptDialog.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "close");
+            receiptDialog.getRootPane().getActionMap().put("close", new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    receiptDialog.dispose();
+                }
+            });
+
+            receiptDialog.pack();
+            receiptDialog.setLocationRelativeTo(this);
+            receiptDialog.setVisible(true);
+            return true;
+        } catch (Exception ex) {
+            // If popup fails to show, just log the error and continue
+            ex.printStackTrace();
+            return false;
+        }
+    }
+
     // -----------------------------------------------------------------
     //  Cập nhật bảng hiển thị
     // -----------------------------------------------------------------
     private void refreshCartTable() {
-        String[] cols = {"Dong", "San pham", "SL", "DVT", "Don gia", "Giam gia", "Thanh tien", "Khuyen mai"};
+        String[] cols = {"Dong", "San pham", "SL", "DVT", "Don gia", "Thanh tien", "Khuyen mai"};
         Object[][] data = new Object[cart.size()][cols.length];
         for (int i = 0; i < cart.size(); i++) {
             CartLine c = cart.get(i);
+            // Thanh tien = Don gia * SL (khong tru giam gia)
+            BigDecimal amountWithoutDiscount = c.quantity.multiply(c.unitPrice);
             data[i] = new Object[]{
                     i + 1,
                     c.product.name,
                     c.quantity.stripTrailingZeros().toPlainString(),
                     c.product.unit,
                     Ui.money(c.unitPrice),
-                    Ui.money(c.discount),
-                    Ui.money(c.lineTotal()),
+                    Ui.money(amountWithoutDiscount),
                     c.promoNote};
         }
         ((DefaultTableModel) tbCart.getModel()).setDataVector(data, cols);
@@ -410,8 +1159,56 @@ public class NewInvoicePanel extends JPanel {
     private void refreshTotals() {
         BigDecimal due  = totalDue();
         BigDecimal paid = totalPaid();
+
+        // Update the lbLeft label based on whether we're overpaid or underpaid
+        if (paid.compareTo(due) > 0) {
+            // Overpaid: show refund amount
+            BigDecimal refundAmount = paid.subtract(due);
+            lbLeft.setText("Số tiền cần thối: " + Ui.money(refundAmount));
+        } else {
+            // Underpaid or exact: show amount due
+            BigDecimal amountDue = due.subtract(paid);
+            lbLeft.setText("Con thieu: " + Ui.money(amountDue));
+        }
+
         lbTotal.setText("Tong: " + Ui.money(due));
         lbPaid.setText("Da thanh toan: " + Ui.money(paid));
-        lbLeft.setText("Con thieu: " + Ui.money(due.subtract(paid)));
+
+        // Update refund button state based on current conditions
+        updateRefundButtonState();
+    }
+
+    private void updateRefundButtonState() {
+        // Enable refund button only when:
+        // 1. Selected payment method is Cash (index 0)
+        // 2. There is at least one payment
+        // 3. Total paid > Total due (there is overpayment to refund)
+        // 4. There is at least one cash payment with positive amount
+
+        boolean enable = false;
+
+        // Check if selected payment method is Cash
+        boolean isCashSelected = (selectedPaymentMethodIndex == 0);
+
+        // Check if there is at least one payment
+        boolean hasPayments = !payments.isEmpty();
+
+        // Check if we're overpaid (total paid > total due)
+        boolean isOverpaid = totalPaid().compareTo(totalDue()) > 0;
+
+        // Check if there is at least one cash payment with positive amount
+        boolean hasCashPayment = false;
+        for (PaymentEntry payment : payments) {
+            if (payment.method.equals(PaymentEntry.CASH) &&
+                    payment.amount.compareTo(BigDecimal.ZERO) > 0) {
+                hasCashPayment = true;
+                break;
+            }
+        }
+
+        // Enable if all conditions are met
+        enable = isCashSelected && hasPayments && isOverpaid && hasCashPayment;
+
+        btRefund.setEnabled(enable);
     }
 }
