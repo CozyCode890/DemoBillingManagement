@@ -17,6 +17,7 @@ import java.sql.Time;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,6 +30,39 @@ import java.util.List;
  *    đồng thời gọi tuần tự các Stored Procedure của Dev SQL trên cùng một Connection.
  */
 public class InvoiceDao {
+
+    /**
+     * Lớp nội bộ để lưu trữ thông tin về một mục trả hàng
+     */
+    public static class ReturnItem {
+        private final String productName;
+        private final int lineNumber;
+        private final int returnQuantity;
+        private final double amountRefunded;
+
+        public ReturnItem(String productName, int lineNumber, int returnQuantity, double amountRefunded) {
+            this.productName = productName;
+            this.lineNumber = lineNumber;
+            this.returnQuantity = returnQuantity;
+            this.amountRefunded = amountRefunded;
+        }
+
+        public String getProductName() {
+            return productName;
+        }
+
+        public int getLineNumber() {
+            return lineNumber;
+        }
+
+        public int getReturnQuantity() {
+            return returnQuantity;
+        }
+
+        public double getAmountRefunded() {
+            return amountRefunded;
+        }
+    }
 
     // =================================================================
     //  PHẦN 1 -- GHI DỮ LIỆU QUA THỦ TỤC & QUẢN LÝ TRANSACTION
@@ -306,6 +340,83 @@ public class InvoiceDao {
 
         } catch (SQLException e) {
             throw new RuntimeException("Loi khi xoa dong hang " + lineNumber + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Xử lý trả hàng cho hóa đơn.
+     * Lưu danh sách các sản phẩm trả hàng vào database qua transaction.
+     *
+     * @param invoiceId Mã hóa đơn cần trả hàng
+     * @param returnList Danh sách các mục trả hàng
+     * @param supervisorId ID của người quản lý chịu trách nhiệm
+     * @return true nếu xử lý thành công, false nếu có lỗi
+     */
+    public boolean processReturn(String invoiceId, List<ReturnItem> returnList, String supervisorId) {
+        if (returnList == null || returnList.isEmpty()) {
+            return false;
+        }
+
+        String spReturn = "{call sp_add_return(?, ?, ?, ?, ?, ?, ?)}";
+
+        long t0 = System.currentTimeMillis();
+        Connection conn = null;
+
+        try {
+            conn = Db.getConnection();
+            conn.setAutoCommit(false);          // ==== BẮT ĐẦU TRANSACTION ====
+
+            // Thực hiện thêm từng mục trả hàng
+            for (ReturnItem item : returnList) {
+                try (CallableStatement cs = conn.prepareCall(spReturn)) {
+                    // Tạo Return_ID tự động (sử dụng hàm hoặc để AUTO_INCREMENT)
+                    // Trong trường hợp này, chúng ta để NULL và để DB xử lý (AUTO_INCREMENT)
+                    cs.setNull(1, Types.VARCHAR); // Return_ID (sẽ được tạo tự động)
+                    cs.setString(2, invoiceId);
+                    cs.setInt(3, item.getLineNumber());
+                    cs.setDate(4, Date.valueOf(LocalDate.now())); // Return_Date
+                    cs.setInt(5, item.getReturnQuantity());
+                    cs.setBigDecimal(6, BigDecimal.valueOf(item.getAmountRefunded()));
+                    cs.setString(7, supervisorId);
+
+                    cs.executeUpdate();
+                    SqlLog.add(spReturn, new Object[]{
+                            "AUTO_GENERATED", invoiceId, item.getLineNumber(),
+                            LocalDate.now(), item.getReturnQuantity(),
+                            item.getAmountRefunded(), supervisorId}, 0, 1);
+                }
+            }
+
+            // Tùy chọn: Cập nhật trạng thái hóa đơn nếu cần
+            // Ví dụ: đánh dấu hóa đơn đã có trả hàng một phần
+            // String spUpdateStatus = "{call sp_update_invoice_return_status(?, ?)}";
+            // try (CallableStatement cs = conn.prepareCall(spUpdateStatus)) {
+            //     cs.setString(1, invoiceId);
+            //     cs.setString(2, "PARTIALLY_RETURNED");
+            //     cs.executeUpdate();
+            // }
+
+            conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
+            SqlLog.add("COMMIT;  -- luu thanh cong tra hang hoa don " + invoiceId,
+                       null, System.currentTimeMillis() - t0, 0);
+            return true;
+
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                    SqlLog.add("ROLLBACK;  -- da huy toan bo vi co loi", null, 0, 0);
+                } catch (SQLException ignore) { }
+            }
+            System.err.println("Loi khi xu ly tra hang: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+
+        } finally {
+            if (conn != null) {
+                try { conn.setAutoCommit(true); } catch (SQLException ignore) { }
+                try { conn.close(); }            catch (SQLException ignore) { }
+            }
         }
     }
 }

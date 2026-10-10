@@ -30,8 +30,9 @@ public class CartLine {
         this.promoNote = promoNote;
     }
 
-    /** Thành tiền = số lượng * đơn giá - giảm giá */
+    /** Thành tiền = số lượng * đơn giá - giảm giá (trước thuế) */
     public BigDecimal lineTotal() {
+        // Tiền trước thuế: (số lượng * đơn giá) - giảm giá
         return quantity.multiply(unitPrice)
                        .subtract(discount)
                        .setScale(2, RoundingMode.HALF_UP);

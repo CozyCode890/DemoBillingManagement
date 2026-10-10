@@ -43,6 +43,31 @@ else
     echo -e "${GREEN}[OK] Da tai xong driver vao: ${DEST}${NC}"
 fi
 
+# --- 1b. Tai ZXing Core & Javase (sinh ma QR VietQR) ------------------
+ZXING_VERSION="3.5.0"
+for ARTIFACT in core javase; do
+    JAR_NAME="zxing-${ARTIFACT}-${ZXING_VERSION}.jar"
+    URL="https://repo1.maven.org/maven2/com/google/zxing/${ARTIFACT}/${ZXING_VERSION}/${ARTIFACT}-${ZXING_VERSION}.jar"
+    DEST="${PROJECT_ROOT}/lib/${JAR_NAME}"
+
+    # Chap nhan ca ten da tai truoc do khong co tien to "zxing-".
+    EXISTING="$(ls "${PROJECT_ROOT}"/lib/*"${ARTIFACT}-${ZXING_VERSION}".jar 2>/dev/null | head -n 1 || true)"
+    if [ -n "$EXISTING" ]; then
+        echo -e "${GREEN}[OK] Da co san: ${EXISTING}${NC}"
+    else
+        echo -e "${CYAN}Dang tai ${JAR_NAME} tu Maven Central...${NC}"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$URL" -o "$DEST"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q "$URL" -O "$DEST"
+        else
+            echo -e "${RED}[LOI] Khong tim thay curl hoac wget de tai file!${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}[OK] Da tai xong vao: ${DEST}${NC}"
+    fi
+done
+
 # --- 2. Kiem tra Homebrew tren macOS ----------------------------------
 OS="$(uname -s)"
 if [ "$OS" = "Darwin" ]; then
