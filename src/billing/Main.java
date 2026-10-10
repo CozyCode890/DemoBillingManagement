@@ -1,6 +1,7 @@
 package billing;
 
 import billing.db.Db;
+import billing.db.SqlLog;
 import billing.ui.LoginDialog;
 import billing.ui.MainWindow;
 
@@ -42,6 +43,11 @@ public class Main {
             JOptionPane.showMessageDialog(null, help, "Loi ket noi", JOptionPane.ERROR_MESSAGE);
             return;
         }
+
+        // Đánh dấu mốc mở đầu phiên trong logs/sql.log -- file đó chứa nhật ký
+        // của nhiều ngày, không có dòng mốc thì không biết câu nào thuộc phiên nào.
+        // Xem tab "5. SQL Log" của Setup App.
+        SqlLog.appStart(Db.getUrl());
 
         // Mở màn hình Đăng nhập trước khi vào Cửa sổ chính
         SwingUtilities.invokeLater(() -> {

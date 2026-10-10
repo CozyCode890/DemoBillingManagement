@@ -330,7 +330,7 @@ Thêm `logs/`. Nhật ký là sản phẩm lúc chạy, không phải mã nguồ
 |---|---|---|
 | 1 | Mở `SetupApp.jar` khi `logs/` chưa tồn tại, vào tab 5 | Trạng thái: "Chưa có logs/sql.log. Hãy chạy app billing (tab 2)." Không có exception nào trong console. |
 | 2 | Tab 2 → `Chạy source billing` → đăng nhập | Tab 5 xuất hiện dòng `=== APP START ... ===` và các câu `sp_authenticate_account`, `sp_lookup_counters`, ... trong vòng ~1 giây. |
-| 3 | Trong billing: tab Lập hoá đơn → chọn sản phẩm → `Them vao hoa don` | Tab 5 thêm **đúng 2 dòng**: một câu tra `Price_History`, một câu tra khuyến mãi. Mỗi dòng có đủ `ms`, `dong` và giá trị tham số `?`. |
+| 3 | Trong billing: tab Lập hoá đơn → chọn sản phẩm → `Them vao hoa don` | Tab 5 thêm **đúng 2 dòng**: `{? = call fn_get_product_price(?, ?)}` (tra giá theo ngày bán — việc đọc `Price_History` nằm bên trong hàm này, phía MySQL) và `{call sp_get_active_promo(?, ?)}`. Mỗi dòng có đủ `ms`, `dong` và giá trị tham số `?`. |
 | 4 | Gõ `promo` vào ô `Lọc dòng chứa:` | Console đọc lại từ đầu, chỉ còn các dòng chứa `promo` (không phân biệt hoa thường). |
 | 5 | Xoá ô lọc | Hiện lại toàn bộ. |
 | 6 | Lưu một hoá đơn | Có dòng `sp_create_invoice_header`, nhiều dòng `sp_add_payment`, và dòng `COMMIT;` được tô xanh. |
@@ -347,7 +347,158 @@ hộp thoại lỗi nào bật lên.
 
 ---
 
-## 6. Trạng Thái Triển Khai
+## 6. Trạng Thái Triển Khai (đã hoàn thành)
 
-*(điền sau khi code xong — theo mẫu của plan/09: file đã thay đổi, những điểm làm khác kế hoạch và
-lý do, kết quả từng bước kiểm thử)*
+### 6.1. File đã thay đổi
+
+| File | Trạng thái | Ghi chú |
+|------|-----------|---------|
+| `.gitignore` | Bổ sung | Thêm `logs/` |
+| `src/billing/db/SqlLog.java` | Viết lại | Ghi file `logs/sql.log`, một bản ghi một dòng; giữ nguyên chữ ký `add()`; thêm `appStart()` |
+| `src/billing/Main.java` | Chỉnh sửa | Gọi `SqlLog.appStart(Db.getUrl())` sau khi test kết nối thành công |
+| `src/billing/ui/SqlLogPanel.java` | **Đã xoá** | Code chết, đã bị bỏ khỏi `billing/ui/MainWindow.java` từ trước |
+| `src/envsetup/runner/LogTailer.java` | Tạo mới | Đọc phần mới của file UTF-8 theo byte thô, decode sau khi cắt theo `\n` |
+| `src/envsetup/ui/SqlLogTab.java` | Tạo mới | Tab 5: `Timer` 1s, ô lọc, 3 nút, dòng trạng thái |
+| `src/envsetup/ui/BaseTab.java` | Bổ sung | Thêm `setStatus()` và `addToButtonBar()` (chỉ thêm, không sửa code cũ) |
+| `src/envsetup/ui/LogConsole.java` | **Sửa lỗi** | `clear()` đi chung hàng đợi với `append()` — xem mục 6.2.2 |
+| `src/envsetup/ui/Icons.java` | Bổ sung | Thêm hình `FOLDER` cho nút "Mở thư mục log" |
+| `src/envsetup/ui/MainWindow.java` | Chỉnh sửa | Đăng ký tab `  5. SQL Log  ` |
+| `SetupApp.jar` | Build lại | Qua `scripts\ps1\build-setup.ps1`, mã thoát 0, class version 65 (Java 21) |
+
+> Lưu ý: `.gitignore` loại trừ `src/envsetup/`, nên mã nguồn `LogTailer` / `SqlLogTab` và các sửa đổi
+> trong `BaseTab` / `LogConsole` / `MainWindow` (phía envsetup) **không được commit**; các thành viên
+> chỉ nhận bản `SetupApp.jar` đã build sẵn ở thư mục gốc. Phần billing (`SqlLog`, `Main`, việc xoá
+> `SqlLogPanel`) thì được commit bình thường.
+
+### 6.2. Những điểm làm khác kế hoạch (và lý do)
+
+1. **`LogTailer` nhận diện file bị thay bằng "vân tay" 64 byte đầu, không chỉ so `length < offset`.**
+   Kế hoạch (mục 3.4) chỉ nêu dấu hiệu `file.length() < offset`. Dấu hiệu đó **không đủ**: file có
+   thể bị xoá trắng rồi được ghi lại *vượt* qua offset cũ giữa hai lượt poll — lúc đó kích thước vẫn
+   tăng, tailer đọc tiếp từ giữa một file hoàn toàn khác và nhả ra những dòng rác bị cắt đầu. Lỗi
+   này **đã tái hiện thật** trong kiểm thử T6 (xoay file khi offset đang nhỏ) trước khi sửa. Dòng đầu
+   file luôn chứa mốc thời gian tới milli giây nên hai file khác nhau gần như không thể trùng vân tay.
+
+2. **Sửa một lỗi tranh chấp (race) có sẵn trong `LogConsole.clear()`.** Bản cũ xoá bằng
+   `invokeLater(() -> textPane.setText(""))`, trong khi `append()` chỉ đẩy dòng vào hàng đợi và một
+   `Timer` 60ms mới ghi chúng vào document. Nếu một lượt flush đã được xếp vào hàng đợi EDT **trước**
+   lúc `clear()` gọi `invokeLater`, thì flush chạy trước và ghi vào document những dòng được thêm
+   *sau* lệnh xoá, rồi `setText("")` mới chạy và xoá mất chúng. Hậu quả: bấm `Đọc lại từ đầu` thì
+   console trống trơn. Lỗi này **đã tái hiện thật** (kiểm thử #9 fail) trước khi sửa. Cách sửa: xoá
+   trở thành một mốc đi chung hàng đợi với các dòng log, nên thứ tự xoá/ghi luôn đúng, gọi từ luồng
+   nào cũng vậy. Lỗi này vốn cũng ảnh hưởng nút "Xoá log" của 4 tab cũ (bấm lúc script đang in ra),
+   nên đây là sửa lỗi chung, không riêng tab 5.
+
+3. **Ô lọc có hoãn 250ms (debounce) trước khi đọc lại từ đầu.** Kế hoạch nói "sửa nội dung ô này thì
+   tự Đọc lại từ đầu". Làm đúng từng chữ thì mỗi lần gõ một ký tự là một lần đọc lại cả file 2 MB.
+   Hoãn 250ms sau khi người dùng ngừng gõ cho kết quả giống hệt mà không đọc lại 5 lần cho chữ
+   `promo`.
+
+4. **Dòng trạng thái báo thêm số dòng khớp khi đang lọc.** Kế hoạch: `logs/sql.log -- 134 KB -- 812
+   câu SQL`. Khi đang lọc, hiện `hiện 45 / 812 câu SQL khớp "promo"` — không có số này thì người
+   dùng không biết bộ lọc đã bỏ qua bao nhiêu dòng. Số "câu SQL" **không đếm** dòng mốc
+   `=== APP START ... ===` vì nó không phải câu SQL.
+
+5. **Nút "Xoá nhật ký" ghi file rỗng chứ không xoá file** (đúng như kế hoạch mục 3.5), và cũng không
+   xoá `sql.log.1`. Giữ lại file giúp tránh luôn trường hợp người dùng đang mở file đó bằng Notepad.
+
+6. **`appStart()` cũng `synchronized`** như `add()`, để dòng mốc không bị xen vào giữa một bản ghi khác.
+
+7. **Giá trị tham số `?` dài bị cắt ở 120 ký tự.** Kế hoạch chỉ nói cắt câu SQL ở 500. Một tham số
+   dị thường (ví bản ghi dán cả đoạn văn) cũng làm vỡ bảng y như vậy.
+
+8. **Mỗi lượt poll đọc cạn file (tối đa 64 lượt đọc 1 MB)** thay vì đọc đúng một lần. Cần thiết khi
+   bấm `Đọc lại từ đầu` trên file đã lớn: một lần đọc chỉ lấy 1 MB, phần còn lại sẽ phải chờ các
+   nhịp timer sau.
+
+### 6.3. Kết quả kiểm thử đã chạy
+
+**Biên dịch** — cả hai phía, từ trạng thái sạch:
+
+- [x] Phía billing: 25 file, `javac -encoding UTF-8 -d out -cp "lib\*"` mã thoát 0 (chỉ còn cảnh báo
+      deprecated có từ trước trong `SearchPanel.java`).
+- [x] Phía Setup App: `build-setup.ps1` mã thoát 0; `LogTailer`, `SqlLogTab`, `MainWindow` trong jar
+      đều là class version 65 (Java 21) — máy cài Temurin 21 chạy được.
+- [x] `grep -rn "SqlLogPanel\|SqlLog.dump\|SqlLog.clear" src/` → không còn chỗ nào tham chiếu trước
+      khi xoá; không còn `SqlLogPanel.class` sót trong `out/`.
+- [x] `git check-ignore logs/sql.log logs/sql.log.1` → cả hai bị `.gitignore:10:logs/` chặn.
+
+**Hợp đồng file giữa hai app** (32 phép kiểm, chạy `SqlLog` thật ghi và `LogTailer` thật đọc, tất cả PASS):
+
+| Phép kiểm | Kết quả |
+|---|---|
+| Mỗi bản ghi đúng một dòng, đúng 5 trường cách nhau bằng ` \| ` | PASS |
+| SQL nhiều dòng (`\n`, `\r\n`) bị co thành một dòng | PASS |
+| Trường tham số rỗng nhưng dấu `\|` vẫn còn | PASS |
+| SQL dài 900 ký tự bị cắt ở 500 kèm `...` | PASS |
+| Tham số có dấu (`Nguyễn Thị Hoà - Đường Lê Lợi`) ghi và đọc lại đúng | PASS |
+| File chưa tồn tại → danh sách rỗng, không ném lỗi | PASS |
+| Đọc tăng dần: lượt sau chỉ trả về dòng mới | PASS |
+| Đọc đúng lúc đang ghi dở một dòng → chưa trả về gì, dòng sau mới trọn vẹn | PASS |
+| **Cắt đúng giữa một ký tự UTF-8 nhiều byte** → ghép lại đúng, không thành `?` | PASS |
+| File bị xoá trắng → đọc lại được từ đầu | PASS |
+| File bị xoá hẳn rồi tạo lại → đọc lại từ đầu | PASS |
+| Xoay file khi `>= 2 MB`: `sql.log.1` giữ bản cũ, `sql.log` mới còn 1 dòng, tailer đọc đúng | PASS |
+| Bất biến: không có `\r` hay `\n` bên trong bất kỳ bản ghi nào | PASS |
+
+**Kịch bản mục 5** — phần tự động hoá được (điều khiển thẳng component của tab 5, 18 phép kiểm, tất
+cả PASS):
+
+- [x] **#1** Chưa có `logs/` → dòng trạng thái đúng chữ "Chưa có logs/sql.log. Hãy chạy app billing
+      (tab 2)."; dựng tab không ném exception; `Timer` chạy nhiều nhịp không ném exception.
+- [x] **#2** Mốc `=== APP START ... ===` hiện ra; dòng trạng thái đếm đúng số câu SQL.
+- [x] **#3** Câu tra `Price_History` hiện ra kèm đủ `ms`, `dong` và `? 1=8934008, 2=2026-10-10`.
+- [x] **#4** Gõ `PROMO` (hoa) khớp dòng chứa `promo` (thường); các dòng không khớp và cả mốc
+      APP START bị ẩn; trạng thái báo `hiện 1 / 5 câu SQL khớp "PROMO"`.
+- [x] **#5** Xoá ô lọc → hiện lại toàn bộ.
+- [x] **#6** Dòng `COMMIT;` hiện ra (được `detectLevel` tô xanh vì chứa `thanh cong`).
+- [x] **#7** Bỏ tick `Tự động đọc` → dòng mới không tự hiện; bấm `Đọc lại từ đầu` → hiện ra;
+      tick lại → tự đọc tiếp.
+- [x] **#8** (phần quyết định, chạy bằng **hai tiến trình thật**) Trong lúc một tiến trình đang ghi
+      `SqlLog` liên tục 50ms/câu: ghi file rỗng từ tiến trình khác → **thành công**; xoá hẳn file →
+      **thành công**; tiến trình ghi không hề báo lỗi (stderr rỗng, không có dòng
+      `[SqlLog] Khong ghi duoc`), tự tạo lại file và ghi tiếp 64 dòng nữa, kết thúc bình thường.
+      → Xác nhận đúng lý do của quy tắc "mở — ghi — đóng ngay cho từng bản ghi" (mục 2.4).
+- [x] **#9** Sau khi tiến trình ghi đã tắt, bấm `Đọc lại từ đầu` → đọc lại được toàn bộ nhật ký của
+      phiên vừa rồi, không nhân đôi nội dung.
+- [x] **#8 qua hộp thoại thật** Bấm `Xoá nhật ký` → hộp thoại xác nhận hiện ra → bấm `Yes`: file về
+      0 byte, console sạch và in `[OK] Đã xoá nội dung ...`; ghi tiếp một câu SQL thì dòng mới lại
+      hiện ra. (Hộp thoại modal chặn EDT nên phải bấm nút bằng `invokeLater` rồi từ luồng khác tìm
+      hộp thoại trong `Window.getWindows()` và bấm `Yes`.)
+- [x] **#10** `Desktop.Action.OPEN` khả dụng; bấm `Mở thư mục log` mở Explorer thật, không sinh cảnh
+      báo nào. Nhánh phòng lỗi (thiếu thư mục / `Desktop` không khả dụng) chỉ in cảnh báo kèm đường
+      dẫn tuyệt đối, không ném exception.
+- [x] **#11** File thật decode được bằng UTF-8 strict, **không có BOM**, chữ `Nguyễn Thị Hoà` đúng,
+      mọi bản ghi đúng 5 trường.
+- [x] **#12** Dựng `MainWindow` thật ở đúng bề rộng tối thiểu 880px: đủ 5 tab, tab 5 là `SqlLogTab`,
+      **5 tab nằm gọn một hàng** — đo được tổng bề rộng 392px trong tab pane rộng 866px, còn thừa
+      474px (tab Git từng tràn box ở commit `59910eb` nên lần này đo bằng `getTabBounds` chứ không
+      nhìn mắt).
+- [x] **Kiểm thử âm** Đặt `logs` thành file thường thay vì thư mục rồi ghi 6 bản ghi: app **không
+      chết**, console vẫn in đủ 6 dòng, stderr in **đúng một** dòng cảnh báo (cờ `disabled` chặn
+      spam), file `logs` không bị ghi đè.
+
+**Dữ liệu thật trên MySQL thật** — gọi thẳng các DAO mà giao diện billing gọi
+(`retail_billing` trên `localhost:3306`, 10 sản phẩm / 4 quầy / 5 thu ngân trong seed):
+
+- [x] **#2** `AccountDao.authenticate("cashier","cashier")` thành công; nạp được quầy, thu ngân,
+      sản phẩm. File có đủ dòng mốc `=== APP START ... ===`, `sp_authenticate_account`,
+      `sp_lookup_counters`.
+- [x] **#3** Một lần "Them vao hoa don" (= `productDao.priceOn` + `productDao.activePromoOn`) sinh ra
+      **đúng 2 dòng**, mỗi dòng đủ 5 trường và có giá trị tham số thật:
+      ```
+      ... | 27 ms | 1 dong | {? = call fn_get_product_price(?, ?)} | ? 1=8934002, 2=2026-10-10
+      ... | 15 ms | 0 dong | {call sp_get_active_promo(?, ?)}      | ? 1=8934002, 2=2026-10-10
+      ```
+      **Kế hoạch mục 5 ghi sai tên câu SQL**: viết là "một câu tra `Price_History`", nhưng code thật
+      gọi hàm `fn_get_product_price` (việc đọc `Price_History` nằm bên trong hàm đó, phía MySQL).
+      Số dòng và ý nghĩa thì đúng y như kế hoạch.
+- [x] **#6** Lưu **một hoá đơn thật** qua `InvoiceDao.createInvoice` (2 dòng hàng, 2 lần thanh toán
+      CASH + CARD): có `fn_next_invoice_id`, `sp_create_invoice_header`,
+      `sp_add_invoice_line [batch x 2]`, **đúng 2 dòng** `sp_add_payment`, và
+      `COMMIT;  -- luu thanh cong hoa don INV-0016` (chứa `thanh cong` nên `detectLevel` tô xanh).
+      Hoá đơn đã thật sự vào database, **sau đó bị xoá lại** bằng `InvoiceDao.deleteInvoice` —
+      database trở về đúng 17 hoá đơn / 17 thanh toán như trước khi kiểm thử.
+
+> Không còn mục nào phải kiểm bằng tay. Việc duy nhất chưa làm là *đưa chuột bấm trên giao diện
+> billing*; mọi câu SQL mà các nút đó phát ra đều đã chạy thật qua chính các DAO đó.
