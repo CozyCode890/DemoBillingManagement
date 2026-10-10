@@ -1,0 +1,49 @@
+# =====================================================================
+#  .gitattributes -- khoa kieu xuong dong va danh dau file nhi phan.
+# ---------------------------------------------------------------------
+#  Vi sao can file nay?
+#
+#  May Windows thuong dat core.autocrlf=true, nghia la git tu doi xuong
+#  dong LF thanh CRLF khi lay file ve. Voi file .java hay .md thi vo
+#  hai, nhung voi script chay tren macOS thi CHET: dong dau tien tro
+#  thanh "#!/bin/bash\r" va he thong bao
+#      bad interpreter: /bin/bash^M: no such file or directory
+#  Loi nay rat kho doan vi nhin bang mat thuong file van binh thuong.
+#
+#  Cac quy tac duoi day ap dat kieu xuong dong dung cho tung loai file,
+#  bat ke may nguoi dung cau hinh git the nao.
+# =====================================================================
+
+# --- Script chay tren macOS / Linux: BAT BUOC LF ---------------------
+*.sh                            text eol=lf
+*.command                       text eol=lf
+Setup.app/Contents/MacOS/Setup  text eol=lf
+
+# --- Script chay tren Windows: CRLF cho chac -------------------------
+# cmd.exe xu ly LF duoc nhung mot so phien ban cu cat dong sai o cac
+# khoi if/goto nhieu dong, nen cu de CRLF cho dung chuan.
+*.bat                           text eol=crlf
+*.cmd                           text eol=crlf
+*.ps1                           text eol=crlf
+
+# --- File nhi phan: git KHONG duoc dong vao ban byte nao -------------
+# Git tu doan nhi phan kha tot, nhung doan sai mot lan la Setup.exe
+# hong va khong ai hieu tai sao. Khai bao thang cho chac.
+*.exe                           binary
+*.ico                           binary
+*.icns                          binary
+*.jar                           binary
+*.png                           binary
+*.jpg                           binary
+*.gif                           binary
+*.pdf                           binary
+
+# --- Ma nguon: chuan hoa ve LF trong kho -----------------------------
+*.java                          text eol=lf
+*.cs                            text eol=lf
+*.sql                           text eol=lf
+*.md                            text eol=lf
+*.xml                           text eol=lf
+*.plist                         text eol=lf
+*.manifest                      text eol=lf
+*.properties                    text eol=lf

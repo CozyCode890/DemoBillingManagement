@@ -45,7 +45,10 @@ find "$PROJECT_ROOT/src/envsetup" -type f -name "*.java" -print0 | while IFS= re
     echo "\"$f\"" >> "$SOURCES_LIST"
 done
 
-javac -encoding UTF-8 -d "$OUT_DIR" @"$SOURCES_LIST"
+# --release 21 là BẮT BUỘC: javac mặc định sinh bytecode theo đúng phiên bản
+# JDK đang chạy, nên máy bảo trì dùng JDK 25 sẽ tạo ra jar mà máy cài Temurin
+# 21 không chạy nổi (UnsupportedClassVersionError). Khoá ở 21 thì ai cũng chạy.
+javac --release 21 -Xlint:-options -encoding UTF-8 -d "$OUT_DIR" @"$SOURCES_LIST"
 rm -f "$SOURCES_LIST"
 
 JAR_PATH="$PROJECT_ROOT/SetupApp.jar"
