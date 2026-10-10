@@ -120,6 +120,44 @@ public class NewInvoicePanel extends JPanel {
     }
 
     // -----------------------------------------------------------------
+    //  Dữ liệu chưa lưu (dùng để cảnh báo trước khi đăng xuất)
+    // -----------------------------------------------------------------
+
+    /**
+     * Có dữ liệu chưa lưu trong tab này hay không.
+     *
+     * <p>Dùng để cảnh báo trước khi đăng xuất ({@code MainWindow.doLogout}) --
+     * {@code dispose()} cửa sổ sẽ xoá sạch giỏ hàng mà không hỏi gì.
+     */
+    public boolean hasPendingWork() {
+        return !cart.isEmpty() || !payments.isEmpty();
+    }
+
+    /**
+     * Mô tả ngắn phần chưa lưu, ví dụ {@code "3 dong hang, 1 lan thanh toan"};
+     * chuỗi rỗng nếu không có gì.
+     *
+     * <p>Hộp thoại đăng xuất cần nói rõ <i>sẽ mất bao nhiêu</i> -- "bạn có dữ
+     * liệu chưa lưu" chung chung thì người dùng không biết có đáng quan tâm không.
+     */
+    public String pendingWorkSummary() {
+        if (!hasPendingWork()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (!cart.isEmpty()) {
+            sb.append(cart.size()).append(" dong hang");
+        }
+        if (!payments.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(payments.size()).append(" lan thanh toan");
+        }
+        return sb.toString();
+    }
+
+    // -----------------------------------------------------------------
     //  Khu vực trên: thông tin chung của hóa đơn
     // -----------------------------------------------------------------
     private JComponent buildHeader() {

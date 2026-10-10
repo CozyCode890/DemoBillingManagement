@@ -2,9 +2,18 @@
 # =====================================================================
 #  run.sh -- Biên dịch rồi chạy ứng dụng Java Retail Billing
 #  Hỗ trợ macOS & Linux
+#
+#  Chọn sẵn vai trò đăng nhập (tùy chọn):
+#      ./scripts/bash/run.sh manager
+#      ./scripts/bash/run.sh user:pass
+#  Setup App truyền qua biến môi trường BILLING_LOGIN -- biến đó KHÔNG được
+#  billing.Main đọc, nó chỉ là đường ống giữa Setup App và script này.
+#  Xem plan/11-KE-HOACH-KHOI-2-DANG-NHAP-NHANH.md muc 3.2.
 # =====================================================================
 
 set -e
+
+LOGIN="${1:-$BILLING_LOGIN}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -109,5 +118,11 @@ rm -f "$TMP_SOURCES"
 echo -e "${GREEN}[OK] Biên dịch xong vào out/${NC}"
 
 # --- 5. Khởi chạy -----------------------------------------------------
+APP_ARGS=()
+if [ -n "$LOGIN" ]; then
+    APP_ARGS+=("--login=$LOGIN")
+    echo -e "${YELLOW}Dang nhap san bang: $LOGIN${NC}"
+fi
+
 echo -e "${CYAN}Đang khởi động app ($MAIN_CLASS)...${NC}"
-java -Dfile.encoding=UTF-8 -cp "$PROJECT_ROOT/out:$PROJECT_ROOT/lib/*" "$MAIN_CLASS"
+java -Dfile.encoding=UTF-8 -cp "$PROJECT_ROOT/out:$PROJECT_ROOT/lib/*" "$MAIN_CLASS" "${APP_ARGS[@]}"

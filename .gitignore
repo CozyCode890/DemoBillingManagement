@@ -6,7 +6,9 @@ target/
 # Driver JDBC -- 2.4 MB, tai lai duoc bang setup.ps1
 lib/*.jar
 
-# Nhat ky SQL do app billing ghi ra luc chay (xem tab 5 cua Setup App)
+# Trang thai cuc bo do app billing ghi ra luc chay:
+#   logs/sql.log              nhat ky SQL (xem tab 5 cua Setup App)
+#   logs/last-login.properties ten dang nhap gan nhat (KHONG chua mat khau)
 logs/
 
 # IDE
