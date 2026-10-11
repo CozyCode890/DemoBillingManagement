@@ -279,3 +279,22 @@ tệ hơn là hiện `"Tien mat"` ở cả hai.
 3, `NewInvoicePanel` (tab 1), `InvoiceViewPanel` (tab 3) và các hộp thoại đều
 dùng **không dấu**. `SearchPanel` (tab 2) giữ **có dấu** như `plan/13` mục 5.6
 đã chốt -- nó không hiển thị nhãn nào do SQL sinh ra.
+
+### 7.5. Bốn quy ước trên có một cái chốt bằng số
+
+```powershell
+.\scripts\ps1\check-contracts.ps1      # macOS/Linux: ./scripts/bash/check-contracts.sh
+```
+
+`tools/check/ContractCheck.java` kiểm bằng code những thứ **sai thì không ai
+thấy**: hai quy tắc đọc số, công thức giảm giá, hợp đồng tiền mặt
+(`tendered`/`recorded`/`change`), và mã QR có thật sự đọc `config.properties`
+hay không. Án lệ của nó là lỗi #1 của `plan/14` -- thu ngân gõ `500.000` và app
+ghi vào database **500 đồng**, sai đúng 1000 lần, không một ngoại lệ, không một
+cảnh báo. Loại sai đó phải có một cái chốt bằng số.
+
+Nó **chỉ** kiểm các kịch bản không cần bấm chuột; phần tương tác Swing vẫn phải
+kiểm bằng tay (`plan/14` mục 9.3 ghi rõ cái nào đã chạy, cái nào chưa). Nó ghi
+3 hoá đơn thật rồi xoá, không chạm dữ liệu seed. Sửa file đó thì đọc `plan/14`
+mục 9.4 trước -- tham số `-Djava.awt.headless=true` là bắt buộc, không phải
+tuỳ chọn.

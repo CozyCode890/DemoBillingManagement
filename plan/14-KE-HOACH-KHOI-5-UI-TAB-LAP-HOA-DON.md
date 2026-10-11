@@ -1350,8 +1350,8 @@ JDK 25.0.4, Windows 11.
 `PAY-0019 → PAY-0020 → PAY-0021` sau mỗi lần `sp_add_payment` (#8); hai thủ tục báo cáo chạy đúng
 như trước (#9 — khối này không chạm chúng, nên đây là xác nhận chứ không phải so sánh trước/sau).
 
-**Phần B–E (chạy bằng Java, headless) — một chương trình kiểm tạm ở thư mục scratchpad, KHÔNG commit
-vào dự án** (dự án không có bộ khung test; thêm một bộ nằm ngoài phạm vi khối này). Nó gọi thẳng vào
+**Phần B–E (chạy bằng Java, headless) — `tools/check/ContractCheck.java`, chạy bằng
+`.\scripts\ps1\check-contracts.ps1` (hoặc `scripts/bash/check-contracts.sh`).** Nó gọi thẳng vào
 `Ui`, `NewInvoicePanel.splitPayment`, `NewInvoicePanel.lineDiscount` (qua reflection),
 `VietQRHelper`, `AppConfig` và `InvoiceDao`:
 
@@ -1410,3 +1410,21 @@ ghi là đạt.
 **Đáng chú ý nhất trong số chưa chạy:** #36 (bấm hai lần ra một hoá đơn) và #37 (tắt MySQL, cửa sổ
 không đứng hình) là hai lỗi mà cách sửa *chỉ* kiểm được bằng tay. #49–#56 cũng vậy: `ReceiptDialog`
 là 354 dòng mới và chưa có một pixel nào của nó được nhìn thấy.
+
+### 9.4. Chốt bằng số cho khối sau
+
+`tools/check/ContractCheck.java` (272 dòng) nằm **ngoài** `src/` có chủ ý: nó cần `package billing.ui`
+để gọi được `NewInvoicePanel.splitPayment` và lớp `Split` (package-private), nhưng `run.ps1` / `run.sh`
+biên dịch toàn bộ `src/**/*.java` vào app — một lớp kiểm thử không nên đi theo bản giao hàng. Hai
+script `check-contracts.ps1` / `check-contracts.sh` biên dịch nó riêng vào `out-check/` (đã
+`.gitignore`) rồi chạy với `-Djava.awt.headless=true`.
+
+**Tham số headless là BẮT BUỘC, không phải tuỳ chọn.** `Ui.readMoney` / `Ui.readQuantity` "trả `null`
+sau khi **đã** hiện thông báo", nên không thể phân biệt *từ chối* với *nhận giá trị null* mà không
+bấm được hộp thoại. Chạy headless thì mỗi lời gọi `JOptionPane` ném `HeadlessException`, và bắt
+exception đó chính là phép kiểm "đã hiện thông báo". Bỏ tham số đi thì các phép kiểm đường "từ chối"
+sẽ treo ở một hộp thoại modal không ai bấm.
+
+**Khối 6 (seed động) dùng được ngay hai phép kiểm:** `#4` (bất biến `Tendered_Amount >= Amount` trên
+toàn database — mục 3.1 đã ghi đây là yêu cầu cho khối 6) và toàn bộ nhóm *Hợp đồng tiền mặt*, vì
+seed động sinh ra dòng `Cash_Payment` thì phải tuân đúng hợp đồng mà `splitPayment` thực hiện.

@@ -198,10 +198,12 @@ DemoBillingManagement/
 │   ├── ps1/                <- Script PowerShell cho Windows
 │   │   ├── setup.ps1, mysql-start.ps1, mysql-stop.ps1
 │   │   ├── run.ps1, billing-stop.ps1, db-setup.ps1
+│   │   ├── check-contracts.ps1  <- kiểm 4 hợp đồng số/tiền bằng code
 │   │   └── sql-*.ps1, build-setup.ps1, build-launcher.ps1
 │   └── bash/               <- Script Bash cho macOS (Homebrew) & Linux
 │       ├── setup.sh, mysql-start.sh, mysql-stop.sh
 │       ├── run.sh, billing-stop.sh, db-setup.sh
+│       ├── check-contracts.sh
 │       └── sql-*.sh, build-setup.sh, build-launcher.sh
 │
 ├── tools/launcher/         <- Mã nguồn của hai launcher (chỉ người bảo trì cần)
@@ -209,6 +211,9 @@ DemoBillingManagement/
 │   ├── app.manifest        <- bật comctl32 v6 + DPI aware cho Setup.exe
 │   ├── IconGen.java        <- vẽ icon, xuất ra cả .ico lẫn .icns
 │   └── Setup.ico
+│
+├── tools/check/            <- Chốt bằng số cho 4 hợp đồng (docs/05 mục 7)
+│   └── ContractCheck.java  <- đọc/hiện số, giảm giá, tiền mặt, mã QR
 │
 ├── sql/
 │   ├── 01_schema.sql       <- 15 bảng, có comment từng bảng
