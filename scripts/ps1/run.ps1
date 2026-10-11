@@ -5,7 +5,12 @@
 #  - Quét tất cả file .java trong src\ (tự động loại trừ src\envsetup)
 #  - Tự động nhận diện hoặc đọc app.main.class từ config.properties
 #  - Tự động tắt tiến trình cũ để tránh bị khóa file thư mục out\
+#  - Chọn sẵn vai trò đăng nhập:  .\scripts\ps1\run.ps1 -Login manager
 # =====================================================================
+
+# param() PHẢI là câu lệnh đầu tiên của file (trước cả $ErrorActionPreference),
+# nếu không PowerShell báo lỗi cú pháp.
+param([string]$Login)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -21,6 +26,21 @@ $jar = Get-ChildItem (Join-Path $projectRoot 'lib\mysql-connector-j-*.jar') -Err
 if (-not $jar) {
     Write-Host "Thiếu driver MySQL trong lib\. Chạy:  .\scripts\ps1\setup.ps1" -ForegroundColor Red
     exit 1
+}
+
+# ZXing cũng nằm trong lib\ và cũng bị .gitignore bỏ qua (dòng "lib/*.jar"),
+# nên một bản clone mới -- hoặc một bản copy chỉ mang theo driver MySQL --
+# sẽ thiếu nó. Thiếu mà không kiểm ở đây thì javac đổ ra 16 lỗi "cannot find
+# symbol" giữa VietQRHelper.java, không ai đoán được nguyên nhân thật là
+# thiếu thư viện. Kiểm trước, báo đúng việc cần làm.
+foreach ($artifact in @('core', 'javase')) {
+    $zx = Get-ChildItem (Join-Path $projectRoot "lib\*$artifact-*.jar") -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+    if (-not $zx) {
+        Write-Host "Thiếu thư viện ZXing ($artifact) trong lib\ -- cần để sinh mã QR VietQR." -ForegroundColor Red
+        Write-Host "Chạy:  .\scripts\ps1\setup.ps1" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # --- 1. Đọc cấu hình Main Class --------------------------------------
@@ -98,6 +118,18 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[OK] Biên dịch xong vào out\" -ForegroundColor Green
 
 # --- 5. Khởi chạy -----------------------------------------------------
+# Đăng nhập sẵn (tùy chọn): -Login manager  hoặc  -Login user:pass
+# Setup App truyền qua biến môi trường BILLING_LOGIN -- biến đó KHÔNG được
+# billing.Main đọc, nó chỉ là đường ống giữa Setup App và script này.
+# Xem plan/11-KE-HOACH-KHOI-2-DANG-NHAP-NHANH.md muc 3.2.
+if ([string]::IsNullOrWhiteSpace($Login)) { $Login = $env:BILLING_LOGIN }
+
+$appArgs = @()
+if (-not [string]::IsNullOrWhiteSpace($Login)) {
+    $appArgs += "--login=$Login"
+    Write-Host "Dang nhap san bang: $Login" -ForegroundColor DarkGray
+}
+
 Write-Host "Đang khởi động app ($mainClass)..." -ForegroundColor Cyan
-& java "-Dfile.encoding=UTF-8" -cp "out;lib\*" $mainClass
+& java "-Dfile.encoding=UTF-8" -cp "out;lib\*" $mainClass @appArgs
 exit $LASTEXITCODE

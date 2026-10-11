@@ -14,6 +14,21 @@ import java.math.BigDecimal;
  *  Barcode, Quantity, Unit_Price, Discount.
  *  Có cơ chế kiểm tra và cảnh báo nếu người dùng cố ý xóa các trường
  *  có ràng buộc NOT NULL (Quantity, Unit_Price, Barcode).
+ *
+ *  <p>Ba số nhận vào là {@code BigDecimal}, không phải {@code String}: cột
+ *  {@code DECIMAL} của MySQL về Java vốn là {@code BigDecimal} rồi, và ô nhập
+ *  được điền sẵn bằng {@code Ui.qtyInput} / {@code Ui.moneyInput} nên người
+ *  dùng thấy {@code 1.5} và {@code 158.000} thay vì {@code 1.500} và
+ *  {@code 158000.00}.
+ *
+ *  <p>Đọc số đi qua {@code Ui.readQuantity} / {@code Ui.readMoney}: ba khối
+ *  {@code try { new BigDecimal(...) } catch} của bản cũ biến mất, và dòng hàng
+ *  hết đường nhận {@code 1.2345} để {@code DECIMAL(10,3)} âm thầm làm tròn
+ *  thành {@code 1.235} (plan/14 lỗi #1, #23).
+ *
+ *  <p><b>Hai ô cạnh nhau có hai quy tắc đọc số khác nhau</b> (plan/14 mục 3.3),
+ *  nên mỗi ô có tooltip nêu đúng quy tắc của nó -- để sự khác biệt đó là một
+ *  điều được nói ra, không phải một cái bẫy.
  */
 public class EditLineDialog extends JDialog {
 
@@ -28,7 +43,8 @@ public class EditLineDialog extends JDialog {
     private final JTextField tfDiscount  = new JTextField(15);
 
     public EditLineDialog(Window owner, InvoiceDao dao, String invoiceId, int lineNumber,
-                          String barcode, String quantity, String unitPrice, String discount) {
+                          String barcode, BigDecimal quantity,
+                          BigDecimal unitPrice, BigDecimal discount) {
         super(owner, "Chinh sua Dong hang: " + lineNumber + " (HD: " + invoiceId + ")", ModalityType.APPLICATION_MODAL);
         this.dao = dao;
         this.invoiceId = invoiceId;
@@ -37,11 +53,21 @@ public class EditLineDialog extends JDialog {
         setLayout(new BorderLayout(10, 10));
         setResizable(false);
 
-        // Gán dữ liệu ban đầu
+        // Gán dữ liệu ban đầu.
+        // Số lượng: KHÔNG dấu nghìn (ô nhập hiểu '.' là dấu thập phân).
+        // Tiền: CÓ dấu nghìn (ô nhập hiểu '.' là dấu tách nghìn).
         tfBarcode.setText(barcode != null ? barcode : "");
-        tfQuantity.setText(quantity != null ? quantity : "1");
-        tfUnitPrice.setText(unitPrice != null ? unitPrice : "0");
-        tfDiscount.setText(discount != null ? discount : "0");
+        tfQuantity.setText(quantity == null ? "1" : Ui.qtyInput(quantity));
+        tfUnitPrice.setText(unitPrice == null ? "0" : Ui.moneyInput(unitPrice));
+        tfDiscount.setText(discount == null ? "0" : Ui.moneyInput(discount));
+
+        tfQuantity.setToolTipText("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN,"
+                + " toi da 3 chu so (cot DECIMAL(10,3)).<br>"
+                + "Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>");
+        String moneyTip = "<html>Dau <b>.</b> la dau TACH NGHIN: <code>158.000</code>"
+                + " = 158 nghin.<br>Dau <b>,</b> la dau thap phan (toi da 2 chu so).</html>";
+        tfUnitPrice.setToolTipText(moneyTip);
+        tfDiscount.setToolTipText(moneyTip);
 
         // Form nhập liệu
         JPanel form = new JPanel(new GridBagLayout());
@@ -134,41 +160,22 @@ public class EditLineDialog extends JDialog {
             return;
         }
 
-        BigDecimal quantity;
-        try {
-            quantity = new BigDecimal(qtyStr);
-            if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
-                JOptionPane.showMessageDialog(this, "So luong phai lon hon 0!", "Loi gia tri", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "So luong phai la so hop le!", "Loi gia tri", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
+        // Ba khối try { new BigDecimal(...) } catch của bản cũ biến mất.
+        // Ui.read* tự hiện thông báo nêu rõ quy tắc đọc số của từng ô, nên chỗ
+        // này chỉ cần "null thì dừng" (plan/14 mục 5.10).
+        //
+        // Số lượng: không trần (max = null) -- đây là sửa trực tiếp database,
+        // không phải trả hàng.
+        BigDecimal quantity = Ui.readQuantity(this, qtyStr, null, "");
+        if (quantity == null) return;
 
-        BigDecimal unitPrice;
-        try {
-            unitPrice = new BigDecimal(priceStr);
-            if (unitPrice.compareTo(BigDecimal.ZERO) < 0) {
-                JOptionPane.showMessageDialog(this, "Don gia khong duoc am!", "Loi gia tri", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Don gia phai la so hop le!", "Loi gia tri", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
+        // Đơn giá và giảm giá NHẬN số 0: Discount = 0.00 là giá trị bình thường
+        // nhất của cột đó.
+        BigDecimal unitPrice = Ui.readMoneyAllowZero(this, priceStr, "Don gia (Unit_Price)");
+        if (unitPrice == null) return;
 
-        BigDecimal discount;
-        try {
-            discount = new BigDecimal(discStr);
-            if (discount.compareTo(BigDecimal.ZERO) < 0) {
-                JOptionPane.showMessageDialog(this, "Giam gia khong duoc am!", "Loi gia tri", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Giam gia phai la so hop le!", "Loi gia tri", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
+        BigDecimal discount = Ui.readMoneyAllowZero(this, discStr, "Giam gia (Discount)");
+        if (discount == null) return;
 
         try {
             dao.updateInvoiceLine(invoiceId, lineNumber, barcode, quantity, unitPrice, discount);

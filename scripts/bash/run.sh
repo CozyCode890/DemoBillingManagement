@@ -2,9 +2,18 @@
 # =====================================================================
 #  run.sh -- Biên dịch rồi chạy ứng dụng Java Retail Billing
 #  Hỗ trợ macOS & Linux
+#
+#  Chọn sẵn vai trò đăng nhập (tùy chọn):
+#      ./scripts/bash/run.sh manager
+#      ./scripts/bash/run.sh user:pass
+#  Setup App truyền qua biến môi trường BILLING_LOGIN -- biến đó KHÔNG được
+#  billing.Main đọc, nó chỉ là đường ống giữa Setup App và script này.
+#  Xem plan/11-KE-HOACH-KHOI-2-DANG-NHAP-NHANH.md muc 3.2.
 # =====================================================================
 
 set -e
+
+LOGIN="${1:-$BILLING_LOGIN}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -43,6 +52,18 @@ if [ -z "$JAR_DRIVER" ]; then
     echo -e "${RED}[LOI] Thieu driver MySQL trong lib/. Hay chay: ./scripts/bash/setup.sh${NC}"
     exit 1
 fi
+
+# ZXing cung nam trong lib/ va cung bi .gitignore bo qua (dong "lib/*.jar"),
+# nen mot ban clone moi se thieu no. Thieu ma khong kiem o day thi javac do ra
+# 16 loi "cannot find symbol" giua VietQRHelper.java, khong ai doan duoc
+# nguyen nhan that la thieu thu vien. Kiem truoc, bao dung viec can lam.
+for ARTIFACT in core javase; do
+    if ! ls "$PROJECT_ROOT/lib"/*"${ARTIFACT}"-*.jar >/dev/null 2>&1; then
+        echo -e "${RED}[LOI] Thieu thu vien ZXing (${ARTIFACT}) trong lib/ -- can de sinh ma QR VietQR.${NC}"
+        echo -e "${RED}      Hay chay: ./scripts/bash/setup.sh${NC}"
+        exit 1
+    fi
+done
 
 # --- 1. Đọc Main Class từ config.properties --------------------------
 MAIN_CLASS=""
@@ -109,5 +130,11 @@ rm -f "$TMP_SOURCES"
 echo -e "${GREEN}[OK] Biên dịch xong vào out/${NC}"
 
 # --- 5. Khởi chạy -----------------------------------------------------
+APP_ARGS=()
+if [ -n "$LOGIN" ]; then
+    APP_ARGS+=("--login=$LOGIN")
+    echo -e "${YELLOW}Dang nhap san bang: $LOGIN${NC}"
+fi
+
 echo -e "${CYAN}Đang khởi động app ($MAIN_CLASS)...${NC}"
-java -Dfile.encoding=UTF-8 -cp "$PROJECT_ROOT/out:$PROJECT_ROOT/lib/*" "$MAIN_CLASS"
+java -Dfile.encoding=UTF-8 -cp "$PROJECT_ROOT/out:$PROJECT_ROOT/lib/*" "$MAIN_CLASS" "${APP_ARGS[@]}"

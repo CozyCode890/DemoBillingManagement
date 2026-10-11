@@ -54,9 +54,15 @@ function Invoke-SqlFile($path, $label) {
     }
 }
 
-Invoke-SqlFile '.\sql\01_schema.sql'   'Buoc 1/3: tao 15 bang'
-Invoke-SqlFile '.\sql\02_seed.sql'     'Buoc 2/3: nap du lieu mau'
-Invoke-SqlFile '.\sql\04_routines.sql' 'Buoc 3/3: tao cac ham va thu tuc SQL'
+# THU TU 01 -> 04 -> 02 LA BAT BUOC (plan/15 muc 4.1): tu khoi 6,
+# 02_seed.sql GOI cac ham va thu tuc cua 04_routines.sql de sinh du lieu
+# (sp_create_invoice_header, sp_add_payment, sp_settle_invoice, ...), nen
+# routine phai co TRUOC seed. Doi cho hai buoc nay cung lam hai duong nap
+# cua du an thong nhat thu tu: sql-create-db + sql-seed-data (duong cua
+# Setup App) da nap 01 + 04 roi moi 02 tu truoc.
+Invoke-SqlFile '.\sql\01_schema.sql'   'Buoc 1/3: tao 16 bang'
+Invoke-SqlFile '.\sql\04_routines.sql' 'Buoc 2/3: tao cac ham va thu tuc SQL'
+Invoke-SqlFile '.\sql\02_seed.sql'     'Buoc 3/3: nap du lieu mau (90 ngay)'
 
 $env:MYSQL_PWD = $null
 

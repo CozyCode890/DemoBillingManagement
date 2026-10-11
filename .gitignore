@@ -1,10 +1,18 @@
 # Ket qua bien dich -- sinh lai duoc bang run.ps1
 out/
+# out-check/ -- ket qua bien dich cua tools/check, sinh lai bang
+# scripts/ps1/check-contracts.ps1 (hoac scripts/bash/check-contracts.sh)
+out-check/
 *.class
 target/
 
 # Driver JDBC -- 2.4 MB, tai lai duoc bang setup.ps1
 lib/*.jar
+
+# Trang thai cuc bo do app billing ghi ra luc chay:
+#   logs/sql.log              nhat ky SQL (xem tab 5 cua Setup App)
+#   logs/last-login.properties ten dang nhap gan nhat (KHONG chua mat khau)
+logs/
 
 # IDE
 .idea/

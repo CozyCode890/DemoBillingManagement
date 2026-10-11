@@ -1,6 +1,7 @@
 package billing.dao;
 
 import billing.db.QueryResult;
+import billing.model.CustomerRef;
 import billing.model.IdName;
 
 import java.util.ArrayList;
@@ -25,40 +26,38 @@ public class LookupDao {
     }
 
     /**
-     * Danh sách khách hàng (gọi Stored Procedure: sp_lookup_customers).
-     * Phần tử đầu tiên là "khách vãng lai" (id = null) vì cột Customer_ID
-     * trên bảng Invoice cho phép NULL.
+     * Tìm khách hàng theo TIỀN TỐ số điện thoại:
+     * {@code sp_search_customers_by_phone(p_prefix)}.
+     *
+     * <p>Thủ tục, KHÔNG phải SQL thô: câu {@code SELECT ... WHERE Phone LIKE ?}
+     * cũ là câu SQL thô cuối cùng của tầng DAO và nó phá quy ước
+     * {@code Swing -> DAO -> Stored Procedure} (docs/05 mục 1).
+     *
+     * <p>Trả về {@link CustomerRef} với ba field riêng, KHÔNG ghép sẵn chuỗi
+     * hiển thị: ghép chuỗi để hiện trên màn hình là việc của tầng UI. Bản cũ
+     * ghép trong DAO nên chính cái chuỗi ghép đó bị đổ trở lại ô nhập
+     * (plan/14 lỗi #12).
+     *
+     * <p>CHẠY NGOÀI EDT -- chỗ gọi ({@code CustomerPicker}) dùng
+     * {@code SwingWorker} và hoãn 250ms, nên gõ 10 số là 1-2 câu SQL chứ không
+     * phải 10 (plan/14 lỗi #14).
+     *
+     * @param phonePrefix tiền tố, phía UI đã chắc chắn là chuỗi toàn chữ số
+     *                    dài {@code >= 3} (plan/14 mục 3.5)
      */
-    public List<IdName> customers() {
-        QueryResult qr = QueryResult.call("{call sp_lookup_customers()}");
-        List<IdName> list = new ArrayList<>();
-        list.add(new IdName(null, "(khach vang lai - khong luu)"));
-        list.addAll(toIdNames(qr));
-        return list;
-    }
-
-    /**
-     * Tìm khách hàng theo tiền tố số điện thoại.
-     * @param phonePrefix tiền tố số điện thoại để tìm
-     * @return danh sách khách hàng khớp (mỗi phần tử là IdName với id=Customer_ID, name="ID - Name - Phone")
-     */
-    public List<IdName> searchCustomersByPhonePrefix(String phonePrefix) {
+    public List<CustomerRef> searchCustomersByPhone(String phonePrefix) {
+        List<CustomerRef> list = new ArrayList<>();
         if (phonePrefix == null || phonePrefix.isEmpty()) {
-            return new ArrayList<>();
+            return list;
         }
 
-        String sql = "SELECT Customer_ID, Name, Phone FROM Customer WHERE Phone LIKE ?";
-        QueryResult qr = QueryResult.run(sql, phonePrefix + "%");
-        List<IdName> list = new ArrayList<>();
-
+        QueryResult qr = QueryResult.call("{call sp_search_customers_by_phone(?)}", phonePrefix);
         for (Object[] row : qr.rows) {
-            String id = String.valueOf(row[0]);
-            String name = String.valueOf(row[1]);
-            String phone = String.valueOf(row[2]);
-            String display = id + " - " + name + " - " + phone;
-            list.add(new IdName(id, display));
+            list.add(new CustomerRef(
+                    String.valueOf(row[0]),     // Ma_KH
+                    String.valueOf(row[1]),     // Ten
+                    String.valueOf(row[2])));   // Dien_thoai
         }
-
         return list;
     }
 
@@ -69,4 +68,10 @@ public class LookupDao {
         }
         return list;
     }
+
+    // Khong con customers(): thu tuc sp_lookup_customers VAN GIU trong SQL
+    // (6 dong, vo hai, con gia tri minh hoa) nhung khong con man hinh nao goi
+    // no -- cai gay nham la ham Java vi no lam nguoi doc tin rang co man hinh
+    // dang dung. Tim khach hang di qua sp_search_customers_by_phone
+    // (plan/14 muc 4.6).
 }

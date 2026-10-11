@@ -13,11 +13,13 @@ public class Account {
     private final String username;
     private final String role;
     private final String fullName;
+    private final String cashierId;   // co the null -- xem plan/12 muc 3.3
 
-    public Account(String username, String role, String fullName) {
+    public Account(String username, String role, String fullName, String cashierId) {
         this.username = username;
         this.role = role;
         this.fullName = fullName;
+        this.cashierId = cashierId;
     }
 
     public String getUsername() {
@@ -30,6 +32,15 @@ public class Account {
 
     public String getFullName() {
         return fullName;
+    }
+
+    /**
+     * Mã nhân viên trong bảng Cashier, hoặc null nếu tài khoản không gắn với
+     * nhân viên nào. Cột `Return.Approved_By` đòi đúng một `Cashier_ID`, nên
+     * đây là giá trị duy nhất dùng được làm "người duyệt" khi trả hàng.
+     */
+    public String getCashierId() {
+        return cashierId;
     }
 
     /** Kiểm tra xem tài khoản này có phải là Quản lý hay không */

@@ -1,17 +1,15 @@
 package billing.ui;
 
 import billing.db.Db;
+import billing.model.InvoiceStatus;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Tab 5: Tra cứu dữ liệu (Search Form)
@@ -30,16 +28,32 @@ public class SearchPanel extends JPanel {
     private final JTable table;
     private final JLabel lbRowCount;
 
-    // Formatters for Vietnamese locale (matching tab 2)
-    private static final DecimalFormat CURRENCY_FORMAT;
-    private static final DecimalFormat INTEGER_FORMAT;
-    static {
-        DecimalFormatSymbols sym = new DecimalFormatSymbols(new Locale("vi", "VN"));
-        sym.setGroupingSeparator('.');
-        sym.setDecimalSeparator(',');
-        CURRENCY_FORMAT = new DecimalFormat("#,##0", sym);
-        INTEGER_FORMAT = new DecimalFormat("#,##0", sym);
-    }
+    // =================================================================
+    //  TRẦN SỐ DÒNG (khối 6)
+    // =================================================================
+    //  Tab này là TRÌNH XEM BẢNG TỔNG QUÁT và plan/14 mục 2.3 đã chốt rằng
+    //  SQL thô ở đây là CÓ CHỦ Ý -- nên khối 6 không viết lại nó. Việc tối
+    //  thiểu và đủ: một trần + một nhãn nói ra khi bảng bị cắt.
+    //
+    //  Trước khối 6 cả hai câu là `SELECT * FROM <bang>` không LIMIT. Với
+    //  seed 91 ngày, chọn bảng Invoice_Line là nạp ~1.200 dòng và chọn
+    //  Payment là ~650 (plan/15 lỗi #21).
+    //
+    //  LẤY LIMIT + 1 RỒI BỎ DÒNG CUỐI: đó là cách biết "còn nữa" mà không
+    //  phải chạy thêm một câu COUNT(*) trên cùng bảng. Nhãn nói "1.000+"
+    //  chứ không bịa ra một tổng mà ta chưa đếm.
+    private static final int ROW_LIMIT = 1000;
+    private boolean lastResultTruncated = false;
+
+    // ĐỊNH DẠNG SỐ: KHÔNG CÒN BẢN CHÉP Ở ĐÂY.
+    // Lớp này từng giữ HAI trong bốn bản chép của cả dự án: bộ DecimalFormat ở
+    // đây, và một DecimalFormat("#0.##") dựng mới mỗi lần gọi trong
+    // formatValue() cho riêng cột Tax_Rate -- bản duy nhất biết định dạng phần
+    // trăm, nhưng lại đi qua double (plan/14 lỗi #22).
+    //
+    // Giờ mọi phép định dạng đi qua Ui, và cảnh báo biên dịch
+    // `new Locale("vi","VN")` đã deprecated -- cảnh báo cuối cùng của dự án
+    // ngoài nhóm [serial]/[this-escape] của Swing -- biến mất cùng bộ format.
 
     // Dynamic filter panel with CardLayout
     private final JPanel filterCardPanel;
@@ -332,8 +346,13 @@ public class SearchPanel extends JPanel {
 
     /** Filter panel for Invoice table */
     class InvoiceFilterPanel extends JPanel {
-        // Status: all, completed, voided
+        // Status: all, open, completed, voided
+        // Chip "Đang lập" (OPEN) thêm từ khối 4: trước đó không có hóa đơn OPEN
+        // nào nên thiếu chip là vô hại, giờ OPEN là trạng thái thật nên thiếu
+        // nó là chip "Tất cả" trộn lẫn hóa đơn đang lập mà không lọc riêng
+        // được, còn "Đã hoàn tất" thì im lặng ẩn chúng đi (plan/13 lỗi #7).
         private final JToggleButton rbAllStatus;
+        private final JToggleButton rbOpen;
         private final JToggleButton rbPaid;
         private final JToggleButton rbVoided;
         // Date: all, today, last 7 days, this month
@@ -352,12 +371,15 @@ public class SearchPanel extends JPanel {
             statusRow.add(new JLabel("Trạng thái hóa đơn: "));
             ButtonGroup statusGroup = new ButtonGroup();
             rbAllStatus = createToggleButton("Tất cả", true);
+            rbOpen = createToggleButton("Đang lập", false);
             rbPaid = createToggleButton("Đã hoàn tất", false);
             rbVoided = createToggleButton("Đã hủy", false);
             statusGroup.add(rbAllStatus);
+            statusGroup.add(rbOpen);
             statusGroup.add(rbPaid);
             statusGroup.add(rbVoided);
             statusRow.add(rbAllStatus);
+            statusRow.add(rbOpen);
             statusRow.add(rbPaid);
             statusRow.add(rbVoided);
             add(statusRow);
@@ -387,6 +409,7 @@ public class SearchPanel extends JPanel {
 
             // Add action listeners to all interactive components to trigger search
             rbAllStatus.addItemListener(e -> performSearch());
+            rbOpen.addItemListener(e -> performSearch());
             rbPaid.addItemListener(e -> performSearch());
             rbVoided.addItemListener(e -> performSearch());
             cbDate.addActionListener(e -> performSearch());
@@ -400,6 +423,7 @@ public class SearchPanel extends JPanel {
          */
         public void resetToDefault() {
             rbAllStatus.setSelected(true);
+            rbOpen.setSelected(false);
             rbPaid.setSelected(false);
             rbVoided.setSelected(false);
             cbDate.setSelectedIndex(0);
@@ -418,12 +442,18 @@ public class SearchPanel extends JPanel {
             StringBuilder where = new StringBuilder();
             List<Object> params = new ArrayList<>();
 
-            // Status
+            // Status -- mã trạng thái lấy từ InvoiceStatus, không gõ literal
+            // (plan/13 lỗi #6: bộ giá trị này từng bị chép 3 lần). Dùng tham số
+            // '?' thay vì nối chuỗi: hàm này ĐÃ có danh sách params cho các bộ
+            // lọc khác nên đây là dùng đúng cơ chế đang có.
             if (!rbAllStatus.isSelected()) {
-                if (rbPaid.isSelected()) {
-                    where.append("Invoice.Status = 'PAID' AND ");
-                } else if (rbVoided.isSelected()) {
-                    where.append("Invoice.Status = 'VOIDED' AND ");
+                InvoiceStatus want = rbOpen.isSelected()   ? InvoiceStatus.OPEN
+                                   : rbPaid.isSelected()   ? InvoiceStatus.PAID
+                                   : rbVoided.isSelected() ? InvoiceStatus.VOIDED
+                                   : null;
+                if (want != null) {
+                    where.append("Invoice.Status = ? AND ");
+                    params.add(want.code());
                 }
             }
 
@@ -685,9 +715,12 @@ public class SearchPanel extends JPanel {
     private void loadTableData(String tableName) {
         if (tableName == null || tableName.isEmpty()) return;
 
+        // LIMIT ROW_LIMIT + 1: dòng thừa thứ 1001 chỉ dùng để BIẾT là còn nữa,
+        // populateTable bỏ nó đi.
         try (Connection conn = Db.getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM `" + tableName + "`")) {
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT * FROM `" + tableName + "` LIMIT " + (ROW_LIMIT + 1))) {
 
             populateTable(rs);
         } catch (SQLException ex) {
@@ -804,6 +837,10 @@ public class SearchPanel extends JPanel {
             sql += " ORDER BY " + orderBy;
         }
 
+        // Cùng trần với loadTableData: một bộ lọc rộng (hoặc không lọc gì) trên
+        // Invoice_Line vẫn là ~1.200 dòng.
+        sql += " LIMIT " + (ROW_LIMIT + 1);
+
         try (Connection conn = Db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             // Set parameters
@@ -858,7 +895,14 @@ public class SearchPanel extends JPanel {
             }
         };
 
+        // Chỉ nhận ROW_LIMIT dòng; dòng thứ ROW_LIMIT + 1 (nếu câu SQL trả về)
+        // là tín hiệu "còn nữa", không phải dữ liệu để hiện.
+        lastResultTruncated = false;
         while (rs.next()) {
+            if (model.getRowCount() >= ROW_LIMIT) {
+                lastResultTruncated = true;
+                break;
+            }
             Object[] row = new Object[colCount];
             for (int i = 1; i <= colCount; i++) {
                 Object val = rs.getObject(i);
@@ -879,22 +923,29 @@ public class SearchPanel extends JPanel {
             return "";
         }
 
-        // Handle Tax_Rate column as percentage
+        // LOGIC CHON NHOM GIU NGUYEN, chi doi CHO DINH DANG sang Ui.
+        // Lop nay la mot trinh xem bang tong quat (14 bang), nen no khong co
+        // hop dong chi so cot nhu tab 3 -- no doan nhom theo TEN COT va kieu
+        // SQL. Cach doan do khong sai, no chi khong duoc phep tu dung
+        // DecimalFormat rieng (plan/14 muc 5.9c).
+
+        // Tax_Rate la PHAN TRAM, va day tung la ban DUY NHAT biet dinh dang
+        // phan tram trong ca du an -- nhung di qua double.
         if (columnName != null && columnName.equalsIgnoreCase("Tax_Rate")) {
-            if (value instanceof Number) {
-                double d = ((Number) value).doubleValue();
-                // Format without trailing zeros, then add '%'
-                java.text.DecimalFormat fmt = new java.text.DecimalFormat("#0.##");
-                fmt.setDecimalSeparatorAlwaysShown(false);
-                fmt.setGroupingUsed(false);
-                return fmt.format(d) + "%";
-            }
-            return value.toString();
+            return Ui.percent(value);
         }
 
-        // Treat quantity columns as integer (no currency symbol)
+        // So luong la DECIMAL(10,3) -- khong phai so nguyen (plan/12 muc 3.2).
+        // INV-0002 dong 1 ban 1,5 KG thit ba chi; lam tron thanh "2" la noi doi
+        // ve du lieu dang nam trong database.
+        String upper = columnName == null ? "" : columnName.toUpperCase();
+        if (upper.equals("QUANTITY") || upper.equals("RETURN_QUANTITY")) {
+            return Ui.qty(value);
+        }
+
+        // Treat ID-like columns as integer (no currency symbol)
         if (isQuantityColumn(columnName)) {
-            return formatInteger(value);
+            return Ui.integer(value);
         }
 
         // Numeric types: treat as currency if fractional, else integer
@@ -904,12 +955,12 @@ public class SearchPanel extends JPanel {
             case Types.DOUBLE:
             case Types.FLOAT:
             case Types.REAL:
-                return formatCurrency(value);
+                return Ui.money(value);
             case Types.INTEGER:
             case Types.SMALLINT:
             case Types.TINYINT:
             case Types.BIGINT:
-                return formatInteger(value);
+                return Ui.integer(value);
             // Date/time types: show as string (default formatting)
             case Types.DATE:
             case Types.TIME:
@@ -921,26 +972,21 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Format as currency (with thousand separator dot, and "đ" suffix) */
-    private String formatCurrency(Object value) {
-        if (value instanceof Number) {
-            return CURRENCY_FORMAT.format(((Number) value).doubleValue()) + "đ";
-        }
-        return value.toString();
-    }
-
-    /** Format as integer (with thousand separator dot, no decimal) */
-    private String formatInteger(Object value) {
-        if (value instanceof Number) {
-            return INTEGER_FORMAT.format(((Number) value).longValue());
-        }
-        return value.toString();
-    }
-
-    /** Update row count label */
+    /**
+     * Update row count label.
+     *
+     * <p>Một bảng bị cắt mà không nói là đang nói sai: nhãn "Tổng số hàng:
+     * 1.000 dòng" trên một bảng có 1.205 dòng là một con số sai. Khi chạm
+     * trần, nhãn phải nói ra điều đó (plan/15 mục 5.5).
+     */
     private void updateRowCount() {
         int rows = table.getModel().getRowCount();
-        lbRowCount.setText("Tổng số hàng: " + rows + " dòng");
+        if (lastResultTruncated) {
+            lbRowCount.setText("Đang hiện " + Ui.integer(rows)
+                    + " dòng đầu (bảng còn nhiều hơn — dùng bộ lọc để thu hẹp)");
+        } else {
+            lbRowCount.setText("Tổng số hàng: " + Ui.integer(rows) + " dòng");
+        }
     }
 
     /** Reset the filter panel for the given index to default state */
@@ -958,14 +1004,19 @@ public class SearchPanel extends JPanel {
         // For other panels (default message panels), there is no state to reset.
     }
 
-    /** Helper to check if a column should be treated as a quantity (integer) rather than currency */
+    /**
+     * Helper to check if a column should be treated as a plain integer / code
+     * rather than currency.
+     *
+     * QUANTITY va RETURN_QUANTITY DA BI BO khoi danh sach nay: chung la
+     * DECIMAL(10,3) va duoc formatValue() xu ly rieng truoc khi goi vao day
+     * (plan/12 muc 5.8).
+     */
     private boolean isQuantityColumn(String columnName) {
         if (columnName == null) return false;
         String upper = columnName.toUpperCase();
-        // Common quantity columns
-        return upper.equals("RETURN_QUANTITY") ||
-               upper.equals("QUANTITY") ||
-               upper.equals("LINE_NUMBER") ||
+        // Common integer / code columns
+        return upper.equals("LINE_NUMBER") ||
                upper.equals("RETURN_ID") ||
                upper.equals("INVOICE_ID") ||
                upper.equals("PAYMENT_ID") ||

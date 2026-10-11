@@ -47,10 +47,16 @@ Nếu để `payment_method` thành một cột trên `Invoice` thì mỗi hóa 
 Cách làm: tách `Payment` thành bảng riêng, quan hệ một-nhiều với `Invoice`.
 
 ```
-INV-0005  (tổng 377.800)
-  ├─ PAY-0005  200.000  → Cash_Payment   (khách đưa 200.000)
-  └─ PAY-0006  177.800  → Card_Payment   (thẻ ****9911)
+INV-0005  (một hóa đơn)
+  ├─ PAY-0007   84.200  → Cash_Payment     (khách đưa 90.000, thối 5.800)
+  └─ PAY-0008  126.300  → EWallet_Payment  (VNPay)
 ```
+
+> Các con số trên là dữ liệu thật của một lần nạp seed, nhưng **đừng ghim
+> chúng**: `02_seed.sql` tính mọi mốc ngày theo `CURDATE()` nên số tiền cụ thể
+> đổi theo ngày bạn chạy. Cái **không** đổi là hình dạng: một `Invoice`, nhiều
+> `Payment`, mỗi `Payment` nằm ở đúng một bảng con. Seed 91 ngày có hàng chục
+> hóa đơn kiểu này.
 
 Mỗi phương thức lại cần thông tin riêng: tiền mặt cần "khách đưa bao nhiêu", thẻ cần số thẻ và mã chuẩn chi, ví điện tử cần nhà cung cấp và mã giao dịch. Nhét hết vào `Payment` thì mỗi dòng sẽ có 4-5 cột `NULL` — vừa rối vừa không ràng buộc được gì.
 
@@ -79,10 +85,14 @@ Muốn biết một payment thuộc loại nào thì LEFT JOIN cả ba bảng co
 
 | Barcode | Valid_From_Date | Price |
 |---|---|---|
-| 8934008 | 2024-11-27 | 130.000 |
-| 8934008 | 2026-07-22 | 158.000 |
+| 8934008 | `CURDATE() - 400` | 130.000 |
+| 8934008 | `CURDATE() - 45`  | 158.000 |
 
-Muốn biết giá ngày 2025-08-16, lấy mốc gần nhất mà **không vượt quá** ngày đó:
+Hai mốc này có thật trong `02_seed.sql`. Mốc thứ hai — **ngày đổi giá** — nằm
+*giữa* cửa sổ 90 ngày của dữ liệu mẫu, nên cùng một sản phẩm xuất hiện ở cả hai
+đơn giá trên những hóa đơn bạn thấy cạnh nhau trong tab *Xem hóa đơn*.
+
+Muốn biết giá tại một ngày, lấy mốc gần nhất mà **không vượt quá** ngày đó:
 
 ```sql
 SELECT Price

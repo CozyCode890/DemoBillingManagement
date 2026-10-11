@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Setup.app/Contents/Info.plist
+
+  Đây là "giấy khai sinh" của một ứng dụng macOS. Finder đọc file này để
+  biết Setup.app là app chứ không phải thư mục thường, lấy tên hiển thị,
+  icon, và biết phải chạy file Contents/MacOS/Setup khi người dùng bấm đúp.
+
+  Bundle này KHÔNG chứa Java. Nó chỉ là lớp vỏ gọn (vài KB) bọc quanh
+  SetupApp.jar nằm ở thư mục gốc dự án, để trên macOS cũng bấm đúp một
+  phát là chạy giống Setup.exe trên Windows.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Setup</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Retail Billing Setup</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.demo.retailbilling.setup</string>
+
+    <!-- Tên file trong Contents/MacOS mà macOS sẽ chạy khi bấm đúp -->
+    <key>CFBundleExecutable</key>
+    <string>Setup</string>
+
+    <!-- Tên file trong Contents/Resources, phần đuôi .icns có thể bỏ -->
+    <key>CFBundleIconFile</key>
+    <string>Setup</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleSignature</key>
+    <string>????</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+
+    <!-- Thiếu khoá này thì cửa sổ Swing bị phóng to mờ trên màn Retina -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>

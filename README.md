@@ -11,10 +11,33 @@ Không Maven, không Spring, không Hibernate — chỉ `javac`, `java` và JDBC
 ## Chạy app
 
 ### Cách 1: Dùng GUI Quản Lý Môi Trường (Khuyên dùng - 1 Click)
-- **Trên Windows:** Bấm đúp chuột vào file `Setup.bat` ở thư mục gốc (hoặc `SetupApp.jar`).
-- **Trên macOS:** Bấm đúp chuột vào file `Setup.command` ở thư mục gốc (hoặc chạy `java -jar SetupApp.jar`).
 
-> Giao diện Swing sẽ mở lên ngay lập tức với 3 tab trực quan giúp bạn: Cài đặt môi trường, bật/tắt MySQL Server, biên dịch mã nguồn và quản trị Database chỉ bằng 1 cú click chuột.
+| Hệ điều hành | Bấm đúp vào | Dự phòng |
+|---|---|---|
+| Windows | **`Setup.exe`** | `Setup.bat` |
+| macOS | **`Setup.app`** | `Setup.command` |
+
+> Giao diện Swing sẽ mở lên ngay lập tức với 4 tab trực quan giúp bạn: Cài đặt môi trường, bật/tắt MySQL Server, biên dịch mã nguồn và quản trị Database chỉ bằng 1 cú click chuột.
+
+Hai file launcher này là chương trình gốc của từng hệ điều hành, không phải script, nên:
+
+- **Không nháy cửa sổ đen.** Bấm đúp là GUI hiện thẳng ra, có icon riêng.
+- **Tự dò Java ở mọi chỗ** chứ không chỉ trong `PATH`: biến `JAVA_HOME`, registry (Windows) / `java_home` (macOS), và thư mục cài của Temurin, Oracle, Microsoft, Zulu, Corretto, Homebrew...
+- **Thiếu Java thì mời cài** bằng một hộp thoại có nút `Cài tự động` (dùng `winget` trên Windows, `brew` trên macOS) thay vì bắt bạn tự gõ lệnh.
+- **Không cần mở lại cửa sổ sau khi cài JDK.** Launcher nhồi thẳng đường dẫn JDK vào `JAVA_HOME` và `PATH` của tiến trình con, nên các script `javac` / `mysql` mà GUI gọi chạy được ngay.
+
+<details>
+<summary>Nếu launcher bị hệ điều hành chặn (chỉ xảy ra khi tải repo dạng ZIP)</summary>
+
+Khi bạn `git clone` thì không gặp chuyện này. Chỉ khi tải file ZIP từ GitHub, hệ điều hành mới đánh dấu "tải từ Internet" lên các file trong đó:
+
+- **Windows** hiện bảng xanh *"Windows protected your PC"* → bấm `More info` → `Run anyway`. Lý do là `Setup.exe` chưa mua chữ ký số (khoảng vài trăm USD/năm, không đáng cho dự án học tập).
+- **macOS** báo *"không mở được vì không rõ nhà phát triển"* → bấm đúp `Setup.command` một lần, nó sẽ gỡ cờ cách ly rồi mở `Setup.app` hộ bạn. Hoặc tự chạy:
+
+  ```bash
+  xattr -dr com.apple.quarantine Setup.app
+  ```
+</details>
 
 ### Cách 2: Dùng dòng lệnh (Terminal)
 - **Trên Windows (PowerShell):**
@@ -165,25 +188,40 @@ DemoBillingManagement/
 ├── README.md               <- bạn đang đọc file này
 ├── config.properties       <- sửa mật khẩu MySQL ở đây
 ├── SetupApp.jar            <- File chạy portable GUI đa nền tảng
-├── Setup.bat               <- Bấm đúp chạy GUI trên Windows
-├── Setup.command           <- Bấm đúp chạy GUI trên macOS
+├── Setup.exe               <- BẤM ĐÚP trên Windows (launcher gốc, 36 KB)
+├── Setup.app/              <- BẤM ĐÚP trên macOS (bundle gốc, 35 KB)
+├── Setup.bat               <- dự phòng cho Windows nếu .exe bị chặn
+├── Setup.command           <- dự phòng cho macOS, gỡ cờ cách ly Gatekeeper
 ├── pom.xml                 <- chỉ cần nếu bạn mở bằng IntelliJ/Eclipse
 │
 ├── scripts/                <- Thư mục chứa toàn bộ script vận hành
 │   ├── ps1/                <- Script PowerShell cho Windows
 │   │   ├── setup.ps1, mysql-start.ps1, mysql-stop.ps1
 │   │   ├── run.ps1, billing-stop.ps1, db-setup.ps1
-│   │   └── sql-*.ps1, build-setup.ps1
+│   │   ├── check-contracts.ps1  <- kiểm 4 hợp đồng số/tiền bằng code
+│   │   ├── check-seed.ps1       <- kiểm 14 bất biến của dữ liệu bằng SQL
+│   │   └── sql-*.ps1, build-setup.ps1, build-launcher.ps1
 │   └── bash/               <- Script Bash cho macOS (Homebrew) & Linux
 │       ├── setup.sh, mysql-start.sh, mysql-stop.sh
 │       ├── run.sh, billing-stop.sh, db-setup.sh
-│       └── sql-*.sh, build-setup.sh
+│       ├── check-contracts.sh, check-seed.sh
+│       └── sql-*.sh, build-setup.sh, build-launcher.sh
+│
+├── tools/launcher/         <- Mã nguồn của hai launcher (chỉ người bảo trì cần)
+│   ├── WindowsLauncher.cs  <- nguồn của Setup.exe, biên dịch bằng csc.exe
+│   ├── app.manifest        <- bật comctl32 v6 + DPI aware cho Setup.exe
+│   ├── IconGen.java        <- vẽ icon, xuất ra cả .ico lẫn .icns
+│   └── Setup.ico
+│
+├── tools/check/            <- Chốt bằng số cho 4 hợp đồng (docs/05 mục 7)
+│   └── ContractCheck.java  <- đọc/hiện số, giảm giá, tiền mặt, mã QR
 │
 ├── sql/
-│   ├── 01_schema.sql       <- 15 bảng, có comment từng bảng
-│   ├── 02_seed.sql         <- dữ liệu mẫu (ngày tháng tự tính theo hôm nay)
+│   ├── 01_schema.sql       <- 16 bảng, có comment từng bảng
+│   ├── 02_seed.sql         <- dữ liệu mẫu 90 ngày, sinh bằng vòng lặp SQL
 │   ├── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
-│   └── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
+│   ├── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
+│   └── 05_invariants.sql   <- 14 bất biến của dữ liệu (sp_check_seed)
 │
 ├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
 │
@@ -201,13 +239,29 @@ Kiến trúc ba tầng: **ui → dao → db → MySQL**. Tầng giao diện khô
 
 ## Dữ liệu mẫu có sẵn
 
-- 3 cửa hàng, 4 quầy, 5 thu ngân, 4 khách hàng
-- 10 sản phẩm, trong đó **5 sản phẩm tăng giá hơn 10%** trong năm nay
-- 17 hóa đơn: 14 hóa đơn trong 7 ngày gần nhất, 1 hóa đơn bị hủy, **2 hóa đơn từ năm ngoái dùng giá cũ**
-- 1 hóa đơn thanh toán **tách làm hai phương thức** (tiền mặt + thẻ)
-- 3 lần trả hàng, trong đó **2 hóa đơn bị trả quá nửa giá trị**
+- 3 cửa hàng, 6 quầy (**2 quầy mỗi shop**), 5 thu ngân, 30 khách hàng
+- 20 sản phẩm, trong đó **5 sản phẩm tăng giá hơn 10%** trong năm nay
+- **91 ngày liên tục đều có hóa đơn** — khoảng 550 hóa đơn, mỗi shop 2 hóa đơn mỗi ngày
+- Cả **ba trạng thái** đều có hàng chục hóa đơn: đã thanh toán, đang lập (trả thiếu), đã hủy
+- Hàng trăm hóa đơn tiền mặt có **tiền thối** thật, và hàng chục hóa đơn thanh toán **tách làm hai phương thức**
+- Khoảng 50 lượt trả hàng, có cả **hai lượt trả trên cùng một dòng**, và vài hóa đơn bị trả quá nửa giá trị
+- 6 chương trình khuyến mãi phủ kín 91 ngày: hai đợt **gối nhau** trên cùng một sản phẩm (phải chọn mức cao hơn), một chương trình **tạm dừng** (có dòng trong bảng mà vẫn không được áp dụng), **2 hóa đơn từ năm ngoái dùng giá cũ**
 
-Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`, nên bạn chạy lúc nào thì báo cáo "7 ngày gần nhất" cũng có dữ liệu.
+Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`, nên bạn chạy lúc nào thì cả năm báo cáo cũng có dữ liệu đáng xem.
+
+Điểm đáng xem nhất: **ngày đổi giá nằm giữa cửa sổ 90 ngày**, nên cùng một sản phẩm xuất hiện ở **hai đơn giá khác nhau** trên hai hóa đơn mà bạn thấy cạnh nhau trong tab *Xem hóa đơn* — "hóa đơn cũ giữ giá cũ" không còn phải lùi 400 ngày mới thấy.
+
+Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những thủ tục mà tab *Lập hóa đơn* đi qua**, nên mọi con số trong database là con số mà app *có thể* đã tự tạo ra. Không `Status`, `Unit_Price`, `Discount` hay `Return_ID` nào được gõ tay. Kiểm bằng:
+
+```powershell
+.\scripts\ps1\check-seed.ps1
+```
+
+```bash
+./scripts/bash/check-seed.sh
+```
+
+Chi tiết quy ước: [docs/05-SQL-JAVA-CONVENTION.md](docs/05-SQL-JAVA-CONVENTION.md) mục 8.
 
 ---
 
@@ -216,13 +270,39 @@ Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`,
 | Thông báo | Cách xử lý |
 |---|---|
 | `Communications link failure` | **Lỗi hay gặp nhất.** MySQL chưa bật — mở GUI bấm "Chạy SQL Server" hoặc chạy script `mysql-start` |
-| `javac` / `java` không phải lệnh nhận dạng được | Chưa mở lại terminal sau khi cài JDK |
+| `javac` / `java` không phải lệnh nhận dạng được | Chưa mở lại terminal sau khi cài JDK. Mở GUI bằng `Setup.exe` / `Setup.app` thì không dính lỗi này — launcher tự nhồi đường dẫn JDK vào tiến trình con |
+| `UnsupportedClassVersionError ... class file version 69` | `SetupApp.jar` bị đóng gói bằng JDK mới hơn JDK đang chạy. Đóng gói lại bằng script `build-setup` (script đã khoá `--release 21`) |
+| Bấm đúp `Setup.exe` báo `side-by-side configuration is incorrect` | `tools/launcher/app.manifest` hỏng cú pháp XML — chạy `scripts\ps1\build-launcher.ps1`, nó kiểm tra và chỉ ra lỗi |
 | `No suitable driver found` | Thiếu jar trong `lib\` — chạy script `setup` (hoặc bấm "Cài đặt môi trường" trong GUI) |
 | `Access denied for user 'root'@'localhost'` | Sai mật khẩu trong `config.properties` (mặc định là `root`) |
 | `Unknown database 'retail_billing'` | Chưa chạy script `sql-create-db` / `db-setup` |
 | App mở ra nhưng bảng trống | Chưa nạp `02_seed.sql` (bấm "Tạo dữ liệu mẫu" trong GUI) |
+| Nạp `02_seed.sql` báo `FUNCTION ... does not exist` | Nạp seed **trước** `04_routines.sql`. Từ khối 6 seed gọi các hàm/thủ tục trong đó, nên thứ tự bắt buộc là **01 → 04 → 02** (script `db-setup` đã đúng thứ tự này) |
+| `check-seed` báo `PROCEDURE sp_check_seed does not exist` | Chưa nạp `sql/05_invariants.sql` — nạp một lần là đủ, nó chỉ tạo một thủ tục |
+| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `plan/15` đang bị vi phạm. Nạp lại `02_seed.sql` là về 0 |
 
 Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
+
+---
+
+## Dựng lại launcher (chỉ người bảo trì)
+
+`Setup.exe` và `Setup.app` đã được commit sẵn nên người dùng không cần dựng lại. Chỉ khi sửa `tools/launcher/WindowsLauncher.cs`, `app.manifest`, `IconGen.java` hoặc `Setup.app/Contents/MacOS/Setup` mới cần:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\ps1\build-launcher.ps1
+```
+
+```bash
+bash scripts/bash/build-launcher.sh
+```
+
+Vài điều đáng biết:
+
+- **Không cần cài thêm công cụ gì.** Trình biên dịch C# (`csc.exe`) nằm sẵn trong Windows từ bản 10, và `.icns` cho macOS được `IconGen.java` ghi tay bằng Java thuần nên máy Windows cũng tạo được, không cần `iconutil`.
+- **`Setup.exe` phải dựng trên Windows**, `Setup.app` thì dựng ở đâu cũng được vì nó chỉ là thư mục chứa `Info.plist` + script bash.
+- **Bit thực thi của `Setup.app/Contents/MacOS/Setup` phải nằm trong git.** Thiếu nó, máy Mac clone về sẽ báo "ứng dụng bị hỏng". Hai script build tự kiểm tra và sửa bằng `git update-index --chmod=+x`.
+- **XML trong `app.manifest` cấm hai dấu gạch ngang liền nhau trong comment.** `csc.exe` nhúng manifest mà không kiểm tra nên lỗi chỉ lộ ra lúc bấm đúp; script build kiểm tra hộ trước khi biên dịch.
 
 ---
 

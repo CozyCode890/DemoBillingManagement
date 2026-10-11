@@ -161,24 +161,34 @@ ORDER BY Phan_tram_tra DESC;
 -- =====================================================================
 -- BONUS: chứng minh "hóa đơn cũ giữ giá cũ"
 -- So sánh đơn giá đã ghi trên hóa đơn với giá HIỆN TẠI của sản phẩm.
+--
+-- GOM theo (sản phẩm, đơn giá đã đóng băng) thay vì liệt kê từng dòng:
+-- với seed 91 ngày, mốc đổi giá nằm GIỮA cửa sổ hóa đơn nên "giá cũ trên
+-- hóa đơn cũ" xảy ra ở hàng trăm dòng. Mỗi dòng kết quả trả lời đúng câu
+-- hỏi của đề bài: "có bao nhiêu dòng hàng đang ghi giá này, và giá hôm nay
+-- là bao nhiêu".
+--
+-- Bản cũ lọc `LIKE 'INV-OLD%'` còn bản trong `sp_report_old_price_proof`
+-- KHÔNG có `WHERE` nào -- hai bản chép của cùng một báo cáo đã lệch nhau.
+-- Nay cả hai lọc theo "đơn giá khác giá hôm nay", tức là theo ĐỊNH NGHĨA
+-- của "giữ giá cũ" thay vì theo một tiền tố mã hóa đơn (plan/15 mục 5.3).
+-- Hai hóa đơn INV-OLD-* vẫn nằm trong kết quả, chỉ là không còn là bằng
+-- chứng duy nhất.
 -- =====================================================================
 SELECT '=== BONUS: Hoa don cu van giu gia cu ===' AS ' ';
 
-SELECT  l.Invoice_ID                AS Ma_HD,
-        i.`Date`                    AS Ngay_ban,
-        p.Name                      AS San_pham,
-        l.Unit_Price                AS Gia_tren_hoa_don,
-        (SELECT h.Price
-         FROM   Price_History h
-         WHERE  h.Barcode = l.Barcode
-           AND  h.Valid_From_Date <= CURDATE()
-         ORDER BY h.Valid_From_Date DESC
-         LIMIT 1)                   AS Gia_hom_nay
+SELECT  p.Name                                     AS San_pham,
+        l.Unit_Price                               AS Gia_ghi_tren_HD,
+        fn_get_product_price(l.Barcode, CURDATE()) AS Gia_hom_nay,
+        COUNT(*)                                   AS So_dong_hang,
+        MIN(i.`Date`)                              AS Ban_tu_ngay,
+        MAX(i.`Date`)                              AS Ban_den_ngay
 FROM    Invoice_Line l
-JOIN    Invoice i ON i.Invoice_ID = l.Invoice_ID
-JOIN    Product p ON p.Barcode    = l.Barcode
-WHERE   l.Invoice_ID LIKE 'INV-OLD%'
-ORDER BY l.Invoice_ID, l.Line_Number;
+JOIN    Invoice      i ON i.Invoice_ID = l.Invoice_ID
+JOIN    Product      p ON p.Barcode    = l.Barcode
+WHERE   l.Unit_Price <> fn_get_product_price(l.Barcode, CURDATE())
+GROUP BY p.Name, l.Unit_Price, l.Barcode
+ORDER BY p.Name, l.Unit_Price;
 
 
 -- =====================================================================

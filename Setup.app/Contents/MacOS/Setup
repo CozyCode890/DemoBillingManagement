@@ -1,0 +1,274 @@
+#!/bin/bash
+# =====================================================================
+#  Setup.app/Contents/MacOS/Setup
+#  Launcher 1-click cho macOS -- bản tương đương Setup.exe của Windows.
+# ---------------------------------------------------------------------
+#  Người dùng bấm đúp Setup.app trong Finder, macOS chạy đúng file này.
+#  Không có cửa sổ Terminal nào bật lên, app hiện thẳng trên Dock với
+#  icon riêng.
+#
+#  Việc nó làm, theo thứ tự:
+#    1. Tìm thư mục gốc dự án (đi ngược lên từ vị trí Setup.app).
+#    2. Tìm bản Java mới nhất trên máy và kiểm tra >= 21.
+#    3. Thiếu Java thì hiện hộp thoại mời cài bằng Homebrew.
+#    4. Chạy SetupApp.jar, ghi log, báo lỗi bằng hộp thoại nếu jar chết.
+#
+#  QUAN TRỌNG khi sửa file: macOS chỉ có bash 3.2 (bản 2007, Apple không
+#  cập nhật vì lý do giấy phép GPLv3). Không dùng mảng kết hợp
+#  (declare -A), ${bien,,} hay mapfile -- bash 3.2 không hiểu.
+# =====================================================================
+
+set -u
+
+MIN_JAVA_MAJOR=21
+APP_NAME="Retail Billing Setup"
+DOWNLOAD_PAGE="https://adoptium.net/temurin/releases/?version=21&os=mac"
+BREW_CASK="temurin@21"
+
+# --- Vị trí các thư mục ----------------------------------------------
+HERE="$(cd "$(dirname "$0")" && pwd)"            # .../Setup.app/Contents/MacOS
+APP_BUNDLE="$(cd "$HERE/../.." && pwd)"          # .../Setup.app
+RESOURCES="$APP_BUNDLE/Contents/Resources"
+LOG="${TMPDIR:-/tmp}/retail-billing-setup.log"
+
+# ---------------------------------------------------------------------
+#  Hộp thoại
+# ---------------------------------------------------------------------
+# Truyền nội dung qua argv của AppleScript chứ không nhét thẳng vào chuỗi
+# lệnh: đường dẫn có dấu nháy hay tiếng Việt sẽ làm hỏng cú pháp osascript.
+
+show_error() { # $1 = nội dung
+    /usr/bin/osascript \
+        -e 'on run argv' \
+        -e 'display dialog (item 1 of argv) with title (item 2 of argv) buttons {"Đóng"} default button 1 with icon stop' \
+        -e 'end run' \
+        "$1" "$APP_NAME" >/dev/null 2>&1
+}
+
+# In ra nhãn nút người dùng bấm (rỗng nếu họ nhấn Esc).
+ask_three_way() { # $1 = nội dung, $2..$4 = nhãn ba nút
+    /usr/bin/osascript \
+        -e 'on run argv' \
+        -e 'set r to display dialog (item 1 of argv) with title (item 2 of argv) buttons {item 3 of argv, item 4 of argv, item 5 of argv} default button 3 with icon caution' \
+        -e 'return button returned of r' \
+        -e 'end run' \
+        "$1" "$APP_NAME" "$2" "$3" "$4" 2>/dev/null
+}
+
+# ---------------------------------------------------------------------
+#  Tìm thư mục gốc dự án
+# ---------------------------------------------------------------------
+# Giống envsetup.runner.PlatformUtil.climbToRoot(): đi ngược tối đa 5 cấp
+# tìm nơi có scripts/ hoặc config.properties.
+
+find_project_root() {
+    local dir="$1"
+    local i
+    for ((i = 0; i < 5; i++)); do
+        if [ -d "$dir/scripts/bash" ] || [ -d "$dir/scripts/ps1" ] || [ -f "$dir/config.properties" ]; then
+            echo "$dir"
+            return 0
+        fi
+        [ "$dir" = "/" ] && break
+        dir="$(dirname "$dir")"
+    done
+    return 1
+}
+
+ROOT="$(find_project_root "$(dirname "$APP_BUNDLE")")"
+if [ -z "$ROOT" ]; then
+    show_error "Không tìm thấy thư mục dự án.
+
+Setup.app phải nằm ngay trong thư mục gốc của DemoBillingManagement (cạnh config.properties và SetupApp.jar).
+
+Nếu bạn đã kéo Setup.app sang Applications hoặc Desktop, hãy chuyển nó về lại thư mục dự án."
+    exit 1
+fi
+
+JAR="$ROOT/SetupApp.jar"
+if [ ! -f "$JAR" ]; then
+    show_error "Không tìm thấy SetupApp.jar trong:
+$ROOT
+
+Đóng gói lại bằng lệnh:
+    bash scripts/bash/build-setup.sh"
+    exit 1
+fi
+
+# ---------------------------------------------------------------------
+#  Tìm Java
+# ---------------------------------------------------------------------
+# CẨN THẬN: trên macOS KHÔNG được kiểm tra bằng "command -v java".
+# /usr/bin/java luôn tồn tại kể cả khi máy chưa cài JDK -- nó chỉ là cái
+# vỏ của Apple, chạy vào sẽ bật popup "No Java runtime present" của hệ
+# thống thay vì thông báo của mình. Phải hỏi /usr/libexec/java_home hoặc
+# soi thẳng thư mục cài.
+
+# In ra số phiên bản chính của một JAVA_HOME, ví dụ 21. Rỗng nếu không đọc được.
+java_major() {
+    local home="$1"
+    local version=""
+
+    # Mọi JDK từ 9 trở lên đều có file "release" chứa JAVA_VERSION="21.0.12".
+    if [ -r "$home/release" ]; then
+        version="$(/usr/bin/sed -n 's/^JAVA_VERSION="\{0,1\}\([^"]*\)".*/\1/p' "$home/release" | head -1)"
+    fi
+    # Dự phòng cho Java 8 (chưa có file release).
+    if [ -z "$version" ] && [ -x "$home/bin/java" ]; then
+        version="$("$home/bin/java" -version 2>&1 | head -1 | /usr/bin/sed -n 's/.*version "\([^"]*\)".*/\1/p')"
+    fi
+    [ -z "$version" ] && return 1
+
+    case "$version" in
+        1.*) echo "$version" | cut -d. -f2 ;;          # 1.8.0_412 -> 8
+        *)   echo "$version" | cut -d. -f1 | cut -d- -f1 ;;  # 21.0.12 -> 21
+    esac
+}
+
+# Liệt kê mọi JAVA_HOME khả dĩ, mỗi dòng một đường dẫn (có thể trùng nhau).
+collect_java_homes() {
+    [ -n "${JAVA_HOME:-}" ] && echo "$JAVA_HOME"
+
+    # Sổ đăng ký JDK chính thức của macOS: bắt được bản cài bằng .pkg của
+    # Temurin/Oracle và cask temurin của Homebrew.
+    if [ -x /usr/libexec/java_home ]; then
+        /usr/libexec/java_home -v "${MIN_JAVA_MAJOR}+" 2>/dev/null
+        /usr/libexec/java_home 2>/dev/null
+    fi
+
+    local dir
+    for dir in /Library/Java/JavaVirtualMachines/*/Contents/Home \
+               "$HOME/Library/Java/JavaVirtualMachines"/*/Contents/Home; do
+        [ -d "$dir" ] && echo "$dir"
+    done
+
+    # Công thức "openjdk" của Homebrew là keg-only: nó KHÔNG đăng ký với
+    # java_home nên phải dò tay. Có cả hai nhánh Apple Silicon và Intel.
+    for dir in /opt/homebrew/opt/openjdk*/libexec/openjdk.jdk/Contents/Home \
+               /usr/local/opt/openjdk*/libexec/openjdk.jdk/Contents/Home \
+               /opt/homebrew/Cellar/openjdk*/*/libexec/openjdk.jdk/Contents/Home \
+               /usr/local/Cellar/openjdk*/*/libexec/openjdk.jdk/Contents/Home; do
+        [ -d "$dir" ] && echo "$dir"
+    done
+}
+
+# Chọn bản mới nhất. Dùng process substitution để vòng lặp chạy trong
+# shell hiện tại -- viết "collect | while" thì biến gán bên trong sẽ mất
+# khi ra khỏi pipe.
+BEST_HOME=""
+BEST_MAJOR=0
+find_best_java() {
+    BEST_HOME=""
+    BEST_MAJOR=0
+    local home major
+    while IFS= read -r home; do
+        [ -n "$home" ] || continue
+        [ -x "$home/bin/java" ] || continue
+        major="$(java_major "$home")" || continue
+        [ -n "$major" ] || continue
+        case "$major" in
+            ''|*[!0-9]*) continue ;;
+        esac
+        if [ "$major" -gt "$BEST_MAJOR" ]; then
+            BEST_MAJOR="$major"
+            BEST_HOME="$home"
+        fi
+    done < <(collect_java_homes)
+}
+
+find_best_java
+
+# ---------------------------------------------------------------------
+#  Thiếu Java -- mời cài
+# ---------------------------------------------------------------------
+
+open_install_terminal() {
+    # Mở một cửa sổ Terminal chạy lệnh cài để người dùng thấy tiến độ và
+    # nhập mật khẩu khi cần. Dùng file .command rồi "open" thay vì bảo
+    # Terminal chạy lệnh qua AppleScript: cách sau kích hoạt xin quyền
+    # Automation của macOS, phiền và dễ bị từ chối.
+    local script
+    script="$(/usr/bin/mktemp -t retail-billing-java)".command
+    {
+        echo '#!/bin/bash'
+        echo 'echo "=== Cài Java cho Retail Billing Setup ==="'
+        echo 'if ! command -v brew >/dev/null 2>&1; then'
+        echo '    echo'
+        echo '    echo "[LỖI] Máy chưa có Homebrew."'
+        echo '    echo "Cài Homebrew theo hướng dẫn tại https://brew.sh rồi chạy lại,"'
+        echo "    echo \"hoặc tải thẳng bộ cài Temurin tại $DOWNLOAD_PAGE\""
+        echo '    echo'
+        echo '    read -r -p "Nhấn Enter để đóng..." _'
+        echo '    exit 1'
+        echo 'fi'
+        echo "brew install --cask $BREW_CASK"
+        echo 'status=$?'
+        echo 'echo'
+        echo 'if [ $status -eq 0 ]; then'
+        echo '    echo "[XONG] Đã cài Java. Bấm đúp Setup.app lần nữa để mở Setup App."'
+        echo 'else'
+        echo '    echo "[LỖI] brew kết thúc với mã $status."'
+        echo "    echo \"Có thể tải tay tại $DOWNLOAD_PAGE\""
+        echo 'fi'
+        echo 'read -r -p "Nhấn Enter để đóng..." _'
+    } > "$script"
+    chmod +x "$script"
+    /usr/bin/open "$script"
+}
+
+if [ -z "$BEST_HOME" ] || [ "$BEST_MAJOR" -lt "$MIN_JAVA_MAJOR" ]; then
+    if [ -z "$BEST_HOME" ]; then
+        MESSAGE="Setup App chạy bằng Java nhưng máy này chưa có bản nào.
+
+Bản khuyên dùng là Eclipse Temurin $MIN_JAVA_MAJOR (JDK mã nguồn mở, miễn phí)."
+    else
+        MESSAGE="Máy này đang có Java $BEST_MAJOR nhưng Setup App cần Java $MIN_JAVA_MAJOR trở lên.
+
+$BEST_HOME"
+    fi
+
+    ANSWER="$(ask_three_way "$MESSAGE" "Thoát" "Mở trang tải" "Cài bằng Homebrew")"
+    case "$ANSWER" in
+        "Cài bằng Homebrew") open_install_terminal ;;
+        "Mở trang tải")      /usr/bin/open "$DOWNLOAD_PAGE" ;;
+    esac
+    exit 1
+fi
+
+# ---------------------------------------------------------------------
+#  Chạy SetupApp.jar
+# ---------------------------------------------------------------------
+
+# Finder cấp cho app một PATH rất nghèo (/usr/bin:/bin:/usr/sbin:/sbin).
+# Bổ sung JDK và Homebrew để script bash trong GUI gọi được javac, mysql,
+# git mà không báo "command not found".
+export JAVA_HOME="$BEST_HOME"
+export PATH="$BEST_HOME/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:$PATH"
+
+cd "$ROOT" || exit 1
+
+{
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S') khởi chạy Setup App ==="
+    echo "Thư mục dự án : $ROOT"
+    echo "JAVA_HOME     : $JAVA_HOME (Java $BEST_MAJOR)"
+} > "$LOG"
+
+# -Xdock đặt tên và icon trên Dock; thiếu nó app hiện ra với icon tách cà
+# phê mặc định của Java và tên "java".
+"$BEST_HOME/bin/java" \
+    -Dfile.encoding=UTF-8 \
+    -Dapple.awt.application.name="$APP_NAME" \
+    -Xdock:name="$APP_NAME" \
+    -Xdock:icon="$RESOURCES/Setup.icns" \
+    -jar "$JAR" "$@" >> "$LOG" 2>&1
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+    show_error "Setup App đóng bất thường (mã lỗi $STATUS).
+
+$(tail -n 12 "$LOG")
+
+Nhật ký đầy đủ: $LOG"
+fi
+
+exit $STATUS
