@@ -1,6 +1,7 @@
 package billing.ui;
 
 import billing.db.Db;
+import billing.model.InvoiceStatus;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -335,8 +336,13 @@ public class SearchPanel extends JPanel {
 
     /** Filter panel for Invoice table */
     class InvoiceFilterPanel extends JPanel {
-        // Status: all, completed, voided
+        // Status: all, open, completed, voided
+        // Chip "Đang lập" (OPEN) thêm từ khối 4: trước đó không có hóa đơn OPEN
+        // nào nên thiếu chip là vô hại, giờ OPEN là trạng thái thật nên thiếu
+        // nó là chip "Tất cả" trộn lẫn hóa đơn đang lập mà không lọc riêng
+        // được, còn "Đã hoàn tất" thì im lặng ẩn chúng đi (plan/13 lỗi #7).
         private final JToggleButton rbAllStatus;
+        private final JToggleButton rbOpen;
         private final JToggleButton rbPaid;
         private final JToggleButton rbVoided;
         // Date: all, today, last 7 days, this month
@@ -355,12 +361,15 @@ public class SearchPanel extends JPanel {
             statusRow.add(new JLabel("Trạng thái hóa đơn: "));
             ButtonGroup statusGroup = new ButtonGroup();
             rbAllStatus = createToggleButton("Tất cả", true);
+            rbOpen = createToggleButton("Đang lập", false);
             rbPaid = createToggleButton("Đã hoàn tất", false);
             rbVoided = createToggleButton("Đã hủy", false);
             statusGroup.add(rbAllStatus);
+            statusGroup.add(rbOpen);
             statusGroup.add(rbPaid);
             statusGroup.add(rbVoided);
             statusRow.add(rbAllStatus);
+            statusRow.add(rbOpen);
             statusRow.add(rbPaid);
             statusRow.add(rbVoided);
             add(statusRow);
@@ -390,6 +399,7 @@ public class SearchPanel extends JPanel {
 
             // Add action listeners to all interactive components to trigger search
             rbAllStatus.addItemListener(e -> performSearch());
+            rbOpen.addItemListener(e -> performSearch());
             rbPaid.addItemListener(e -> performSearch());
             rbVoided.addItemListener(e -> performSearch());
             cbDate.addActionListener(e -> performSearch());
@@ -403,6 +413,7 @@ public class SearchPanel extends JPanel {
          */
         public void resetToDefault() {
             rbAllStatus.setSelected(true);
+            rbOpen.setSelected(false);
             rbPaid.setSelected(false);
             rbVoided.setSelected(false);
             cbDate.setSelectedIndex(0);
@@ -421,12 +432,18 @@ public class SearchPanel extends JPanel {
             StringBuilder where = new StringBuilder();
             List<Object> params = new ArrayList<>();
 
-            // Status
+            // Status -- mã trạng thái lấy từ InvoiceStatus, không gõ literal
+            // (plan/13 lỗi #6: bộ giá trị này từng bị chép 3 lần). Dùng tham số
+            // '?' thay vì nối chuỗi: hàm này ĐÃ có danh sách params cho các bộ
+            // lọc khác nên đây là dùng đúng cơ chế đang có.
             if (!rbAllStatus.isSelected()) {
-                if (rbPaid.isSelected()) {
-                    where.append("Invoice.Status = 'PAID' AND ");
-                } else if (rbVoided.isSelected()) {
-                    where.append("Invoice.Status = 'VOIDED' AND ");
+                InvoiceStatus want = rbOpen.isSelected()   ? InvoiceStatus.OPEN
+                                   : rbPaid.isSelected()   ? InvoiceStatus.PAID
+                                   : rbVoided.isSelected() ? InvoiceStatus.VOIDED
+                                   : null;
+                if (want != null) {
+                    where.append("Invoice.Status = ? AND ");
+                    params.add(want.code());
                 }
             }
 

@@ -903,18 +903,33 @@ public class NewInvoicePanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Hoa don chua co dong hang nao.");
                 return;
             }
-            BigDecimal due  = totalDue();
-            BigDecimal paid = totalPaid();
-            if (due.compareTo(paid) != 0) {
-                int ok = JOptionPane.showConfirmDialog(this,
-                        "Tong hoa don " + Ui.money(due) + " nhung da thanh toan "
-                                + Ui.money(paid) + ".\nVan luu chu?",
-                        "Lech tien", JOptionPane.YES_NO_OPTION);
-                if (ok != JOptionPane.YES_OPTION) return;
-            }
+            // Phép kiểm "chưa có thanh toán nào" phải đi TRƯỚC: giỏ có hàng mà
+            // chưa thanh toán gì thì bản cũ hỏi "lệch tiền, vẫn lưu chứ?", người
+            // dùng bấm Yes, rồi mới bị từ chối vì "Chua co dong thanh toan nao"
+            // -- một câu hỏi vô ích (plan/13 mục 5.7).
             if (payments.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Chua co dong thanh toan nao.");
                 return;
+            }
+
+            // Chỉ hỏi khi THIẾU tiền, không hỏi khi thừa: SQL chốt "đã thu đủ"
+            // bằng paid >= due (plan/13 mục 3.4), nên ghi nhận thừa không còn là
+            // chuyện phải hỏi -- hỏi ở đó là báo động giả.
+            BigDecimal due  = totalDue();
+            BigDecimal paid = totalPaid();
+            if (paid.compareTo(due) < 0) {
+                // Đây là chỗ DUY NHẤT người dùng gặp trạng thái OPEN lần đầu.
+                // Không nói rõ hậu quả thì họ sẽ tưởng app vừa đánh mất hóa đơn.
+                int ok = JOptionPane.showConfirmDialog(this,
+                        "Tong hoa don " + Ui.money(due) + " nhung chi thanh toan "
+                      + Ui.money(paid) + " (thieu " + Ui.money(due.subtract(paid)) + ").\n\n"
+                      + "Van luu, nhung hoa don se o trang thai DANG LAP (OPEN):\n"
+                      + "  - Khong duoc tinh vao bao cao doanh thu\n"
+                      + "  - Khong tra hang duoc\n"
+                      + "  - Tu chuyen sang DA THANH TOAN khi thu du tien\n\n"
+                      + "Luu chu?",
+                        "Thieu tien -- hoa don se la OPEN", JOptionPane.YES_NO_OPTION);
+                if (ok != JOptionPane.YES_OPTION) return;
             }
 
             String invoiceId = invoiceDao.nextInvoiceId();

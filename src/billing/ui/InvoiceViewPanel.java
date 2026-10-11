@@ -6,6 +6,7 @@ import billing.dao.LookupDao;
 import billing.db.QueryResult;
 import billing.model.Account;
 import billing.model.IdName;
+import billing.model.InvoiceStatus;
 import billing.model.UserSession;
 
 import javax.swing.*;
@@ -27,7 +28,8 @@ import java.util.function.Consumer;
  * ====================================================================
  *  MÀN HÌNH 2 -- XEM HÓA ĐƠN & THAO TÁC TRỰC TIẾP DATABASE
  * ====================================================================
- *  Bên trái: danh sách hóa đơn + nút "Sửa hóa đơn" + nút "Xóa hóa đơn".
+ *  Bên trái: danh sách hóa đơn + nút "Sửa hóa đơn", "Hủy hóa đơn", "Xóa hóa đơn".
+ *  ("Hủy" đổi Status sang VOIDED và giữ nguyên dữ liệu; "Xóa" xóa sạch 7 bảng.)
  *  Bên phải:
  *    1. Thông tin chung + tổng tiền
  *    2. Các dòng hàng (Invoice_Line) + nút "Sửa dòng", "Xóa dòng", "Thử xóa (Set NULL)"
@@ -56,6 +58,9 @@ public class InvoiceViewPanel extends JPanel {
 
     // Các button thao tác hóa đơn (bên trái)
     private final JButton btEditInvoice   = new JButton("Sua hoa don");
+    // Huỷ KHÁC xoá: nút này đổi Status sang VOIDED và để nguyên dữ liệu;
+    // btDeleteInvoice xoá sạch khỏi 7 bảng (plan/13 mục 3.1).
+    private final JButton btVoidInvoice   = new JButton("Huy hoa don");
     private final JButton btDeleteInvoice = new JButton("Xoa hoa don");
 
     // Các button thao tác dòng hàng trong hóa đơn (bên phải)
@@ -192,13 +197,18 @@ public class InvoiceViewPanel extends JPanel {
 
         JPanel pnlInvoiceActions = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 4));
         btEditInvoice.setFont(Ui.BOLD);
+        btVoidInvoice.setFont(Ui.BOLD);
+        // Cam (không phải đỏ) để mắt phân biệt được ngay với nút xoá vĩnh viễn.
+        btVoidInvoice.setForeground(new Color(190, 110, 20));
         btDeleteInvoice.setFont(Ui.BOLD);
         btDeleteInvoice.setForeground(new Color(180, 40, 40));
 
         btEditInvoice.addActionListener(e -> onEditInvoice());
+        btVoidInvoice.addActionListener(e -> onVoidInvoice());
         btDeleteInvoice.addActionListener(e -> onDeleteInvoice());
 
         pnlInvoiceActions.add(btEditInvoice);
+        pnlInvoiceActions.add(btVoidInvoice);
         pnlInvoiceActions.add(btDeleteInvoice);
 
         JPanel left = new JPanel(new BorderLayout(4, 4));
@@ -311,12 +321,16 @@ public class InvoiceViewPanel extends JPanel {
      *  Nút "Tra hang" nằm trong danh sách này từ khối 3: cột được ghi tên là
      *  Approved_By -- NGƯỜI DUYỆT. Một nút ghi vào ô "người duyệt" mà ai cũng
      *  bấm được thì ô đó không duyệt gì cả.
+     *
+     *  Nút "Huy hoa don" vào danh sách từ khối 4 -- thành 8 nút. Huỷ hoá đơn
+     *  là hành động nghiệp vụ của quản lý, không phải một lần sửa trường.
      */
     public void applyRolePermissions() {
         Account user = UserSession.getCurrentUser();
         boolean isManager = (user != null && user.isManager());
 
         btEditInvoice.setEnabled(isManager);
+        btVoidInvoice.setEnabled(isManager);
         btDeleteInvoice.setEnabled(isManager);
         btEditLine.setEnabled(isManager);
         btDeleteLine.setEnabled(isManager);
@@ -327,6 +341,7 @@ public class InvoiceViewPanel extends JPanel {
         if (!isManager) {
             String lockHint = "Chuc nang nay bi khoa voi Thu ngan (Cashier). Chi Quan ly (Manager) moi co quyen.";
             btEditInvoice.setToolTipText(lockHint);
+            btVoidInvoice.setToolTipText(lockHint);
             btDeleteInvoice.setToolTipText(lockHint);
             btEditLine.setToolTipText(lockHint);
             btDeleteLine.setToolTipText(lockHint);
@@ -335,6 +350,7 @@ public class InvoiceViewPanel extends JPanel {
             btDeleteReturn.setToolTipText(lockHint);
         } else {
             btEditInvoice.setToolTipText("Chinh sua thong tin hoa don truc tiep trong DB");
+            btVoidInvoice.setToolTipText("Huy hoa don: du lieu van con, chi khong tinh vao bao cao");
             btDeleteInvoice.setToolTipText("Xoa hoa don va toan bo du lieu lien quan khoi DB");
             btEditLine.setToolTipText("Chinh sua so luong, don gia dong hang trong DB");
             btDeleteLine.setToolTipText("Xoa dong hang khoi DB");
@@ -443,9 +459,12 @@ public class InvoiceViewPanel extends JPanel {
         }
 
         try {
-            // Tra cứu thông tin gốc của hóa đơn
-            String sql = "SELECT Invoice_ID, `Date`, `Time`, Status, Counter_ID, Cashier_ID, Customer_ID FROM Invoice WHERE Invoice_ID = ?";
-            QueryResult qr = QueryResult.run(sql, invoiceId);
+            // Tra cứu thông tin gốc của hóa đơn.
+            // Thủ tục, KHÔNG phải SQL thô: câu SELECT cũ nằm ngoài tầm với của
+            // mọi thay đổi trong sql/ -- đổi tên cột là nó sai thầm lặng
+            // (plan/13 lỗi #8). sp_get_invoice_edit_fields giữ đúng 7 cột theo
+            // thứ tự cũ nên các chỉ số r[1]..r[6] bên dưới không phải sửa.
+            QueryResult qr = dao.invoiceEditFields(invoiceId);
             if (qr.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Khong tim thay hoa don " + invoiceId, "Loi", JOptionPane.ERROR_MESSAGE);
                 return;
@@ -471,6 +490,68 @@ public class InvoiceViewPanel extends JPanel {
         } catch (Exception ex) {
             Ui.error(this, ex);
         }
+    }
+
+    /**
+     * Hủy một hóa đơn (Status -> VOIDED).
+     *
+     * ĐÂY KHÔNG PHẢI XÓA. Hộp thoại xác nhận phải dạy được sự khác nhau, vì
+     * hai nút nằm cạnh nhau và "huỷ" là từ dễ bị hiểu thành "xoá" (plan/13
+     * rủi ro #7).
+     *
+     * Chạy NGOÀI EDT: sp_void_invoice có SELECT ... FOR UPDATE, MySQL chậm
+     * hoặc dòng đang bị khóa bởi cửa sổ khác là cả cửa sổ đứng hình.
+     */
+    private void onVoidInvoice() {
+        final String invoiceId = getSelectedInvoiceId();
+        if (invoiceId == null) {
+            JOptionPane.showMessageDialog(this, "Vui long chon mot hoa don de huy!",
+                    "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Huy hoa don " + invoiceId + "?\n\n"
+              + "Huy KHAC Xoa:\n"
+              + "  - Du lieu van con nguyen: dong hang, thanh toan, tra hang\n"
+              + "  - Hoa don khong con duoc tinh vao bao cao doanh thu\n"
+              + "  - Khong tra hang duoc nua\n"
+              + "  - KHONG mo lai duoc: VOIDED la trang thai cuoi\n\n"
+              + "Muon xoa sach khoi database thi dung nut \"Xoa hoa don\".",
+                "Xac nhan huy hoa don",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+
+        if (choice != JOptionPane.YES_OPTION) return;
+
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                dao.voidInvoice(invoiceId);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    get();
+                } catch (Exception ex) {
+                    showSqlFailure(InvoiceViewPanel.this, ex, "Khong huy duoc hoa don");
+                    return;
+                }
+
+                JOptionPane.showMessageDialog(InvoiceViewPanel.this,
+                        "Da huy hoa don " + invoiceId + ".\n"
+                      + "Du lieu van con trong database, chi khong tinh vao bao cao nua.",
+                        "Da huy hoa don", JOptionPane.INFORMATION_MESSAGE);
+
+                // PHẢI THẤY KẾT QUẢ: reload() xóa selection nên chọn lại đúng
+                // hàng rồi vẽ lại chi tiết (plan/12 lỗi #12).
+                reload();
+                selectInvoiceRow(invoiceId);
+                showDetail(invoiceId);
+            }
+        }.execute();
     }
 
     /** Xóa hóa đơn trực tiếp trong database */
@@ -847,12 +928,16 @@ public class InvoiceViewPanel extends JPanel {
                 status = row[3] == null ? "" : String.valueOf(row[3]);
             }
 
-            // Khối này chỉ ĐỌC Invoice.Status, không bao giờ ghi -- cột đó thuộc
-            // khối 4 (plan/12 mục 2.3). VOIDED là trường hợp duy nhất không cần tranh luận.
-            if ("VOIDED".equalsIgnoreCase(status)) {
+            // Khối 4 sở hữu cột Status và đã định nghĩa: OPEN = chưa thu đủ tiền
+            // -> hoàn tiền cho một hóa đơn chưa thu tiền là vô nghĩa. SQL cũng
+            // chặn (sp_add_return), đây chỉ là lớp thông báo sớm.
+            InvoiceStatus st = InvoiceStatus.of(status);
+            if (st != InvoiceStatus.PAID) {
                 JOptionPane.showMessageDialog(this,
-                        "Hoa don " + invoiceId + " da bi huy (VOIDED), khong tra hang duoc.",
-                        "Hoa don da huy", JOptionPane.WARNING_MESSAGE);
+                        "Hoa don " + invoiceId + " dang o trang thai "
+                      + (st == null ? status : st.display())
+                      + ".\nChi hoa don da thanh toan (PAID) moi tra hang duoc.",
+                        "Khong tra hang duoc", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
@@ -1065,7 +1150,7 @@ public class InvoiceViewPanel extends JPanel {
                         try {
                             get();
                         } catch (Exception ex) {
-                            showReturnFailure(parent, ex);
+                            showSqlFailure(parent, ex, "Khong tra hang duoc");
                             return;
                         }
 
@@ -1168,12 +1253,16 @@ public class InvoiceViewPanel extends JPanel {
      * Nhờ vậy câu "Dong 1: chi con 0.000 co the tra (da mua 2.000, da tra 2.000)"
      * hiện ra như một lời giải thích, chứ không như một tai nạn. Và lỗi thật vẫn
      * giữ nguyên đường cũ với thông điệp gốc của MySQL (plan/12 mục 5.7c).
+     *
+     * BA NÚT DÙNG CHUNG MỘT CÁCH HIỆN LỖI: trả hàng, hủy hóa đơn, và lưu hộp
+     * thoại sửa hóa đơn (EditInvoiceDialog). Cả ba đều gặp SIGNAL '45000' từ
+     * các thủ tục của khối 4, nên tiêu đề hộp thoại là tham số.
      */
-    private void showReturnFailure(Component parent, Throwable ex) {
+    static void showSqlFailure(Component parent, Throwable ex, String title) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
             if (t instanceof SQLException && "45000".equals(((SQLException) t).getSQLState())) {
                 JOptionPane.showMessageDialog(parent, t.getMessage(),
-                        "Khong tra hang duoc", JOptionPane.WARNING_MESSAGE);
+                        title, JOptionPane.WARNING_MESSAGE);
                 return;
             }
         }

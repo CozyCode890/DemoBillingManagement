@@ -75,6 +75,7 @@ public class InvoiceDao {
      *      - Gọi sp_create_invoice_header: ghi đầu hóa đơn
      *      - Gọi sp_add_invoice_line: ghi từng dòng hàng (batching)
      *      - Gọi sp_add_payment: ghi thanh toán (SQL tự rẽ nhánh bảng con)
+     *      - Gọi sp_settle_invoice: chuyển sang PAID nếu đã thu đủ tiền
      *      conn.commit();
      */
     public void createInvoice(String invoiceId,
@@ -86,6 +87,7 @@ public class InvoiceDao {
         String spHeader  = "{call sp_create_invoice_header(?, ?, ?, ?, ?, ?)}";
         String spLine    = "{call sp_add_invoice_line(?, ?, ?, ?, ?, ?)}";
         String spPayment = "{call sp_add_payment(?, ?, ?, ?, ?, ?)}";
+        String spSettle  = "{call sp_settle_invoice(?)}";
 
         long t0 = System.currentTimeMillis();
         Connection conn = null;
@@ -146,6 +148,20 @@ public class InvoiceDao {
                     SqlLog.add(spPayment, new Object[]{payId, invoiceId, pe.amount,
                             pe.method, pe.detail1, pe.detail2}, 0, 1);
                 }
+            }
+
+            // ---- 4. Chuyển trạng thái nếu đã thu đủ tiền --------------
+            // Java KHÔNG tự quyết định PAID (plan/13 mục 2.2): thủ tục tự đọc
+            // bảng Payment và so với tổng tiền các dòng hàng. Trả thiếu thì hóa
+            // đơn ở lại OPEN, và đây KHÔNG phải lỗi.
+            //
+            // PHẢI nằm TRONG transaction: thủ tục đọc các dòng Payment vừa
+            // INSERT mà chưa commit -- chỉ cùng một Connection mới thấy chúng.
+            // executeUpdate được vì sp_settle_invoice không trả ResultSet.
+            try (CallableStatement cs = conn.prepareCall(spSettle)) {
+                cs.setString(1, invoiceId);
+                cs.executeUpdate();
+                SqlLog.add(spSettle, new Object[]{invoiceId}, 0, 1);
             }
 
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
@@ -221,6 +237,19 @@ public class InvoiceDao {
         return QueryResult.call("{call sp_get_invoice_header(?)}", invoiceId);
     }
 
+    /**
+     * Các trường THÔ của một hóa đơn cho hộp thoại sửa:
+     * sp_get_invoice_edit_fields(p_invoice_id).
+     *
+     * Khác invoiceHeader(): trả về MÃ (Counter_ID, Cashier_ID, Customer_ID)
+     * chứ không phải TÊN, và không join Invoice_Line nên hóa đơn chưa có dòng
+     * hàng nào vẫn đọc được. Thứ tự 7 cột là hợp đồng với Java -- chỗ gọi đọc
+     * theo chỉ số r[1]..r[6] (plan/13 mục 3.5).
+     */
+    public QueryResult invoiceEditFields(String invoiceId) {
+        return QueryResult.call("{call sp_get_invoice_edit_fields(?)}", invoiceId);
+    }
+
     /** Các lần thanh toán của hóa đơn: sp_get_invoice_payments(p_invoice_id) */
     public QueryResult invoicePayments(String invoiceId) {
         return QueryResult.call("{call sp_get_invoice_payments(?)}", invoiceId);
@@ -271,6 +300,49 @@ public class InvoiceDao {
         }
     }
 
+    /**
+     * Tổng tiền hóa đơn PHẢI thu: fn_invoice_amount_due(p_invoice_id).
+     *
+     * Trả 0 cho hóa đơn không có dòng hàng nào, nên NGƯỜI GỌI phải tự biết
+     * hóa đơn có dòng hàng hay không trước khi so sánh: 0 >= 0 là true
+     * (plan/13 mục 3.4 điểm 2). Java đọc hai số này CHỈ để hiển thị -- phép
+     * so sánh quyết định trạng thái chỉ tồn tại trong sp_settle_invoice.
+     */
+    public BigDecimal amountDue(String invoiceId) {
+        return scalarMoney("{? = call fn_invoice_amount_due(?)}", invoiceId,
+                           "Khong doc duoc tong phai tra cua hoa don ");
+    }
+
+    /**
+     * Tổng tiền ĐÃ GHI NHẬN: fn_invoice_amount_paid(p_invoice_id).
+     * Là SUM(Payment.Amount), KHÔNG phải tiền khách đưa
+     * (tiền khách đưa nằm ở Cash_Payment.Tendered_Amount).
+     */
+    public BigDecimal amountPaid(String invoiceId) {
+        return scalarMoney("{? = call fn_invoice_amount_paid(?)}", invoiceId,
+                           "Khong doc duoc tong da thu cua hoa don ");
+    }
+
+    /** Khuôn chung của hai hàm tiền ở trên -- cùng một câu gọi, khác tên hàm. */
+    private BigDecimal scalarMoney(String sql, String invoiceId, String errorPrefix) {
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.registerOutParameter(1, Types.DECIMAL);
+            cs.setString(2, invoiceId);
+            cs.execute();
+            BigDecimal amount = cs.getBigDecimal(1);
+
+            SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 1);
+            return amount == null ? BigDecimal.ZERO : amount;
+
+        } catch (SQLException e) {
+            throw new RuntimeException(errorPrefix + invoiceId + ": " + e.getMessage(), e);
+        }
+    }
+
 
     // =================================================================
     //  PHẦN 3 -- THAO TÁC SỬA / XÓA TRỰC TIẾP TRONG DATABASE (DAO)
@@ -299,8 +371,50 @@ public class InvoiceDao {
     }
 
     /**
+     * Hủy một hóa đơn: sp_void_invoice(p_invoice_id).
+     *
+     * HỦY KHÁC XÓA: dữ liệu vẫn còn nguyên (dòng hàng, thanh toán, trả hàng),
+     * chỉ không được tính vào báo cáo nữa vì các câu truy vấn báo cáo đều lọc
+     * WHERE Status = 'PAID'. Muốn xóa sạch thì dùng deleteInvoice().
+     *
+     * Đây là ĐƯỜNG DUY NHẤT tới VOIDED: hộp thoại sửa hóa đơn không đổi được
+     * trạng thái nữa (plan/13 mục 3.2).
+     *
+     * @throws RuntimeException khi SQL từ chối. Exception gốc được giữ làm
+     *         cause để UI đọc getSQLState() -- "45000" là lỗi nghiệp vụ
+     *         (hóa đơn đã hủy trước đó, hoặc không tìm thấy hóa đơn).
+     */
+    public void voidInvoice(String invoiceId) {
+        String sql = "{call sp_void_invoice(?)}";
+        long t0 = System.currentTimeMillis();
+
+        try (Connection c = Db.getConnection();
+             CallableStatement cs = c.prepareCall(sql)) {
+
+            cs.setString(1, invoiceId);
+            cs.executeUpdate();
+
+            SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 1);
+
+        } catch (SQLException e) {
+            // Ghi lại cả lần thử thất bại: nhật ký SQL (tab 5 Setup App) phải
+            // thấy được câu gọi vừa bị từ chối, với 0 dòng ảnh hưởng.
+            SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 0);
+            // Giữ nguyên exception gốc làm cause -- UI đọc getSQLState() của nó.
+            throw new RuntimeException("Khong huy duoc hoa don " + invoiceId
+                                       + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Cập nhật thông tin phần đầu hóa đơn (Header).
      * Sử dụng thủ tục sp_update_invoice_header().
+     *
+     * @param status trạng thái HIỆN TẠI của hóa đơn, KHÔNG phải trạng thái
+     *        muốn đặt. sp_update_invoice_header dùng tham số này làm phép
+     *        kiểm: khác trạng thái trong DB là bị từ chối bằng SIGNAL '45000'.
+     *        Mọi chuyển đổi trạng thái đi qua voidInvoice() hoặc
+     *        sp_settle_invoice (plan/13 mục 3.2).
      */
     public void updateInvoiceHeader(String invoiceId, LocalDate date, LocalTime time,
                                     String status, String counterId, String cashierId, String customerId) {

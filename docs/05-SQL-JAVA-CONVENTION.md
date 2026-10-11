@@ -178,6 +178,8 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `fn_next_payment_id` | FUNCTION | *(không)* | Tự sinh mã thanh toán `PAY-xxxx` | SQL & Java |
 | `fn_return_refund` | FUNCTION | `p_invoice_id`, `p_line_number`, `p_quantity` | **Bản duy nhất** của công thức tiền hoàn: `ROUND(n / Q * T, 2)`. Java không được tự tính | `InvoiceDao.returnRefund()` |
 | `fn_next_return_id` | FUNCTION | `p_invoice_id`, `p_line_number` | Số thứ tự lượt trả kế tiếp **trong một dòng** (không phải `AUTO_INCREMENT`) | *(chỉ SQL -- `sp_add_return` gọi)* |
+| `fn_invoice_amount_due` | FUNCTION | `p_invoice_id` | Tổng tiền hoá đơn phải thu. `0.00` nếu chưa có dòng hàng → **người gọi phải tự kiểm có dòng hàng hay không** | `InvoiceDao.amountDue()` |
+| `fn_invoice_amount_paid` | FUNCTION | `p_invoice_id` | Tổng tiền đã ghi nhận (`Payment.Amount`, không phải tiền khách đưa) | `InvoiceDao.amountPaid()` |
 | `sp_lookup_counters` | PROCEDURE | *(không)* | Danh sách quầy tính tiền | `LookupDao.counters()` |
 | `sp_lookup_cashiers` | PROCEDURE | *(không)* | Danh sách thu ngân | `LookupDao.cashiers()` |
 | `sp_lookup_customers` | PROCEDURE | *(không)* | Danh sách khách có thẻ | `LookupDao.customers()` |
@@ -189,13 +191,17 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn | `InvoiceDao.invoicePayments()` |
 | `sp_get_invoice_returns` | PROCEDURE | `p_invoice_id` | Thông tin trả hàng (7 cột, có `Lan_tra`) | `InvoiceDao.invoiceReturns()` |
 | `sp_get_returnable_lines` | PROCEDURE | `p_invoice_id` | Các dòng của hóa đơn kèm **số lượng còn trả được** | `InvoiceDao.returnableLines()` |
+| `sp_get_invoice_edit_fields` | PROCEDURE | `p_invoice_id` | 7 trường thô của hóa đơn cho hộp thoại sửa (trả **mã**, không join `Invoice_Line`) | `InvoiceDao.invoiceEditFields()` |
 | `sp_report_daily_takings` | PROCEDURE | *(không)* | Báo cáo doanh thu 7 ngày | `ReportDao.dailyTakings()` |
 | `sp_report_price_rise` | PROCEDURE | *(không)* | Báo cáo sản phẩm tăng giá > 10% | `ReportDao.priceRise()` |
 | `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc | `ReportDao.bestCashier()` |
 | `sp_report_big_returns` | PROCEDURE | *(không)* | Báo cáo hóa đơn trả hàng > 50% | `ReportDao.bigReturns()` |
 | `sp_report_old_price_proof`| PROCEDURE | *(không)* | Chứng minh hóa đơn cũ giữ giá | `ReportDao.oldPriceProof()` |
-| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới | `InvoiceDao.createInvoice()` |
+| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **luôn là `OPEN`** -- chưa thu đủ tiền thì chưa `PAID` | `InvoiceDao.createInvoice()` |
 | `sp_add_invoice_line` | PROCEDURE | `(6 tham số)` | Ghi dòng chi tiết hóa đơn | `InvoiceDao.createInvoice()` |
 | `sp_add_payment` | PROCEDURE | `(6 tham số)` | Ghi thanh toán & rẽ nhánh bảng con | `InvoiceDao.createInvoice()` |
-| `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn `VOIDED` | `InvoiceDao.processReturn()` |
+| `sp_settle_invoice` | PROCEDURE | `p_invoice_id` | **Chỗ duy nhất đặt `PAID`**: chuyển khi đã thu đủ (`paid >= due` và có dòng hàng). Không trả ResultSet, idempotent | `InvoiceDao.createInvoice()` |
+| `sp_void_invoice` | PROCEDURE | `p_invoice_id` | **Đường duy nhất tới `VOIDED`**. Huỷ ≠ xoá: dữ liệu còn nguyên, chỉ không vào báo cáo | `InvoiceDao.voidInvoice()` |
+| `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn không phải `PAID` | `InvoiceDao.processReturn()` |
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
+| `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |

@@ -131,6 +131,14 @@ INSERT INTO Invoice (Invoice_ID, `Date`, `Time`, Status, Counter_ID, Cashier_ID,
 ('INV-0013', DATE_SUB(CURDATE(), INTERVAL 2 DAY),    '13:15:00', 'PAID',   'C01', 'E02', 'KH003'),
 ('INV-0014', DATE_SUB(CURDATE(), INTERVAL 4 DAY),    '15:55:00', 'PAID',   'C03', 'E03', NULL),
 ('INV-0015', CURDATE(),                              '10:00:00', 'VOIDED', 'C01', 'E02', NULL),
+-- Hoa don DANG LAP (OPEN): tong 178.000 nhung chi thanh toan 78.000.
+-- Co day du dong hang va mot dong Payment, chi la CHUA THU DU TIEN -- dung
+-- dinh nghia cua 'OPEN' (plan/13 muc 3.1). Dung de thay:
+--   1. chip "Dang lap" o tab Tim kiem ra ket qua
+--   2. sp_report_daily_takings KHONG cong hoa don nay vao doanh thu
+--   3. nut "Tra hang" bi chan vi hoa don chua thanh toan
+-- Ma dat LIEN NGAY SAU INV-0015 de fn_next_invoice_id khong bi lech.
+('INV-0016', CURDATE(),                              '11:20:00', 'OPEN',   'C02', 'E05', NULL),
 -- Hai hóa đơn CŨ (năm ngoái) dùng GIÁ CŨ -- đây là minh chứng cho
 -- yêu cầu "hóa đơn cũ phải giữ giá cũ".
 ('INV-OLD-01', DATE_SUB(CURDATE(), INTERVAL 400 DAY),'09:00:00', 'PAID',   'C01', 'E02', NULL),
@@ -183,6 +191,9 @@ INSERT INTO Invoice_Line (Invoice_ID, Line_Number, Barcode, Quantity, Unit_Price
 ('INV-0014', 2, '8934010', 3.000,  21000.00,  6300.00),
 -- INV-0015 : hoa don bi HUY
 ('INV-0015', 1, '8934009', 1.000,  78000.00,     0.00),
+-- INV-0016 : tong 178,000 -- hoa don DANG LAP, chi thanh toan 78,000
+('INV-0016', 1, '8934004', 4.000,  35000.00,     0.00),
+('INV-0016', 2, '8934002', 2.000,  19000.00,     0.00),
 -- Hoa don cu: chu y gia thap hon han (28,000 va 130,000 va 52,000)
 ('INV-OLD-01', 1, '8934001', 2.000,  28000.00,   0.00),
 ('INV-OLD-01', 2, '8934008', 1.000, 130000.00,   0.00),
@@ -222,7 +233,10 @@ INSERT INTO Payment (Payment_ID, Amount, Invoice_ID) VALUES
 ('PAY-0014', 316000.00, 'INV-0013'),
 ('PAY-0015', 231700.00, 'INV-0014'),
 ('PAY-0016', 186000.00, 'INV-OLD-01'),
-('PAY-0017', 156000.00, 'INV-OLD-02');
+('PAY-0017', 156000.00, 'INV-OLD-02'),
+-- INV-0016 dang lap: thu 78.000 / phai thu 178.000 -> con THIEU 100.000.
+-- Day la ly do hoa don do o trang thai 'OPEN' chu khong phai 'PAID'.
+('PAY-0018',  78000.00, 'INV-0016');
 
 INSERT INTO Cash_Payment (Payment_ID, Tendered_Amount) VALUES
 ('PAY-0001', 150000.00),
@@ -231,7 +245,8 @@ INSERT INTO Cash_Payment (Payment_ID, Tendered_Amount) VALUES
 ('PAY-0007', 100000.00),
 ('PAY-0010',  80000.00),
 ('PAY-0012',  90000.00),
-('PAY-0016', 200000.00);
+('PAY-0016', 200000.00),
+('PAY-0018',  80000.00);
 
 INSERT INTO Card_Payment (Payment_ID, Card_number, Auth_code) VALUES
 ('PAY-0002', '4111-****-****-1234', 'AUTH8801'),
