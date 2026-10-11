@@ -26,6 +26,7 @@ DROP FUNCTION IF EXISTS fn_invoice_amount_paid;
 DROP PROCEDURE IF EXISTS sp_lookup_counters;
 DROP PROCEDURE IF EXISTS sp_lookup_cashiers;
 DROP PROCEDURE IF EXISTS sp_lookup_customers;
+DROP PROCEDURE IF EXISTS sp_search_customers_by_phone;
 DROP PROCEDURE IF EXISTS sp_get_all_products;
 DROP PROCEDURE IF EXISTS sp_get_active_promo;
 
@@ -36,6 +37,7 @@ DROP PROCEDURE IF EXISTS sp_get_invoice_payments;
 DROP PROCEDURE IF EXISTS sp_get_invoice_returns;
 DROP PROCEDURE IF EXISTS sp_get_returnable_lines;
 DROP PROCEDURE IF EXISTS sp_get_invoice_edit_fields;
+DROP PROCEDURE IF EXISTS sp_get_invoice_line_edit_fields;
 
 DROP PROCEDURE IF EXISTS sp_report_daily_takings;
 DROP PROCEDURE IF EXISTS sp_report_price_rise;
@@ -280,7 +282,37 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.4 sp_get_all_products: Lấy toàn bộ sản phẩm để đổ vào danh sách chọn
+-- 2.4 sp_search_customers_by_phone: Tim khach hang theo TIEN TO so dien thoai
+--     Thay cau SQL tho cuoi cung con lai trong tang DAO (LookupDao cu),
+--     giu dung quy uoc Swing -> DAO -> Stored Procedure (docs/05 muc 1).
+--
+--     Tra ve BA COT RIENG, khong CONCAT san chuoi hien thi: ghep chuoi de
+--     hien tren man hinh la viec cua tang UI. Ban cu ghep trong DAO nen
+--     chinh cai chuoi ghep do bi do tro lai o nhap (plan/14 loi #12).
+--
+--     LIMIT 20: danh sach goi y khong ai doc het 500 dong, va popup cao
+--     toi da 200px (CustomerPicker).
+--
+--     p_prefix duoc chac chan la chuoi so: phia Java chi goi khi noi dung
+--     o nhap toan chu so (plan/14 muc 3.5), nen khong co ky tu % hay _
+--     lot vao lam rong dieu kien LIKE.
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_search_customers_by_phone(
+    IN p_prefix VARCHAR(20)
+)
+BEGIN
+    SELECT  Customer_ID AS Ma_KH,
+            Name        AS Ten,
+            Phone       AS Dien_thoai
+    FROM    Customer
+    WHERE   Phone LIKE CONCAT(p_prefix, '%')
+    ORDER BY Phone
+    LIMIT   20;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 2.5 sp_get_all_products: Lấy toàn bộ sản phẩm để đổ vào danh sách chọn
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_all_products()
 BEGIN
@@ -291,7 +323,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.5 sp_get_active_promo: Tra cứu chương trình khuyến mãi tốt nhất
+-- 2.6 sp_get_active_promo: Tra cứu chương trình khuyến mãi tốt nhất
 --     đang áp dụng cho sản phẩm tại một ngày cụ thể
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_active_promo(
@@ -404,6 +436,17 @@ END$$
 
 -- ---------------------------------------------------------------------
 -- 3.4 sp_get_invoice_payments: Chi tiết các đợt thanh toán của hóa đơn
+--     Tien_khach_dua la MOT COT SO RIENG (DECIMAL), khong CONCAT vao
+--     Chi_tiet nua: ban cu cho ra "Khach dua: 500000.00" -- dinh dang tien
+--     nam trong SQL thi Java khong dinh dang lai duoc (plan/14 loi #22).
+--     NULL cho the va vi dien tu: hai phuong thuc do khong co tien khach dua.
+--
+--     HOP DONG COT: 5 cot, va cho goi phai sua theo (plan/14 muc 5.9b):
+--       0 Ma_TT | 1 So_tien | 2 Phuong_thuc | 3 Chi_tiet | 4 Tien_khach_dua
+--
+--     Ba chuoi trong CASE dau GIU NGUYEN TUNG CHU: PayMethod.label() phia
+--     Java phai tra dung ba chuoi nay, neu khong mot hoa don se hien hai
+--     cach viet cho cung mot phuong thuc (plan/14 muc 3.6).
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_payments(
     IN p_invoice_id VARCHAR(30)
@@ -417,10 +460,10 @@ BEGIN
               WHEN ew.Payment_ID IS NOT NULL THEN 'Vi dien tu'
               ELSE '(khong ro)' END AS Phuong_thuc,
             CASE
-              WHEN ca.Payment_ID IS NOT NULL THEN CONCAT('Khach dua: ', ca.Tendered_Amount)
               WHEN cd.Payment_ID IS NOT NULL THEN CONCAT(cd.Card_number, ' / ', cd.Auth_code)
               WHEN ew.Payment_ID IS NOT NULL THEN CONCAT(ew.Wallet_provider, ' / ', ew.Transaction_Ref)
-              ELSE '' END           AS Chi_tiet
+              ELSE '' END           AS Chi_tiet,
+            ca.Tendered_Amount      AS Tien_khach_dua
     FROM    Payment p
     LEFT JOIN Cash_Payment    ca ON ca.Payment_ID = p.Payment_ID
     LEFT JOIN Card_Payment    cd ON cd.Payment_ID = p.Payment_ID
@@ -509,6 +552,28 @@ BEGIN
             i.Customer_ID  AS Khach
     FROM    Invoice i
     WHERE   i.Invoice_ID = p_invoice_id;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 3.8 sp_get_invoice_line_edit_fields: 4 truong THO cua MOT dong hang,
+--     dung cho hop thoai sua dong (EditLineDialog).
+--     Thay cau SQL tho cuoi cung cua tang UI (InvoiceViewPanel -- khoi 4
+--     da xoa cau con lai, khoi 5 xoa cau nay).
+--     Thu tu 4 cot la hop dong voi Java: cho goi doc theo chi so r[0]..r[3].
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_get_invoice_line_edit_fields(
+    IN p_invoice_id  VARCHAR(30),
+    IN p_line_number INT
+)
+BEGIN
+    SELECT  l.Barcode,
+            l.Quantity,
+            l.Unit_Price,
+            l.Discount
+    FROM    Invoice_Line l
+    WHERE   l.Invoice_ID  = p_invoice_id
+      AND   l.Line_Number = p_line_number;
 END$$
 
 

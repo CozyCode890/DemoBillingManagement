@@ -175,23 +175,25 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 |---|---|---|---|---|
 | `fn_get_product_price` | FUNCTION | `p_barcode`, `p_date` | Lấy đơn giá tại ngày bán | `ProductDao.priceOn()` |
 | `fn_next_invoice_id` | FUNCTION | *(không)* | Tự sinh mã hóa đơn `INV-xxxx` | `InvoiceDao.nextInvoiceId()` |
-| `fn_next_payment_id` | FUNCTION | *(không)* | Tự sinh mã thanh toán `PAY-xxxx` | SQL & Java |
+| `fn_next_payment_id` | FUNCTION | *(không)* | Tự sinh mã thanh toán `PAY-xxxx`. Gọi **trong** transaction, một lần cho mỗi dòng thanh toán | `InvoiceDao.createInvoice()` |
 | `fn_return_refund` | FUNCTION | `p_invoice_id`, `p_line_number`, `p_quantity` | **Bản duy nhất** của công thức tiền hoàn: `ROUND(n / Q * T, 2)`. Java không được tự tính | `InvoiceDao.returnRefund()` |
 | `fn_next_return_id` | FUNCTION | `p_invoice_id`, `p_line_number` | Số thứ tự lượt trả kế tiếp **trong một dòng** (không phải `AUTO_INCREMENT`) | *(chỉ SQL -- `sp_add_return` gọi)* |
 | `fn_invoice_amount_due` | FUNCTION | `p_invoice_id` | Tổng tiền hoá đơn phải thu. `0.00` nếu chưa có dòng hàng → **người gọi phải tự kiểm có dòng hàng hay không** | `InvoiceDao.amountDue()` |
 | `fn_invoice_amount_paid` | FUNCTION | `p_invoice_id` | Tổng tiền đã ghi nhận (`Payment.Amount`, không phải tiền khách đưa) | `InvoiceDao.amountPaid()` |
 | `sp_lookup_counters` | PROCEDURE | *(không)* | Danh sách quầy tính tiền | `LookupDao.counters()` |
 | `sp_lookup_cashiers` | PROCEDURE | *(không)* | Danh sách thu ngân | `LookupDao.cashiers()` |
-| `sp_lookup_customers` | PROCEDURE | *(không)* | Danh sách khách có thẻ | `LookupDao.customers()` |
+| `sp_lookup_customers` | PROCEDURE | *(không)* | Danh sách khách có thẻ | *(không còn chỗ gọi trong Java -- thay bằng `sp_search_customers_by_phone`)* |
+| `sp_search_customers_by_phone` | PROCEDURE | `p_prefix` | Tìm khách theo tiền tố số điện thoại, 3 cột, `LIMIT 20`. Trả **cột riêng**, không ghép chuỗi hiển thị | `LookupDao.searchCustomersByPhone()` |
 | `sp_get_all_products` | PROCEDURE | *(không)* | Danh mục tất cả sản phẩm | `ProductDao.findAll()` |
 | `sp_get_active_promo` | PROCEDURE | `p_barcode`, `p_date` | Khuyến mãi cao nhất ngày bán | `ProductDao.activePromoOn()` |
 | `sp_get_recent_invoices` | PROCEDURE | *(không)* | Hóa đơn gần đây + tổng tiền | `InvoiceDao.recentInvoices()` |
 | `sp_get_invoice_header` | PROCEDURE | `p_invoice_id` | Đầu hóa đơn và tổng tiền | `InvoiceDao.invoiceHeader()` |
 | `sp_get_invoice_lines` | PROCEDURE | `p_invoice_id` | Các dòng sản phẩm của hóa đơn | `InvoiceDao.invoiceLines()` |
-| `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn | `InvoiceDao.invoicePayments()` |
+| `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn. **5 cột, đúng thứ tự** `Ma_TT, So_tien, Phuong_thuc, Chi_tiet, Tien_khach_dua`. `Tien_khach_dua` là cột **số** riêng (`NULL` cho thẻ/ví), không `CONCAT` vào `Chi_tiet` -- định dạng tiền là việc của Java | `InvoiceDao.invoicePayments()` |
 | `sp_get_invoice_returns` | PROCEDURE | `p_invoice_id` | Thông tin trả hàng (7 cột, có `Lan_tra`) | `InvoiceDao.invoiceReturns()` |
 | `sp_get_returnable_lines` | PROCEDURE | `p_invoice_id` | Các dòng của hóa đơn kèm **số lượng còn trả được** | `InvoiceDao.returnableLines()` |
 | `sp_get_invoice_edit_fields` | PROCEDURE | `p_invoice_id` | 7 trường thô của hóa đơn cho hộp thoại sửa (trả **mã**, không join `Invoice_Line`) | `InvoiceDao.invoiceEditFields()` |
+| `sp_get_invoice_line_edit_fields` | PROCEDURE | `p_invoice_id`, `p_line_number` | 4 trường thô của một dòng hàng cho hộp thoại sửa, đúng thứ tự `Barcode, Quantity, Unit_Price, Discount` | `InvoiceDao.invoiceLineEditFields()` |
 | `sp_report_daily_takings` | PROCEDURE | *(không)* | Báo cáo doanh thu 7 ngày | `ReportDao.dailyTakings()` |
 | `sp_report_price_rise` | PROCEDURE | *(không)* | Báo cáo sản phẩm tăng giá > 10% | `ReportDao.priceRise()` |
 | `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc | `ReportDao.bestCashier()` |
@@ -205,3 +207,75 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn không phải `PAID` | `InvoiceDao.processReturn()` |
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
 | `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |
+
+---
+
+## 7. Quy Ước Nhãn & Con Số Trên Giao Diện
+
+Bốn quy ước dưới đây sinh ra từ khối 5 (`plan/14`), sau khi phát hiện bộ định
+dạng số bị chép **bốn** lần và nhãn phương thức thanh toán bị chép **ba** lần.
+
+### 7.1. Định dạng số chỉ qua `Ui`
+
+**Không `new DecimalFormat(...)` ở bất kỳ file nào ngoài `billing.ui.Ui`.**
+
+| Hàm | Mẫu | Ví dụ | Dùng cho |
+|---|---|---|---|
+| `Ui.money(Object)` | `#,##0` + `đ`, dấu nghìn `.` | `135.100đ` | mọi cột tiền; `null` → `0đ` |
+| `Ui.qty(Object)` | `#,##0.###`, dấu thập phân `,` | `1,5` / `2` | `Quantity`, `Return_Quantity` |
+| `Ui.percent(Object)` | `#0.##` + `%`, không dấu nghìn | `8%` / `7,5%` | `Tax_Rate`, `VAT_pct`, `Phan_tram_tra` |
+| `Ui.integer(Object)` | `#,##0` | `1.234` | số lượt, số hóa đơn, cột dạng mã |
+| `Ui.qtyInput(BigDecimal)` | `0.###`, **không** dấu nghìn, dấu thập phân `.` | `1.5` | giá trị điền sẵn vào ô **số lượng** |
+| `Ui.moneyInput(BigDecimal)` | `#,##0`, có dấu nghìn | `158.000` | giá trị điền sẵn vào ô **tiền** |
+| `Ui.dec(Object)` | — | — | giá trị thô từ JDBC → `BigDecimal`, không qua `double` |
+
+**Phần trăm không thuộc nhóm tiền tệ.** Xếp `VAT_pct` vào nhóm tiền là nó hiện
+ra thành `"8đ"` -- lỗi #21 của `plan/14`, và là lý do
+`InvoiceViewPanel.fillFormatted` có tham số thứ sáu `percentCols`.
+
+### 7.2. Đọc số chỉ qua `Ui.readMoney` / `Ui.readQuantity`
+
+**Không `new BigDecimal(textField.getText())` ở bất kỳ đâu.** Hai hàm này tự
+hiện thông báo rồi trả `null`, nên chỗ gọi chỉ cần `if (v == null) return;`.
+
+**Hai quy tắc, và sự khác nhau là CỐ Ý:**
+
+| | **Tiền** (`readMoney`) | **Số lượng** (`readQuantity`) |
+|---|---|---|
+| Dấu `.` | **tách nghìn**, phải đủ 3 chữ số theo sau | **dấu thập phân** |
+| Dấu `,` | dấu thập phân, tối đa 2 chữ số | dấu thập phân |
+| Nhận | `500.000`, `1.234,50`, `500000`, `35 000 đ` | `2`, `1,5`, `1.5`, `0,25` |
+| Từ chối | `500.00`, `1.2.3`, `1,234`, `500,000.00`, `<= 0` | quá 3 chữ số thập phân, hai dấu thập phân, `<= 0`, vượt `max` |
+| Kiểu đích | `DECIMAL(12,2)` | `DECIMAL(10,3)` |
+
+Một quy tắc chung buộc phải chọn một nghĩa duy nhất cho dấu `.`, và nghĩa nào
+cũng làm sai một nửa các ô nhập. Vì hai quy tắc là cố ý, **mỗi ô nhập phải có
+tooltip nêu đúng quy tắc của nó kèm ví dụ**, và ô tiền có **nhãn vọng lại**
+(`Ui.attachMoneyEcho`) để người dùng thấy app hiểu gì *trước khi* bấm nút.
+
+`readMoneyAllowZero` là biến thể nhận số `0`: một dòng thanh toán 0 đồng là vô
+nghĩa, nhưng `Invoice_Line.Discount = 0.00` là giá trị bình thường nhất của cột đó.
+
+### 7.3. Không rẽ nhánh theo nhãn hiển thị
+
+So sánh bằng **mã**, không bằng chữ hiện trên màn hình. Án lệ: lỗi #5 của
+`plan/14` so `"Tiền mặt"` (có dấu) với `PaymentEntry.methodLabel()` trả
+`"Tien mat"` (không dấu) -- hai chuỗi không bao giờ bằng nhau, nên 12 dòng code
+**chưa từng chạy một lần nào**.
+
+Dùng `enum`: `InvoiceStatus` (khối 4) và `PayMethod` (khối 5) là **bản chép duy
+nhất trong Java** của hai bộ giá trị đó. Nhãn của `PayMethod` phải **khớp từng
+chữ** với chuỗi mà `CASE` trong `sp_get_invoice_payments` trả về, nếu không một
+hóa đơn sẽ hiện hai cách viết cho cùng một phương thức.
+
+### 7.4. Một file dùng một lối viết
+
+Tiếng Việt **có dấu** hoặc **không dấu**, nhưng không lẫn trong cùng một file.
+Một màn hình hiện `"Tiền mặt"` trong ô chọn và `"Tien mat"` ở bảng ngay dưới thì
+tệ hơn là hiện `"Tien mat"` ở cả hai.
+
+**Chuỗi do SQL sinh ra thì giữ nguyên dạng SQL.** Vì `CASE` trong
+`sp_get_invoice_payments` trả về chuỗi không dấu và chuỗi đó hiện ở tab 2 và tab
+3, `NewInvoicePanel` (tab 1), `InvoiceViewPanel` (tab 3) và các hộp thoại đều
+dùng **không dấu**. `SearchPanel` (tab 2) giữ **có dấu** như `plan/13` mục 5.6
+đã chốt -- nó không hiển thị nhãn nào do SQL sinh ra.

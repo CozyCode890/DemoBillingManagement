@@ -17,11 +17,8 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.math.BigDecimal;
 import java.sql.SQLException;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -73,70 +70,17 @@ public class InvoiceViewPanel extends JPanel {
     private final JButton btDeleteReturn   = new JButton("Huy luot tra");
 
     // =================================================================
-    //  ĐỊNH DẠNG SỐ
+    //  ĐỊNH DẠNG SỐ -- KHÔNG CÒN BẢN CHÉP Ở ĐÂY
     // =================================================================
-    private static final DecimalFormat CURRENCY_FORMAT;
-    private static final DecimalFormat INTEGER_FORMAT;
-    /** 1.500 -> "1,5" ; 2.000 -> "2" ; 0.250 -> "0,25"  (cột DECIMAL(10,3)) */
-    private static final DecimalFormat QUANTITY_FORMAT;
-    /**
-     * Số lượng để ĐIỀN SẴN vào ô nhập: giống QUANTITY_FORMAT nhưng KHÔNG có dấu
-     * phân cách nghìn. Vì ô nhập hiểu cả '.' và ',' là dấu thập phân (plan/12
-     * mục 3.2), điền "1.500" vào đó sẽ bị đọc thành 1,5.
-     */
-    private static final DecimalFormat QUANTITY_INPUT_FORMAT;
-    static {
-        DecimalFormatSymbols sym = new DecimalFormatSymbols(Locale.US);
-        sym.setGroupingSeparator('.');
-        sym.setDecimalSeparator(',');
-        CURRENCY_FORMAT = new DecimalFormat("#,##0", sym);
-        INTEGER_FORMAT = new DecimalFormat("#,##0", sym);
-        QUANTITY_FORMAT = new DecimalFormat("#,##0.###", sym);
-        QUANTITY_INPUT_FORMAT = new DecimalFormat("0.###", sym);
-        QUANTITY_INPUT_FORMAT.setGroupingUsed(false);
-    }
-
-    private String formatCurrency(Object value) {
-        if (value == null) {
-            return "0đ";
-        }
-        if (value instanceof Number) {
-            return CURRENCY_FORMAT.format(value) + "đ";
-        }
-        return value.toString();
-    }
-
-    private String formatInteger(Object value) {
-        if (value == null) {
-            return "0";
-        }
-        if (value instanceof Number) {
-            return INTEGER_FORMAT.format(((Number) value).longValue());
-        }
-        return value.toString();
-    }
-
-    /** Số lượng: hiện đúng phần thập phân, bỏ các số 0 vô nghĩa ở cuối. */
-    private String formatQuantity(Object value) {
-        if (value == null) {
-            return "0";
-        }
-        if (value instanceof Number) {
-            return QUANTITY_FORMAT.format(value);
-        }
-        return value.toString();
-    }
-
-    /**
-     * Đổi giá trị thô từ JDBC thành BigDecimal. Cột DECIMAL của MySQL về Java
-     * vốn là BigDecimal rồi (docs/05 mục 3) -- không qua double, không parse chuỗi.
-     */
-    private static BigDecimal dec(Object o) {
-        if (o == null)               return BigDecimal.ZERO;
-        if (o instanceof BigDecimal) return (BigDecimal) o;
-        if (o instanceof Number)     return new BigDecimal(o.toString());
-        return new BigDecimal(String.valueOf(o).trim());
-    }
+    //  Trước khối 5 lớp này giữ bộ DecimalFormat RIÊNG của nó: bản chép thứ
+    //  hai trong bốn bản của cả dự án (Ui, lớp này, và hai lần trong
+    //  SearchPanel). Thêm một kiểu cột là phải sửa bốn chỗ, mà không chỗ nào
+    //  báo nếu quên -- đúng loại lỗi mà khối 3 trị bằng fn_return_refund và
+    //  khối 4 trị bằng InvoiceStatus (plan/14 lỗi #22).
+    //
+    //  Giờ mọi phép định dạng đi qua Ui.money / Ui.qty / Ui.percent / Ui.dec,
+    //  và nhờ vậy VAT_pct tự đúng là "8%" khi fillFormatted xếp nó vào nhóm
+    //  phần trăm (lỗi #21).
 
     private static int intOf(Object o) {
         if (o instanceof Number) return ((Number) o).intValue();
@@ -144,13 +88,20 @@ public class InvoiceViewPanel extends JPanel {
     }
 
     /**
-     * Đổ dữ liệu vào JTable với định dạng số tiền / số nguyên / số lượng phù hợp.
+     * Đổ dữ liệu vào JTable với định dạng số tiền / số nguyên / số lượng /
+     * phần trăm phù hợp.
      *
      * Chỉ số cột ở đây là HỢP ĐỒNG với thứ tự cột của các thủ tục SQL: đổi cột
      * trả về của thủ tục là phải sửa cả 4 chỗ gọi hàm này (plan/12 mục 3.5).
+     * Vì vậy mỗi chỗ gọi có comment liệt kê tên cột theo chỉ số.
+     *
+     * percentCols là tham số thứ sáu, thêm ở khối 5: VAT_pct bị xếp vào nhóm
+     * tiền tệ nên 8.00 hiện ra là "8đ" (plan/14 lỗi #21) -- việc khối 3 và
+     * khối 4 đều đã giao lại cho khối này.
      */
     private void fillFormatted(JTable table, QueryResult qr,
-                               int[] currencyCols, int[] integerCols, int[] quantityCols) {
+                               int[] currencyCols, int[] integerCols,
+                               int[] quantityCols, int[] percentCols) {
         DefaultTableModel model = (DefaultTableModel) table.getModel();
         model.setRowCount(0);
         model.setColumnCount(0);
@@ -162,11 +113,17 @@ public class InvoiceViewPanel extends JPanel {
             for (int i = 0; i < row.length; i++) {
                 Object val = row[i];
                 if (contains(currencyCols, i)) {
-                    formattedRow[i] = formatCurrency(val);
+                    // null -> "" chu khong phai "0đ": cot Tien_khach_dua la NULL
+                    // voi the / vi dien tu, va "0đ" o do la noi rang khach dua 0
+                    // dong, trong khi su that la "phuong thuc nay khong co tien
+                    // khach dua" (plan/14 muc 3.1).
+                    formattedRow[i] = (val == null) ? "" : Ui.money(val);
                 } else if (contains(integerCols, i)) {
-                    formattedRow[i] = formatInteger(val);
+                    formattedRow[i] = Ui.integer(val);
                 } else if (contains(quantityCols, i)) {
-                    formattedRow[i] = formatQuantity(val);
+                    formattedRow[i] = Ui.qty(val);
+                } else if (contains(percentCols, i)) {
+                    formattedRow[i] = Ui.percent(val);
                 } else {
                     formattedRow[i] = (val == null) ? "" : val;
                 }
@@ -363,8 +320,9 @@ public class InvoiceViewPanel extends JPanel {
     public void reload() {
         try {
             QueryResult qr = dao.recentInvoices();
-            // Column index for Tong_tien (total) is last column
-            fillFormatted(tbInvoices, qr, new int[]{qr.columns.size() - 1}, null, null);
+            // tbInvoices: Ma_HD, Ngay, Gio, Shop, Thu_ngan, Khach, Trang_thai, Tong_tien
+            // Tong_tien la cot CUOI va la cot tien duy nhat.
+            fillFormatted(tbInvoices, qr, new int[]{qr.columns.size() - 1}, null, null, null);
             tbInvoices.setAutoCreateRowSorter(true); // Enable column sorting
         } catch (Exception ex) {
             Ui.error(this, ex);
@@ -401,12 +359,9 @@ public class InvoiceViewPanel extends JPanel {
                 Object[] row = h.rows.get(0);
                 for (int i = 0; i < h.columns.size(); i++) {
                     Object val = row[i];
-                    String formatted;
-                    if (val instanceof Number) {
-                        formatted = formatCurrency(val);
-                    } else {
-                        formatted = val == null ? "" : val.toString();
-                    }
+                    String formatted = (val instanceof Number)
+                            ? Ui.money(val)
+                            : (val == null ? "" : val.toString());
                     sb.append(String.format("%-18s : %s%n", h.columns.get(i), formatted));
                 }
             }
@@ -416,19 +371,24 @@ public class InvoiceViewPanel extends JPanel {
             // --- 2, 3, 4 -------------------------------------------
             // tbLines: Dong, San_pham, SL, DVT, Don_gia, Giam_gia, Thanh_tien, VAT_pct
             // SL (2) la so luong DECIMAL(10,3); Don_gia (4), Giam_gia (5),
-            // Thanh_tien (6), VAT_pct (7) di theo nhom tien te.
+            // Thanh_tien (6) di theo nhom tien te.
+            // VAT_pct (7) la PHAN TRAM, KHONG phai tien: ban cu xep no vao nhom
+            // tien te nen 8.00 hien ra la "8đ" (plan/14 loi #21).
             QueryResult lines = dao.invoiceLines(invoiceId);
-            fillFormatted(tbLines, lines, new int[]{4, 5, 6, 7}, null, new int[]{2});
+            fillFormatted(tbLines, lines, new int[]{4, 5, 6}, null, new int[]{2}, new int[]{7});
 
-            // tbPayments: Ma_TT, So_tien, Phuong_thuc, Chi_tiet -- So_tien (1) la tien
+            // tbPayments: Ma_TT, So_tien, Phuong_thuc, Chi_tiet, Tien_khach_dua
+            // So_tien (1) va Tien_khach_dua (4) deu la tien. Cot thu 5 moi co tu
+            // khoi 5: sp_get_invoice_payments khong CONCAT so tien vao Chi_tiet
+            // nua, nen tab 3 het hien "Khach dua: 500000.00" (plan/14 loi #22).
             QueryResult payments = dao.invoicePayments(invoiceId);
-            fillFormatted(tbPayments, payments, new int[]{1}, null, null);
+            fillFormatted(tbPayments, payments, new int[]{1, 4}, null, null, null);
 
             // tbReturns: Dong, Lan_tra, San_pham, Ngay_tra, SL_tra, Tien_hoan, Nguoi_duyet
             // SL_tra (4) la so luong; Tien_hoan (5) la tien. Chi so da dich mot cot
             // so voi truoc khoi 3 vi sp_get_invoice_returns them cot Lan_tra.
             QueryResult returns = dao.invoiceReturns(invoiceId);
-            fillFormatted(tbReturns, returns, new int[]{5}, null, new int[]{4});
+            fillFormatted(tbReturns, returns, new int[]{5}, null, new int[]{4}, null);
 
         } catch (Exception ex) {
             Ui.error(this, ex);
@@ -483,8 +443,11 @@ public class InvoiceViewPanel extends JPanel {
             dialog.setVisible(true);
 
             if (dialog.isSaved()) {
+                // reload() xoá selection -> chọn lại rồi vẽ lại chi tiết, thay
+                // cho onSelect(null) vốn không còn hàng nào để đọc (lỗi #30).
                 reload();
-                onSelect(null);
+                selectInvoiceRow(invoiceId);
+                showDetail(invoiceId);
             }
 
         } catch (Exception ex) {
@@ -580,11 +543,14 @@ public class InvoiceViewPanel extends JPanel {
                 dao.deleteInvoice(invoiceId);
                 JOptionPane.showMessageDialog(this, "Da xoa thanh cong hoa don " + invoiceId + " khoi Database!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
 
-                // Xóa trắng khung chi tiết
+                // Xóa trắng khung chi tiết.
+                // Bản cũ chạy ba câu QueryResult.run("SELECT '' WHERE 1=0") chỉ
+                // để vẽ ba bảng rỗng -- ba lượt đi database không cần thiết
+                // (plan/14 mục 5.9f).
                 taHeader.setText("");
-                Ui.fill(tbLines, QueryResult.run("SELECT '' WHERE 1=0"));
-                Ui.fill(tbPayments, QueryResult.run("SELECT '' WHERE 1=0"));
-                Ui.fill(tbReturns, QueryResult.run("SELECT '' WHERE 1=0"));
+                Ui.clear(tbLines);
+                Ui.clear(tbPayments);
+                Ui.clear(tbReturns);
 
                 reload();
             } catch (Exception ex) {
@@ -605,27 +571,38 @@ public class InvoiceViewPanel extends JPanel {
         try {
             int lineNo = Integer.parseInt(String.valueOf(tbLines.getValueAt(row, 0)));
 
-            // Lấy thông tin gốc của dòng hàng
-            String sql = "SELECT Barcode, Quantity, Unit_Price, Discount FROM Invoice_Line WHERE Invoice_ID = ? AND Line_Number = ?";
-            QueryResult qr = QueryResult.run(sql, invoiceId, lineNo);
+            // Lấy thông tin gốc của dòng hàng QUA THỦ TỤC, không phải SQL thô:
+            // câu SELECT cũ ở đây là câu SQL thô cuối cùng còn lại trong tầng
+            // UI/DAO của app billing (khối 4 đã xoá câu còn lại). SQL thô trong
+            // UI nằm ngoài tầm với của mọi thay đổi trong sql/ -- đổi tên cột là
+            // nó sai thầm lặng. Thứ tự 4 cột là hợp đồng: r[0]..r[3].
+            QueryResult qr = dao.invoiceLineEditFields(invoiceId, lineNo);
             if (qr.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Khong tim thay dong hang so " + lineNo, "Loi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
+            // BigDecimal, KHONG phai String.valueOf(...): cot DECIMAL cua MySQL
+            // ve Java von la BigDecimal roi, va EditLineDialog can so co kieu de
+            // dien san bang Ui.qtyInput / Ui.moneyInput (plan/14 muc 5.9e).
             Object[] r = qr.rows.get(0);
-            String barcode   = String.valueOf(r[0]);
-            String quantity  = String.valueOf(r[1]);
-            String unitPrice = String.valueOf(r[2]);
-            String discount  = String.valueOf(r[3]);
+            String     barcode   = String.valueOf(r[0]);
+            BigDecimal quantity  = Ui.dec(r[1]);
+            BigDecimal unitPrice = Ui.dec(r[2]);
+            BigDecimal discount  = Ui.dec(r[3]);
 
             Window window = SwingUtilities.getWindowAncestor(this);
             EditLineDialog dialog = new EditLineDialog(window, dao, invoiceId, lineNo, barcode, quantity, unitPrice, discount);
             dialog.setVisible(true);
 
             if (dialog.isSaved()) {
+                // PHẢI THẤY KẾT QUẢ: reload() gọi model.setRowCount(0) nên nó xoá
+                // luôn selection, và onSelect(null) sau đó không còn hàng nào để
+                // đọc -> bảng dòng hàng giữ nguyên nội dung cũ (plan/14 lỗi #30).
+                // Khối 3 đã dựng sẵn hai hàm này và ghi rõ là để lại cho khối 5.
                 reload();
-                onSelect(null);
+                selectInvoiceRow(invoiceId);
+                showDetail(invoiceId);
             }
 
         } catch (Exception ex) {
@@ -651,8 +628,11 @@ public class InvoiceViewPanel extends JPanel {
             try {
                 dao.deleteInvoiceLine(invoiceId, lineNo);
                 JOptionPane.showMessageDialog(this, "Da xoa thanh cong dong hang " + lineNo + "!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                // reload() xoá selection -> chọn lại rồi vẽ lại chi tiết, nên
+                // bảng dòng hàng VÀ tổng tiền ở khung trên cập nhật ngay (lỗi #30).
                 reload();
-                onSelect(null);
+                selectInvoiceRow(invoiceId);
+                showDetail(invoiceId);
             } catch (Exception ex) {
                 Ui.error(this, ex);
             }
@@ -694,12 +674,12 @@ public class InvoiceViewPanel extends JPanel {
             this.lineNumber  = intOf(row[0]);
             this.productName = String.valueOf(row[1]);
             this.unit        = row[2] == null ? "" : String.valueOf(row[2]);
-            this.bought      = dec(row[3]);
-            this.returned    = dec(row[4]);
-            this.remaining   = dec(row[5]);
-            this.unitPrice   = dec(row[6]);
-            this.discount    = dec(row[7]);
-            this.lineTotal   = dec(row[8]);
+            this.bought      = Ui.dec(row[3]);
+            this.returned    = Ui.dec(row[4]);
+            this.remaining   = Ui.dec(row[5]);
+            this.unitPrice   = Ui.dec(row[6]);
+            this.discount    = Ui.dec(row[7]);
+            this.lineTotal   = Ui.dec(row[8]);
         }
     }
 
@@ -836,18 +816,18 @@ public class InvoiceViewPanel extends JPanel {
     }
 
     /** Renderer tiền tệ: model giữ số, chỗ này lo định dạng. */
-    private class CurrencyRenderer extends DefaultTableCellRenderer {
+    private static class CurrencyRenderer extends DefaultTableCellRenderer {
         CurrencyRenderer() { setHorizontalAlignment(SwingConstants.RIGHT); }
         @Override protected void setValue(Object value) {
-            setText(value == null ? "" : formatCurrency(value));
+            setText(value == null ? "" : Ui.money(value));
         }
     }
 
     /** Renderer số lượng DECIMAL(10,3): 1.500 -> "1,5". */
-    private class QuantityRenderer extends DefaultTableCellRenderer {
+    private static class QuantityRenderer extends DefaultTableCellRenderer {
         QuantityRenderer() { setHorizontalAlignment(SwingConstants.RIGHT); }
         @Override protected void setValue(Object value) {
-            setText(value == null ? "" : formatQuantity(value));
+            setText(value == null ? "" : Ui.qty(value));
         }
     }
 
@@ -1007,7 +987,7 @@ public class InvoiceViewPanel extends JPanel {
             returnDialog.add(mainPanel, BorderLayout.CENTER);
 
             // Panel dưới: tổng tiền + người duyệt + nút hành động
-            final JLabel totalAmountLabel = new JLabel(formatCurrency(BigDecimal.ZERO));
+            final JLabel totalAmountLabel = new JLabel(Ui.money(BigDecimal.ZERO));
             totalAmountLabel.setFont(Ui.BOLD);
             totalAmountLabel.setForeground(new Color(180, 40, 40));
             JPanel totalPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -1031,7 +1011,7 @@ public class InvoiceViewPanel extends JPanel {
             returnDialog.add(bottomPanel, BorderLayout.SOUTH);
 
             final Runnable refreshTotal =
-                    () -> totalAmountLabel.setText(formatCurrency(rowsModel.totalRefund()));
+                    () -> totalAmountLabel.setText(Ui.money(rowsModel.totalRefund()));
 
             // Khóa các nút trong lúc transaction đang chạy: bấm 5 lần không được
             // xếp hàng 5 transaction (cùng lý do với setBusy của plan/11 mục 4.2).
@@ -1069,7 +1049,7 @@ public class InvoiceViewPanel extends JPanel {
                 if (remaining.signum() <= 0) {
                     JOptionPane.showMessageDialog(returnDialog,
                             "Dong " + line.lineNumber + " (" + line.productName + ") da tra het "
-                          + formatQuantity(line.bought) + " " + line.unit + " da mua,\n"
+                          + Ui.qty(line.bought) + " " + line.unit + " da mua,\n"
                           + "khong con gi de tra.",
                             "Da tra het", JOptionPane.WARNING_MESSAGE);
                     return;
@@ -1079,16 +1059,17 @@ public class InvoiceViewPanel extends JPanel {
                 // còn lại) chỉ còn một lần Enter.
                 Object answer = JOptionPane.showInputDialog(returnDialog,
                         "San pham: " + line.productName + "\n"
-                      + "Da mua: " + formatQuantity(line.bought) + " " + line.unit
-                      + "   |   Da tra: " + formatQuantity(line.returned)
-                      + "   |   Con lai: " + formatQuantity(remaining) + "\n\n"
+                      + "Da mua: " + Ui.qty(line.bought) + " " + line.unit
+                      + "   |   Da tra: " + Ui.qty(line.returned)
+                      + "   |   Con lai: " + Ui.qty(remaining) + "\n\n"
                       + "Nhap so luong tra (toi da 3 chu so thap phan, dung ',' hoac '.'):",
                         "Nhap so luong tra cho dong " + line.lineNumber,
                         JOptionPane.QUESTION_MESSAGE, null, null,
-                        QUANTITY_INPUT_FORMAT.format(remaining));
+                        Ui.qtyInput(remaining));
                 if (answer == null) return;           // bấm Cancel / đóng hộp thoại
 
-                BigDecimal qty = readQuantity(returnDialog, answer.toString(), remaining, line.unit);
+                BigDecimal qty = Ui.readQuantity(returnDialog, answer.toString(),
+                                                 remaining, line.unit);
                 if (qty == null) return;
 
                 try {
@@ -1129,7 +1110,7 @@ public class InvoiceViewPanel extends JPanel {
 
                 int choice = JOptionPane.showConfirmDialog(returnDialog,
                         "Ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + "?\n\n"
-                      + "Tong tien phai tra lai: " + formatCurrency(total) + "\n"
+                      + "Tong tien phai tra lai: " + Ui.money(total) + "\n"
                       + "Nguoi duyet: " + approverLabel,
                         "Xac nhan xu ly tra hang",
                         JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
@@ -1157,7 +1138,7 @@ public class InvoiceViewPanel extends JPanel {
                         returnDialog.dispose();
                         JOptionPane.showMessageDialog(InvoiceViewPanel.this,
                                 "Da ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + ".\n"
-                              + "Tong tien tra lai: " + formatCurrency(total),
+                              + "Tong tien tra lai: " + Ui.money(total),
                                 "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
 
                         // PHẢI THẤY KẾT QUẢ: reload() xóa selection nên chọn lại
@@ -1195,56 +1176,12 @@ public class InvoiceViewPanel extends JPanel {
         }
     }
 
-    /**
-     * Đọc số lượng người dùng gõ. Trả null (và đã hiện thông báo) nếu không hợp lệ.
-     *
-     * Ba quy tắc của plan/12 mục 3.2:
-     *   1. Quá 3 chữ số thập phân thì TỪ CHỐI, không âm thầm làm tròn --
-     *      DECIMAL(10,3) sẽ lặng lẽ biến 1.2345 thành 1.235.
-     *   2. Không nhận dấu phân cách nghìn; cả ',' và '.' đều là dấu thập phân.
-     *   3. (Chỗ gọi lo) điền sẵn số lượng còn lại.
-     *
-     * So sánh bằng compareTo, KHÔNG equals: BigDecimal("1.5").equals(BigDecimal("1.50"))
-     * là false (khác scale), một cái bẫy kinh điển làm phép kiểm "còn lại" sai ở biên.
-     */
-    private BigDecimal readQuantity(Component parent, String input, BigDecimal max, String unit) {
-        if (input == null) return null;                       // bấm Cancel
-        String s = input.trim().replace(',', '.');
-        if (s.isEmpty()) {
-            warn(parent, "Chua nhap so luong tra.");
-            return null;
-        }
-        if (s.indexOf('.') != s.lastIndexOf('.')) {
-            warn(parent, "Chi duoc mot dau thap phan trong so luong: " + input);
-            return null;
-        }
-        BigDecimal q;
-        try {
-            q = new BigDecimal(s);
-        } catch (NumberFormatException ex) {
-            warn(parent, "So luong khong hop le: " + input);
-            return null;
-        }
-        if (q.scale() > 3) {
-            warn(parent, "Toi da 3 chu so thap phan (cot DECIMAL(10,3)).\n"
-                       + "Ban go: " + input);
-            return null;
-        }
-        if (q.signum() <= 0) {
-            warn(parent, "So luong tra phai lon hon 0.");
-            return null;
-        }
-        if (q.compareTo(max) > 0) {
-            warn(parent, "Chi con " + formatQuantity(max) + " " + unit + " co the tra.");
-            return null;
-        }
-        return q;
-    }
-
-    private static void warn(Component parent, String message) {
-        JOptionPane.showMessageDialog(parent, message, "So luong khong hop le",
-                JOptionPane.WARNING_MESSAGE);
-    }
+    // readQuantity DA DOI CHO: no la hop dong kieu so cua khoi 3 (plan/12 muc
+    // 3.2) nhung lai bi khoa trong lop nay bang `private`, nen tab 1 va
+    // EditLineDialog khong dung duoc va ca hai dang nhan 1.2345 de MySQL am
+    // tham lam tron thanh 1.235 -- dung dieu quy tac 1 cam (plan/14 loi #23).
+    // Gio no la Ui.readQuantity, nguyen van, chi khac mot diem: tham so `max`
+    // nhan null khi khong co tran (tab 1 khong co tran so luong).
 
     /**
      * Lỗi do SQL chủ động SIGNAL (SQLSTATE 45000) -> cảnh báo gọn, đọc được.

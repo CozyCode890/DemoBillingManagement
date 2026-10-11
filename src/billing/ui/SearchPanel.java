@@ -8,11 +8,8 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Tab 5: Tra cứu dữ liệu (Search Form)
@@ -31,19 +28,15 @@ public class SearchPanel extends JPanel {
     private final JTable table;
     private final JLabel lbRowCount;
 
-    // Formatters for Vietnamese locale (matching tab 2)
-    private static final DecimalFormat CURRENCY_FORMAT;
-    private static final DecimalFormat INTEGER_FORMAT;
-    /** 1.500 -> "1,5" ; 2.000 -> "2"  (Quantity va Return_Quantity la DECIMAL(10,3)) */
-    private static final DecimalFormat QUANTITY_FORMAT;
-    static {
-        DecimalFormatSymbols sym = new DecimalFormatSymbols(new Locale("vi", "VN"));
-        sym.setGroupingSeparator('.');
-        sym.setDecimalSeparator(',');
-        CURRENCY_FORMAT = new DecimalFormat("#,##0", sym);
-        INTEGER_FORMAT = new DecimalFormat("#,##0", sym);
-        QUANTITY_FORMAT = new DecimalFormat("#,##0.###", sym);
-    }
+    // ĐỊNH DẠNG SỐ: KHÔNG CÒN BẢN CHÉP Ở ĐÂY.
+    // Lớp này từng giữ HAI trong bốn bản chép của cả dự án: bộ DecimalFormat ở
+    // đây, và một DecimalFormat("#0.##") dựng mới mỗi lần gọi trong
+    // formatValue() cho riêng cột Tax_Rate -- bản duy nhất biết định dạng phần
+    // trăm, nhưng lại đi qua double (plan/14 lỗi #22).
+    //
+    // Giờ mọi phép định dạng đi qua Ui, và cảnh báo biên dịch
+    // `new Locale("vi","VN")` đã deprecated -- cảnh báo cuối cùng của dự án
+    // ngoài nhóm [serial]/[this-escape] của Swing -- biến mất cùng bộ format.
 
     // Dynamic filter panel with CardLayout
     private final JPanel filterCardPanel;
@@ -899,17 +892,16 @@ public class SearchPanel extends JPanel {
             return "";
         }
 
-        // Handle Tax_Rate column as percentage
+        // LOGIC CHON NHOM GIU NGUYEN, chi doi CHO DINH DANG sang Ui.
+        // Lop nay la mot trinh xem bang tong quat (14 bang), nen no khong co
+        // hop dong chi so cot nhu tab 3 -- no doan nhom theo TEN COT va kieu
+        // SQL. Cach doan do khong sai, no chi khong duoc phep tu dung
+        // DecimalFormat rieng (plan/14 muc 5.9c).
+
+        // Tax_Rate la PHAN TRAM, va day tung la ban DUY NHAT biet dinh dang
+        // phan tram trong ca du an -- nhung di qua double.
         if (columnName != null && columnName.equalsIgnoreCase("Tax_Rate")) {
-            if (value instanceof Number) {
-                double d = ((Number) value).doubleValue();
-                // Format without trailing zeros, then add '%'
-                java.text.DecimalFormat fmt = new java.text.DecimalFormat("#0.##");
-                fmt.setDecimalSeparatorAlwaysShown(false);
-                fmt.setGroupingUsed(false);
-                return fmt.format(d) + "%";
-            }
-            return value.toString();
+            return Ui.percent(value);
         }
 
         // So luong la DECIMAL(10,3) -- khong phai so nguyen (plan/12 muc 3.2).
@@ -917,12 +909,12 @@ public class SearchPanel extends JPanel {
         // ve du lieu dang nam trong database.
         String upper = columnName == null ? "" : columnName.toUpperCase();
         if (upper.equals("QUANTITY") || upper.equals("RETURN_QUANTITY")) {
-            return formatQuantity(value);
+            return Ui.qty(value);
         }
 
         // Treat ID-like columns as integer (no currency symbol)
         if (isQuantityColumn(columnName)) {
-            return formatInteger(value);
+            return Ui.integer(value);
         }
 
         // Numeric types: treat as currency if fractional, else integer
@@ -932,12 +924,12 @@ public class SearchPanel extends JPanel {
             case Types.DOUBLE:
             case Types.FLOAT:
             case Types.REAL:
-                return formatCurrency(value);
+                return Ui.money(value);
             case Types.INTEGER:
             case Types.SMALLINT:
             case Types.TINYINT:
             case Types.BIGINT:
-                return formatInteger(value);
+                return Ui.integer(value);
             // Date/time types: show as string (default formatting)
             case Types.DATE:
             case Types.TIME:
@@ -947,30 +939,6 @@ public class SearchPanel extends JPanel {
             default:
                 return value.toString();
         }
-    }
-
-    /** Format as currency (with thousand separator dot, and "đ" suffix) */
-    private String formatCurrency(Object value) {
-        if (value instanceof Number) {
-            return CURRENCY_FORMAT.format(((Number) value).doubleValue()) + "đ";
-        }
-        return value.toString();
-    }
-
-    /** Format as integer (with thousand separator dot, no decimal) */
-    private String formatInteger(Object value) {
-        if (value instanceof Number) {
-            return INTEGER_FORMAT.format(((Number) value).longValue());
-        }
-        return value.toString();
-    }
-
-    /** Format as quantity: giu phan thap phan, bo cac so 0 vo nghia o cuoi */
-    private String formatQuantity(Object value) {
-        if (value instanceof Number) {
-            return QUANTITY_FORMAT.format(value);
-        }
-        return value.toString();
     }
 
     /** Update row count label */

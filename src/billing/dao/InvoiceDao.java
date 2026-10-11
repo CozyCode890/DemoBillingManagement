@@ -10,8 +10,6 @@ import java.math.BigDecimal;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Types;
@@ -72,18 +70,40 @@ public class InvoiceDao {
      * ================================================================
      *  Java quản lý ranh giới nghiệp vụ (Business Transaction):
      *      conn.setAutoCommit(false);
+     *      - Gọi fn_next_invoice_id: sinh mã hóa đơn (nếu chỗ gọi truyền null)
      *      - Gọi sp_create_invoice_header: ghi đầu hóa đơn
      *      - Gọi sp_add_invoice_line: ghi từng dòng hàng (batching)
-     *      - Gọi sp_add_payment: ghi thanh toán (SQL tự rẽ nhánh bảng con)
+     *      - Gọi fn_next_payment_id + sp_add_payment: ghi thanh toán
+     *        (SQL tự rẽ nhánh bảng con)
      *      - Gọi sp_settle_invoice: chuyển sang PAID nếu đã thu đủ tiền
      *      conn.commit();
+     *
+     * @param invoiceId mã hóa đơn, hoặc {@code null} để tự sinh TRONG
+     *        transaction. Truyền {@code null} là cách dùng đúng từ khối 5: bản
+     *        cũ gọi {@link #nextInvoiceId()} trên MỘT CONNECTION KHÁC trước khi
+     *        mở transaction, nên hai cửa sổ app cùng lưu là trùng khóa chính và
+     *        thu ngân mất giỏ hàng (plan/14 lỗi #18).
+     *
+     *        <p>Khe hở còn lại -- hai transaction song song vẫn đọc được cùng
+     *        {@code MAX(...)} trước khi cái nào {@code INSERT} -- KHÔNG được bịt
+     *        ở đây, và đây là một ghi chú trung thực chứ không phải bỏ sót: bịt
+     *        đúng cách là {@code INSERT ... SELECT} hoặc một bảng cấp số, tức là
+     *        đổi {@code fn_next_invoice_id} và {@code sp_create_invoice_header}.
+     *        Cái sửa được ở đây là thu hẹp cửa sổ từ "khoảng thời gian người
+     *        dùng đọc hộp thoại" xuống "vài micro giây trong một transaction",
+     *        và làm cho lần thất bại là một {@code ROLLBACK} sạch kèm thông điệp
+     *        đọc hiểu được (plan/14 mục 5.4a).
+     *
+     * @return mã hóa đơn đã dùng (chính {@code invoiceId}, hoặc mã vừa sinh)
      */
-    public void createInvoice(String invoiceId,
-                              LocalDate date, LocalTime time,
-                              String counterId, String cashierId, String customerId,
-                              List<CartLine> lines,
-                              List<PaymentEntry> payments) {
+    public String createInvoice(String invoiceId,
+                                LocalDate date, LocalTime time,
+                                String counterId, String cashierId, String customerId,
+                                List<CartLine> lines,
+                                List<PaymentEntry> payments) {
 
+        String fnInvId   = "{? = call fn_next_invoice_id()}";
+        String fnPayId   = "{? = call fn_next_payment_id()}";
         String spHeader  = "{call sp_create_invoice_header(?, ?, ?, ?, ?, ?)}";
         String spLine    = "{call sp_add_invoice_line(?, ?, ?, ?, ?, ?)}";
         String spPayment = "{call sp_add_payment(?, ?, ?, ?, ?, ?)}";
@@ -95,6 +115,12 @@ public class InvoiceDao {
         try {
             conn = Db.getConnection();
             conn.setAutoCommit(false);          // ==== BẮT ĐẦU TRANSACTION ====
+
+            // ---- 0. Mã hóa đơn: sinh TRONG transaction ---------------
+            if (invoiceId == null) {
+                invoiceId = scalarString(conn, fnInvId);
+                SqlLog.add(fnInvId, null, 0, 1);
+            }
 
             // ---- 1. Ghi phần đầu hóa đơn qua Stored Procedure -------
             try (CallableStatement cs = conn.prepareCall(spHeader)) {
@@ -133,20 +159,39 @@ public class InvoiceDao {
             // ---- 3. Ghi các lần thanh toán qua Stored Procedure -----
             // Dev SQL tự lo việc rẽ nhánh lưu vào Cash_Payment, Card_Payment
             // hay EWallet_Payment trong sp_add_payment. Java không cần biết cấu trúc bảng con!
-            int paySeq = nextPaymentSeq(conn);
-            try (CallableStatement cs = conn.prepareCall(spPayment)) {
+            //
+            // Mã thanh toán do fn_next_payment_id() sinh, KHÔNG phải một bản
+            // chép của thân hàm đó bằng SQL thô trong Java: quy tắc sinh mã là
+            // một quy tắc nghiệp vụ, và đổi định dạng mã mà sửa một bên là hỏng
+            // ngay (plan/14 mục 4.5).
+            //
+            // Gọi TRONG transaction, một lần cho mỗi dòng: dòng Payment vừa
+            // INSERT ở vòng trước đã nhìn thấy được trên cùng Connection, nên
+            // mã kế tiếp đúng.
+            try (CallableStatement csId = conn.prepareCall(fnPayId);
+                 CallableStatement cs   = conn.prepareCall(spPayment)) {
                 for (PaymentEntry pe : payments) {
-                    String payId = String.format("PAY-%04d", paySeq++);
+                    csId.registerOutParameter(1, Types.VARCHAR);
+                    csId.execute();
+                    String payId = csId.getString(1);
+                    SqlLog.add(fnPayId, null, 0, 1);
+
+                    // detail1 vẫn là CHUỖI (sp_add_payment giữ 6 tham số,
+                    // docs/05 Quy tắc 2) nhưng nguồn của nó giờ là một
+                    // BigDecimal có kiểu -- tiền khách đưa -- chứ không phải
+                    // một bản sao của pe.amount (plan/14 lỗi #9).
+                    String d1 = pe.wireDetail1();
+
                     cs.setString(1, payId);
                     cs.setString(2, invoiceId);
-                    cs.setBigDecimal(3, pe.amount);
+                    cs.setBigDecimal(3, pe.amount);     // Payment.Amount = tiền GHI NHẬN
                     cs.setString(4, pe.method);
-                    cs.setString(5, pe.detail1);
+                    cs.setString(5, d1);
                     cs.setString(6, pe.detail2);
                     cs.executeUpdate();
 
                     SqlLog.add(spPayment, new Object[]{payId, invoiceId, pe.amount,
-                            pe.method, pe.detail1, pe.detail2}, 0, 1);
+                            pe.method, d1, pe.detail2}, 0, 1);
                 }
             }
 
@@ -167,6 +212,7 @@ public class InvoiceDao {
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
             SqlLog.add("COMMIT;  -- luu thanh cong hoa don " + invoiceId,
                        null, System.currentTimeMillis() - t0, 0);
+            return invoiceId;
 
         } catch (SQLException e) {
             if (conn != null) {
@@ -207,13 +253,19 @@ public class InvoiceDao {
         }
     }
 
-    /** Số thứ tự Payment kế tiếp. Dùng chung Connection của transaction. */
-    private int nextPaymentSeq(Connection conn) throws SQLException {
-        String sql = "SELECT COALESCE(MAX(CAST(SUBSTRING(Payment_ID, 5) AS UNSIGNED)), 0) + 1 " +
-                     "FROM Payment WHERE Payment_ID REGEXP '^PAY-[0-9]+$'";
-        try (PreparedStatement ps = conn.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            return rs.next() ? rs.getInt(1) : 1;
+    /**
+     * Gọi một Stored Function trả về chuỗi, TRÊN CONNECTION ĐANG CHO SẴN.
+     *
+     * <p>Khác {@link #nextInvoiceId()}: hàm đó tự mở Connection riêng, nên cái
+     * nó đọc được là trạng thái đã commit của người khác. Ở đây ta cần đúng
+     * Connection của transaction để thấy được những gì chính transaction này
+     * vừa ghi (plan/14 mục 4.5, 5.4a).
+     */
+    private String scalarString(Connection conn, String callSql) throws SQLException {
+        try (CallableStatement cs = conn.prepareCall(callSql)) {
+            cs.registerOutParameter(1, Types.VARCHAR);
+            cs.execute();
+            return cs.getString(1);
         }
     }
 
@@ -248,6 +300,22 @@ public class InvoiceDao {
      */
     public QueryResult invoiceEditFields(String invoiceId) {
         return QueryResult.call("{call sp_get_invoice_edit_fields(?)}", invoiceId);
+    }
+
+    /**
+     * Các trường THÔ của một DÒNG HÀNG cho hộp thoại sửa:
+     * {@code sp_get_invoice_line_edit_fields(p_invoice_id, p_line_number)}.
+     *
+     * <p>Thay câu SQL thô cuối cùng còn lại trong tầng UI
+     * ({@code InvoiceViewPanel.onEditLine}). Thứ tự 4 cột
+     * {@code Barcode, Quantity, Unit_Price, Discount} là hợp đồng với Java --
+     * chỗ gọi đọc theo chỉ số {@code r[0]..r[3]}.
+     *
+     * <p>Trả 0 dòng khi không có dòng hàng đó: chỗ gọi tự báo "không tìm thấy".
+     */
+    public QueryResult invoiceLineEditFields(String invoiceId, int lineNumber) {
+        return QueryResult.call("{call sp_get_invoice_line_edit_fields(?, ?)}",
+                                invoiceId, lineNumber);
     }
 
     /** Các lần thanh toán của hóa đơn: sp_get_invoice_payments(p_invoice_id) */
