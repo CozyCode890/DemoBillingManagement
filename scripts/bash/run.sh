@@ -53,6 +53,18 @@ if [ -z "$JAR_DRIVER" ]; then
     exit 1
 fi
 
+# ZXing cung nam trong lib/ va cung bi .gitignore bo qua (dong "lib/*.jar"),
+# nen mot ban clone moi se thieu no. Thieu ma khong kiem o day thi javac do ra
+# 16 loi "cannot find symbol" giua VietQRHelper.java, khong ai doan duoc
+# nguyen nhan that la thieu thu vien. Kiem truoc, bao dung viec can lam.
+for ARTIFACT in core javase; do
+    if ! ls "$PROJECT_ROOT/lib"/*"${ARTIFACT}"-*.jar >/dev/null 2>&1; then
+        echo -e "${RED}[LOI] Thieu thu vien ZXing (${ARTIFACT}) trong lib/ -- can de sinh ma QR VietQR.${NC}"
+        echo -e "${RED}      Hay chay: ./scripts/bash/setup.sh${NC}"
+        exit 1
+    fi
+done
+
 # --- 1. Đọc Main Class từ config.properties --------------------------
 MAIN_CLASS=""
 if [ -f "$PROJECT_ROOT/config.properties" ]; then

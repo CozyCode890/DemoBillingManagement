@@ -28,6 +28,21 @@ if (-not $jar) {
     exit 1
 }
 
+# ZXing cũng nằm trong lib\ và cũng bị .gitignore bỏ qua (dòng "lib/*.jar"),
+# nên một bản clone mới -- hoặc một bản copy chỉ mang theo driver MySQL --
+# sẽ thiếu nó. Thiếu mà không kiểm ở đây thì javac đổ ra 16 lỗi "cannot find
+# symbol" giữa VietQRHelper.java, không ai đoán được nguyên nhân thật là
+# thiếu thư viện. Kiểm trước, báo đúng việc cần làm.
+foreach ($artifact in @('core', 'javase')) {
+    $zx = Get-ChildItem (Join-Path $projectRoot "lib\*$artifact-*.jar") -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+    if (-not $zx) {
+        Write-Host "Thiếu thư viện ZXing ($artifact) trong lib\ -- cần để sinh mã QR VietQR." -ForegroundColor Red
+        Write-Host "Chạy:  .\scripts\ps1\setup.ps1" -ForegroundColor Red
+        exit 1
+    }
+}
+
 # --- 1. Đọc cấu hình Main Class --------------------------------------
 $mainClass = $null
 $configPath = Join-Path $projectRoot 'config.properties'
