@@ -26,7 +26,12 @@ Write-Host "Dang xoa database retail_billing..." -ForegroundColor Yellow
 $env:MYSQL_PWD = $pw
 
 try {
-    & $mysql -u $user -h 127.0.0.1 -P 3306 -e "DROP DATABASE IF EXISTS retail_billing;"
+    # --default-character-set: không có cờ này thì trên Windows tiếng Việt,
+    # client tự dò ra bảng mã 'cp1258' mà MySQL không biết, rồi in hai dòng
+    # cảnh báo ra stderr. Lệnh vẫn chạy đúng, nhưng log trông như bị lỗi.
+    # Các script sql-*.ps1 còn lại đều đã truyền cờ này.
+    & $mysql -u $user -h 127.0.0.1 -P 3306 --default-character-set=utf8mb4 `
+        -e "DROP DATABASE IF EXISTS retail_billing;"
     if ($LASTEXITCODE -ne 0) { throw "Loi khi xoa database" }
     Write-Host "[OK] Da xoa sach database retail_billing." -ForegroundColor Green
 } finally {
