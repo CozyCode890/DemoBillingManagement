@@ -59,6 +59,23 @@ if ! pgrep -x mysqld >/dev/null 2>&1; then
     exit 1
 fi
 
+# --- 0b. Nap sp_check_seed (nhom Seed cua khoi 6 goi no) --------------
+# 01_schema.sql mo dau bang DROP DATABASE, nen moi lan dung lai database la
+# thu tuc nay bien mat. Nap lai o day cho ContractCheck chay duoc sau BAT KY
+# duong dung database nao. File chi CREATE mot thu tuc, khong cham du lieu.
+if command -v mysql >/dev/null 2>&1; then
+    DB_USER='root'
+    DB_PW='root'
+    if [ -f config.properties ]; then
+        V=$(sed -n 's/^[[:space:]]*db\.user[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' config.properties | tail -n 1)
+        [ -n "$V" ] && DB_USER="$V"
+        V=$(sed -n 's/^[[:space:]]*db\.password[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' config.properties | tail -n 1)
+        [ -n "$V" ] && DB_PW="$V"
+    fi
+    MYSQL_PWD="$DB_PW" mysql -u "$DB_USER" -h 127.0.0.1 -P 3306 \
+        --default-character-set=utf8mb4 < sql/05_invariants.sql >/dev/null 2>&1 || true
+fi
+
 # --- 1. Bien dich app vao out/ ----------------------------------------
 # ContractCheck goi vao NewInvoicePanel.splitPayment (package-private) nen
 # no phai duoc bien dich NGOAI src/ roi dat canh out/ tren classpath.

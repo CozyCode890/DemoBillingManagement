@@ -70,6 +70,25 @@ public class InvoiceViewPanel extends JPanel {
     private final JButton btDeleteReturn   = new JButton("Huy luot tra");
 
     // =================================================================
+    //  Ô CHỌN KHOẢNG NGÀY + NHÃN SỐ DÒNG (khối 6)
+    // =================================================================
+    //  Seed 91 ngày có ~550 hóa đơn và bảng này không có ô lọc nào, nên nạp
+    //  cả bảng là vừa chậm vừa không đọc được (plan/15 lỗi #18).
+    //
+    //  Nhãn số dòng KHÔNG phải trang trí: một bảng bị cắt mà không nói là
+    //  đang nói sai. plan/14 mục 5.6f đã đặt quy ước đó cho nút "Tạo mã QR"
+    //  ("một nút bị khoá không giải thích được gì"), và nó áp dụng y nguyên
+    //  cho một bảng bị cắt.
+    //
+    //  DAY_VALUES song song từng phần tử với các nhãn của cbDays; 0 = tất cả,
+    //  đúng hợp đồng của sp_get_recent_invoices(p_days).
+    private static final int[] DAY_VALUES = { 7, 30, 90, 0 };
+    private final JComboBox<String> cbDays = new JComboBox<>(new String[] {
+            "7 ngay gan nhat", "30 ngay gan nhat", "90 ngay gan nhat", "Tat ca"
+    });
+    private final JLabel lbInvoiceCount = new JLabel(" ");
+
+    // =================================================================
     //  ĐỊNH DẠNG SỐ -- KHÔNG CÒN BẢN CHÉP Ở ĐÂY
     // =================================================================
     //  Trước khối 5 lớp này giữ bộ DecimalFormat RIÊNG của nó: bản chép thứ
@@ -152,6 +171,22 @@ public class InvoiceViewPanel extends JPanel {
         JButton btReload = new JButton("Tai lai danh sach");
         btReload.addActionListener(e -> reload());
 
+        // Mặc định 30 ngày: đủ dày để thấy cả ba trạng thái và vài lượt trả
+        // hàng, mà không nạp cả 548 dòng ngay khi mở tab.
+        cbDays.setSelectedIndex(1);
+        cbDays.addActionListener(e -> reload());
+        cbDays.setToolTipText("Loc theo ngay ban. 'Tat ca' nap moi hoa don, "
+                + "ke ca hai hoa don INV-OLD-* tu nam truoc.");
+
+        JPanel pnlFilter = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        pnlFilter.add(new JLabel("Khoang ngay:"));
+        pnlFilter.add(cbDays);
+        pnlFilter.add(btReload);
+
+        lbInvoiceCount.setFont(lbInvoiceCount.getFont().deriveFont(Font.PLAIN, 11f));
+        lbInvoiceCount.setForeground(new Color(90, 90, 90));
+        lbInvoiceCount.setBorder(BorderFactory.createEmptyBorder(2, 4, 0, 4));
+
         JPanel pnlInvoiceActions = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 4));
         btEditInvoice.setFont(Ui.BOLD);
         btVoidInvoice.setFont(Ui.BOLD);
@@ -168,10 +203,14 @@ public class InvoiceViewPanel extends JPanel {
         pnlInvoiceActions.add(btVoidInvoice);
         pnlInvoiceActions.add(btDeleteInvoice);
 
+        JPanel pnlInvoiceSouth = new JPanel(new BorderLayout());
+        pnlInvoiceSouth.add(lbInvoiceCount, BorderLayout.NORTH);
+        pnlInvoiceSouth.add(pnlInvoiceActions, BorderLayout.CENTER);
+
         JPanel left = new JPanel(new BorderLayout(4, 4));
-        left.add(btReload, BorderLayout.NORTH);
+        left.add(pnlFilter, BorderLayout.NORTH);
         left.add(new JScrollPane(tbInvoices), BorderLayout.CENTER);
-        left.add(pnlInvoiceActions, BorderLayout.SOUTH);
+        left.add(pnlInvoiceSouth, BorderLayout.SOUTH);
         left.setBorder(BorderFactory.createTitledBorder("Danh sach hoa don (bam de xem chi tiet)"));
 
         // --- Cột phải: Chi tiết hóa đơn ---
@@ -319,12 +358,21 @@ public class InvoiceViewPanel extends JPanel {
 
     public void reload() {
         try {
-            QueryResult qr = dao.recentInvoices();
+            int sel  = cbDays.getSelectedIndex();
+            int days = DAY_VALUES[sel < 0 ? 1 : sel];
+
+            QueryResult qr = dao.recentInvoices(days);
             // tbInvoices: Ma_HD, Ngay, Gio, Shop, Thu_ngan, Khach, Trang_thai, Tong_tien
             // Tong_tien la cot CUOI va la cot tien duy nhat.
             fillFormatted(tbInvoices, qr, new int[]{qr.columns.size() - 1}, null, null, null);
             tbInvoices.setAutoCreateRowSorter(true); // Enable column sorting
+
+            // Nói ra số dòng VÀ phạm vi: một bảng bị cắt phải nói là đang bị
+            // cắt, nếu không nó đang nói sai (plan/15 mục 5.2).
+            lbInvoiceCount.setText("Dang hien " + Ui.integer(qr.rows.size()) + " hoa don ("
+                    + (days == 0 ? "tat ca" : days + " ngay gan nhat") + ")");
         } catch (Exception ex) {
+            lbInvoiceCount.setText(" ");
             Ui.error(this, ex);
         }
     }

@@ -28,6 +28,23 @@ public class SearchPanel extends JPanel {
     private final JTable table;
     private final JLabel lbRowCount;
 
+    // =================================================================
+    //  TRẦN SỐ DÒNG (khối 6)
+    // =================================================================
+    //  Tab này là TRÌNH XEM BẢNG TỔNG QUÁT và plan/14 mục 2.3 đã chốt rằng
+    //  SQL thô ở đây là CÓ CHỦ Ý -- nên khối 6 không viết lại nó. Việc tối
+    //  thiểu và đủ: một trần + một nhãn nói ra khi bảng bị cắt.
+    //
+    //  Trước khối 6 cả hai câu là `SELECT * FROM <bang>` không LIMIT. Với
+    //  seed 91 ngày, chọn bảng Invoice_Line là nạp ~1.200 dòng và chọn
+    //  Payment là ~650 (plan/15 lỗi #21).
+    //
+    //  LẤY LIMIT + 1 RỒI BỎ DÒNG CUỐI: đó là cách biết "còn nữa" mà không
+    //  phải chạy thêm một câu COUNT(*) trên cùng bảng. Nhãn nói "1.000+"
+    //  chứ không bịa ra một tổng mà ta chưa đếm.
+    private static final int ROW_LIMIT = 1000;
+    private boolean lastResultTruncated = false;
+
     // ĐỊNH DẠNG SỐ: KHÔNG CÒN BẢN CHÉP Ở ĐÂY.
     // Lớp này từng giữ HAI trong bốn bản chép của cả dự án: bộ DecimalFormat ở
     // đây, và một DecimalFormat("#0.##") dựng mới mỗi lần gọi trong
@@ -698,9 +715,12 @@ public class SearchPanel extends JPanel {
     private void loadTableData(String tableName) {
         if (tableName == null || tableName.isEmpty()) return;
 
+        // LIMIT ROW_LIMIT + 1: dòng thừa thứ 1001 chỉ dùng để BIẾT là còn nữa,
+        // populateTable bỏ nó đi.
         try (Connection conn = Db.getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM `" + tableName + "`")) {
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT * FROM `" + tableName + "` LIMIT " + (ROW_LIMIT + 1))) {
 
             populateTable(rs);
         } catch (SQLException ex) {
@@ -817,6 +837,10 @@ public class SearchPanel extends JPanel {
             sql += " ORDER BY " + orderBy;
         }
 
+        // Cùng trần với loadTableData: một bộ lọc rộng (hoặc không lọc gì) trên
+        // Invoice_Line vẫn là ~1.200 dòng.
+        sql += " LIMIT " + (ROW_LIMIT + 1);
+
         try (Connection conn = Db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             // Set parameters
@@ -871,7 +895,14 @@ public class SearchPanel extends JPanel {
             }
         };
 
+        // Chỉ nhận ROW_LIMIT dòng; dòng thứ ROW_LIMIT + 1 (nếu câu SQL trả về)
+        // là tín hiệu "còn nữa", không phải dữ liệu để hiện.
+        lastResultTruncated = false;
         while (rs.next()) {
+            if (model.getRowCount() >= ROW_LIMIT) {
+                lastResultTruncated = true;
+                break;
+            }
             Object[] row = new Object[colCount];
             for (int i = 1; i <= colCount; i++) {
                 Object val = rs.getObject(i);
@@ -941,10 +972,21 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Update row count label */
+    /**
+     * Update row count label.
+     *
+     * <p>Một bảng bị cắt mà không nói là đang nói sai: nhãn "Tổng số hàng:
+     * 1.000 dòng" trên một bảng có 1.205 dòng là một con số sai. Khi chạm
+     * trần, nhãn phải nói ra điều đó (plan/15 mục 5.5).
+     */
     private void updateRowCount() {
         int rows = table.getModel().getRowCount();
-        lbRowCount.setText("Tổng số hàng: " + rows + " dòng");
+        if (lastResultTruncated) {
+            lbRowCount.setText("Đang hiện " + Ui.integer(rows)
+                    + " dòng đầu (bảng còn nhiều hơn — dùng bộ lọc để thu hẹp)");
+        } else {
+            lbRowCount.setText("Tổng số hàng: " + Ui.integer(rows) + " dòng");
+        }
     }
 
     /** Reset the filter panel for the given index to default state */

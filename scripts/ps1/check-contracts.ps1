@@ -34,6 +34,33 @@ if (-not (Get-Process mysqld -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# --- 0b. Nap sp_check_seed (nhom Seed cua khoi 6 goi no) --------------
+# 01_schema.sql mo dau bang DROP DATABASE, nen moi lan dung lai database la
+# thu tuc nay bien mat. Nap lai o day cho ContractCheck chay duoc sau BAT KY
+# duong dung database nao. File chi CREATE mot thu tuc, khong cham du lieu.
+$mysqlExe = (Get-Command mysql -ErrorAction SilentlyContinue).Source
+if (-not $mysqlExe) {
+    $mysqlExe = @(
+        (Join-Path $env:USERPROFILE 'mysql8\mysql-8.0.45-winx64\bin\mysql.exe'),
+        'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe',
+        'C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe'
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if ($mysqlExe) {
+    $dbUser = 'root'; $dbPw = 'root'
+    $cfg = Join-Path $projectRoot 'config.properties'
+    if (Test-Path $cfg) {
+        Get-Content $cfg | ForEach-Object {
+            if ($_ -match '^\s*db\.user\s*=\s*(.+)$')     { $dbUser = $matches[1].Trim() }
+            if ($_ -match '^\s*db\.password\s*=\s*(.+)$') { $dbPw   = $matches[1].Trim() }
+        }
+    }
+    $env:MYSQL_PWD = $dbPw
+    Get-Content (Join-Path $projectRoot 'sql\05_invariants.sql') -Raw -Encoding UTF8 |
+        & $mysqlExe -u $dbUser -h 127.0.0.1 -P 3306 --default-character-set=utf8mb4 2>&1 | Out-Null
+    $env:MYSQL_PWD = $null
+}
+
 # --- 1. Bien dich app vao out\ ---------------------------------------
 # ContractCheck goi vao NewInvoicePanel.splitPayment (package-private) nen
 # no phai duoc bien dich NGOAI src\ roi dat canh out\ tren classpath.

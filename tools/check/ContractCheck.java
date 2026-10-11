@@ -16,6 +16,10 @@ import billing.model.*;
 import java.awt.HeadlessException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.sql.CallableStatement;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -31,6 +35,10 @@ import java.util.List;
  *    2. GIAM GIA     -- discount la ham cua (san pham, ngay, SO LUONG)
  *    3. DOC / HIEN SO -- hai quy tac doc so, mot ban chep moi phep dinh dang
  *    4. MA QR        -- tai khoan lay tu config.properties va CO TAC DUNG
+ *
+ *  NHOM SEED, them o khoi 6 (plan/15 muc 5.6): ba phep kiem cuoi file.
+ *  Chung PHAI nam o day chu khong trong 05_invariants.sql vi hai trong ba
+ *  so SQL VOI JAVA, nen chi chay duoc o cho goi duoc ca hai.
  *
  *  VI SAO CO FILE NAY: ba trong bon hop dong tren la "thu kiem duoc bang
  *  mat nhung sai thi khong ai thay". Vi du loi #1 cua plan/14: thu ngan go
@@ -167,8 +175,250 @@ public class ContractCheck {
         e2e();
 
         System.out.println();
+        System.out.println("=== SEED (khoi 6)  14 bat bien du lieu + hai ban chep ===");
+        seed();
+
+        System.out.println();
         System.out.printf("TONG: %d dat, %d sai%n", pass, fail);
         if (fail > 0) System.exit(1);
+    }
+
+    // =================================================================
+    //  NHOM SEED -- plan/15 muc 5.6
+    // =================================================================
+
+    /**
+     * Ba phep kiem cua khoi 6:
+     *   #80  sp_check_seed tra 0 vi pham tren CA 14 quy tac
+     *   #76  fn_active_promo_pct == Discount_Percent cua sp_get_active_promo
+     *   #77  fn_line_discount (SQL) == NewInvoicePanel.lineDiscount (Java)
+     *
+     * #76 va #77 la CAI CHOT ma plan/15 muc 3.1 hua khi chap nhan ban chep
+     * thu hai cua dieu kien chon khuyen mai. Rui ro #1/#2 cua muc 8 la:
+     * ca seed va bat bien R2 deu hoi fn_line_discount, nen neu HAM sai thi
+     * R2 van tra 0 -- hai ben sai khop nhau. Hai phep kiem duoi day pha
+     * vong tron do: #76 so ham voi THU TUC (ban chep thu nhat), #77 so no
+     * voi JAVA (ban chep ma tab 1 that su dung).
+     */
+    static void seed() {
+        // --- #80: 14 bat bien du lieu -------------------------------
+        check("#80", checkSeedViolations(true), 0);
+
+        // --- #76: ham khop thu tuc tren luoi ma vach x ngay ----------
+        // Bay ngay moc, chon de cat qua CA NAM vung khuyen mai cua seed:
+        // PR04 don (-90), PR04+PR05 goi nhau (-60), PR06 PAUSED (-45, -30),
+        // khe trong (-15 cho san pham khong co PR01), PR01/PR02 (0, +10).
+        int[] offsets = { -90, -60, -45, -30, -15, 0, 10 };
+        int cells = 0, mismatch = 0;
+        QueryResult prods = QueryResult.run("SELECT Barcode FROM Product ORDER BY Barcode");
+        for (Object[] p : prods.rows) {
+            String barcode = String.valueOf(p[0]);
+            for (int off : offsets) {
+                LocalDate d = LocalDate.now().plusDays(off);
+
+                // ban thu nhat: THU TUC (co ORDER BY ... DESC LIMIT 1)
+                QueryResult sp = QueryResult.call("{call sp_get_active_promo(?, ?)}",
+                        barcode, java.sql.Date.valueOf(d));
+                BigDecimal fromSp = sp.rows.isEmpty()
+                        ? BigDecimal.ZERO
+                        : new BigDecimal(String.valueOf(sp.rows.get(0)[1]));
+
+                // ban thu hai: HAM (co MAX)
+                QueryResult fn = QueryResult.run(
+                        "SELECT fn_active_promo_pct(?, ?)", barcode, java.sql.Date.valueOf(d));
+                BigDecimal fromFn = new BigDecimal(String.valueOf(fn.rows.get(0)[0]));
+
+                cells++;
+                if (fromFn.compareTo(fromSp) != 0) {
+                    mismatch++;
+                    System.out.printf("  LECH %s @ %s: ham=%s thu tuc=%s%n",
+                            barcode, d, fromFn, fromSp);
+                }
+            }
+        }
+        System.out.println("  luoi #76: " + cells + " o");
+        check("#76", mismatch, 0);
+
+        // Ba o CU THE, go bang tay, de phep kiem khong chi dong y voi chinh
+        // no: hai ban chep co the cung sai mot cach, nhung ca hai cung sai
+        // DUNG BA CON SO nay thi kho hon nhieu.
+        check("#76a", pct("8934001", -50), "12.00");  // PR04 (8) + PR05 (12) -> chon 12
+        check("#76b", pct("8934001", -70), "8.00");   // chi PR04
+        check("#76c", pct("8934006", -30), "0.00");   // PR06 PAUSED phu, van 0
+
+        // --- #77: SQL khop Java tung dong ---------------------------
+        try {
+            Method ld = NewInvoicePanel.class.getDeclaredMethod(
+                    "lineDiscount", BigDecimal.class, BigDecimal.class, BigDecimal.class);
+            ld.setAccessible(true);
+
+            String[] qtys  = { "1", "2", "1.5", "0.5" };
+            String[] prices = { "20000", "33000", "158000" };
+            String[] pcts   = { "0", "5", "8", "10", "12" };
+            int grid = 0, bad = 0;
+            for (String q : qtys) {
+                for (String pr : prices) {
+                    for (String pc : pcts) {
+                        BigDecimal java_ = (BigDecimal) ld.invoke(null,
+                                new BigDecimal(q), new BigDecimal(pr), new BigDecimal(pc));
+                        // Cong thuc cua SQL, voi pct truyen vao thay vi tra tu
+                        // bang: so CONG THUC, khong so dieu kien chon khuyen
+                        // mai (cai do la viec cua #76).
+                        QueryResult sql = QueryResult.run(
+                                "SELECT ROUND(? * ? * ? / 100, 2)", q, pr, pc);
+                        BigDecimal sql_ = new BigDecimal(String.valueOf(sql.rows.get(0)[0]));
+                        grid++;
+                        if (java_.compareTo(sql_) != 0) {
+                            bad++;
+                            System.out.printf("  LECH qty=%s gia=%s pct=%s: java=%s sql=%s%n",
+                                    q, pr, pc, java_, sql_);
+                        }
+                    }
+                }
+            }
+            System.out.println("  luoi #77: " + grid + " o");
+            check("#77", bad, 0);
+
+            // Va mot o di qua DUNG fn_line_discount that -- de khong ai sua
+            // ham do ma hai phep kiem tren van xanh. INV-0001 dong 1 cua seed:
+            // 8934001, SL 2, don gia 28.000 tai ngay -90, PR04 8% -> 4.480.
+            QueryResult real = QueryResult.run(
+                    "SELECT fn_line_discount('8934001', ?, 2.000, 28000.00)",
+                    java.sql.Date.valueOf(LocalDate.now().minusDays(90)));
+            check("#77b", String.valueOf(real.rows.get(0)[0]), "4480.00");
+
+        } catch (Exception e) {
+            check("#77", "loi: " + e.getMessage(), 0);
+        }
+
+        // --- #110 / #111: du lieu do APP sinh ra thoa CUNG bo bat bien ---
+        // Day la noi dung cua plan/15 muc 3.1 duoi dang mot phep kiem CHAY
+        // DUOC: seed di qua thu tuc cua app, nen mot hoa don do tab 1 lap ra
+        // va mot hoa don do seed sinh ra phai thoa CUNG 14 quy tac.
+        //
+        //   #110 ban hom nay   -> gia hom nay, khuyen mai hom nay (PR01/PR02)
+        //   #111 ban o qua khu -> gia CU (truoc moc doi gia -45) va khuyen
+        //                         mai CUA NGAY DO (PR04/PR05), khong phai
+        //                         cua hom nay
+        //
+        // Hoa don duoc XOA ngay sau khi kiem -- khong cham du lieu seed.
+        appInvoiceKeepsInvariants("#110", LocalDate.now());
+        appInvoiceKeepsInvariants("#111", LocalDate.now().minusDays(60));
+    }
+
+    /**
+     * Goi sp_check_seed va tra ve TONG so vi pham.
+     *
+     * <p>Thu tuc do vua tra ve BANG vua co tham so {@code OUT}, nen phai doc
+     * ca hai: bang de in ra cho nguoi doc, so de cong vao {@code fail}.
+     * {@code QueryResult.call} khong ho tro {@code OUT} nen cho nay dung
+     * {@code CallableStatement} truc tiep -- day la mot chuong trinh kiem,
+     * khong phai tang DAO.
+     *
+     * <p>Tra ve {@code -1} neu khong goi duoc (chua nap 05_invariants.sql).
+     */
+    static int checkSeedViolations(boolean print) {
+        try (Connection conn = billing.db.Db.getConnection();
+             CallableStatement cs = conn.prepareCall("{call sp_check_seed(?)}")) {
+
+            cs.registerOutParameter(1, Types.INTEGER);
+            boolean hasRs = cs.execute();
+            while (hasRs) {
+                try (ResultSet rs = cs.getResultSet()) {
+                    while (rs.next()) {
+                        int bad = rs.getInt("Vi_pham");
+                        if (print || bad != 0) {
+                            System.out.printf("  %-4s %-5s %-62s %s%n",
+                                    bad == 0 ? "ok" : "FAIL",
+                                    rs.getString("Quy_tac"),
+                                    rs.getString("Noi_dung"),
+                                    bad == 0 ? "" : "vi pham=" + bad);
+                        }
+                    }
+                }
+                hasRs = cs.getMoreResults();
+            }
+            return cs.getInt(1);
+
+        } catch (java.sql.SQLException e) {
+            System.out.println("  (khong goi duoc sp_check_seed -- da nap "
+                    + "sql/05_invariants.sql chua?)  " + e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * Lap MOT hoa don qua {@code InvoiceDao.createInvoice} (dung duong tab 1
+     * di), chay lai 14 bat bien, roi XOA hoa don do.
+     *
+     * <p>Don gia va tien giam KHONG duoc go tay o day: chung tra bang
+     * {@code ProductDao.priceOn} va {@code NewInvoicePanel.lineDiscount} tai
+     * {@code saleDate} -- dung hai nguon ma tab 1 dung. Do la toan bo y nghia
+     * cua phep kiem: neu app tinh khac seed thi R1 hoac R2 bao ngay.
+     */
+    static void appInvoiceKeepsInvariants(String id, LocalDate saleDate) {
+        LookupDao  lk = new LookupDao();
+        ProductDao pd = new ProductDao();
+        InvoiceDao dao = new InvoiceDao();
+        String created = null;
+
+        try {
+            Method ld = NewInvoicePanel.class.getDeclaredMethod(
+                    "lineDiscount", BigDecimal.class, BigDecimal.class, BigDecimal.class);
+            ld.setAccessible(true);
+
+            // Chon mot san pham CO khuyen mai tai saleDate, de phep kiem di
+            // qua nhanh "Discount <> 0" chu khong chi nhanh 0.
+            Product prod = null;
+            BigDecimal price = null, pctv = BigDecimal.ZERO;
+            for (Product p : pd.findAll()) {
+                BigDecimal pr = pd.priceOn(p.barcode, saleDate);
+                if (pr == null || pr.signum() <= 0) continue;
+                Object[] promo = pd.activePromoOn(p.barcode, saleDate);
+                if (promo != null) {
+                    prod = p; price = pr; pctv = (BigDecimal) promo[1];
+                    break;
+                }
+                if (prod == null) { prod = p; price = pr; }   // du phong
+            }
+            if (prod == null) {
+                System.out.println("  (khong co san pham co gia -- bo qua " + id + ")");
+                return;
+            }
+
+            BigDecimal qty = new BigDecimal("2");
+            BigDecimal disc = (BigDecimal) ld.invoke(null, qty, price, pctv);
+            BigDecimal due = price.multiply(qty).subtract(disc).setScale(2);
+
+            List<CartLine> lines = new ArrayList<>();
+            lines.add(new CartLine(prod, qty, price, disc, ""));
+
+            NewInvoicePanel.Split sp = NewInvoicePanel.splitPayment(
+                    PayMethod.CASH, due.add(new BigDecimal("50000.00")), due);
+            List<PaymentEntry> pays = new ArrayList<>();
+            pays.add(new PaymentEntry(PayMethod.CASH.code(), sp.recorded, sp.tendered, null, null));
+
+            created = dao.createInvoice(null, saleDate, LocalTime.now().withNano(0),
+                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
+            System.out.println("  " + id + ": " + created + " ban ngay " + saleDate
+                    + " (" + prod.barcode + ", gia " + price + ", giam " + disc + ")");
+
+            check(id, checkSeedViolations(false), 0);
+
+        } catch (Exception e) {
+            check(id, "loi: " + e.getMessage(), 0);
+        } finally {
+            if (created != null) {
+                try { new InvoiceDao().deleteInvoice(created); } catch (Exception ignore) { }
+            }
+        }
+    }
+
+    /** fn_active_promo_pct tai CURDATE() + offset, duoi dang chuoi de so sanh. */
+    static String pct(String barcode, int offsetDays) {
+        QueryResult r = QueryResult.run("SELECT fn_active_promo_pct(?, ?)",
+                barcode, java.sql.Date.valueOf(LocalDate.now().plusDays(offsetDays)));
+        return String.valueOf(r.rows.get(0)[0]);
     }
 
     static void qr() {

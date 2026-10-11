@@ -16,6 +16,8 @@ USE retail_billing;
 
 -- Xóa các hàm và thủ tục cũ nếu đã tồn tại để tránh lỗi trùng lặp khi chạy lại
 DROP FUNCTION IF EXISTS fn_get_product_price;
+DROP FUNCTION IF EXISTS fn_active_promo_pct;
+DROP FUNCTION IF EXISTS fn_line_discount;
 DROP FUNCTION IF EXISTS fn_next_invoice_id;
 DROP FUNCTION IF EXISTS fn_next_payment_id;
 DROP FUNCTION IF EXISTS fn_return_refund;
@@ -91,7 +93,80 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.2 fn_next_invoice_id: Tự động sinh mã hóa đơn tiếp theo (INV-xxxx)
+-- 1.2 fn_active_promo_pct: Phan tram giam cua khuyen mai TOT NHAT dang ap
+--     dung cho san pham tai mot ngay. Khong co khuyen mai -> 0.00.
+--
+--     DAY LA BAN CHEP THU HAI cua dieu kien chon khuyen mai: ban thu nhat
+--     la sp_get_active_promo (muc 2.6). plan/14 muc 3.2 da tu choi tao ban
+--     thu hai nay -- va luc do la dung, vi khi do KHONG CO code SQL nao can
+--     tinh Discount. Tien de do doi o khoi 6: seed sinh Invoice_Line.Discount
+--     bang SQL (plan/15 muc 3.1).
+--
+--     Hai ban chep nay co CHOT BANG SO, khong phai co loi hua:
+--       - kich ban #76: ham tra dung cai sp_get_active_promo tra, tren mot
+--         luoi ma vach x ngay
+--       - kich ban #77: cong thuc giam gia cua SQL khop
+--         NewInvoicePanel.lineDiscount cua Java, tung dong
+--     Sua mot ban thi hai kich ban do sai ngay. DUNG sua mot ben.
+--
+--     Vi sao MAX(...) chu khong ORDER BY ... LIMIT 1: khi chi lay MOT cot
+--     thi hai cach cho cung ket qua, va MAX() doc duoc trong mot cau SELECT
+--     INTO. sp_get_active_promo phai dung ORDER BY vi no con tra Promo_ID
+--     va Rule_Description.
+-- ---------------------------------------------------------------------
+CREATE FUNCTION fn_active_promo_pct(
+    p_barcode VARCHAR(20),
+    p_date    DATE
+)
+RETURNS DECIMAL(5,2)
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_pct DECIMAL(5,2) DEFAULT NULL;
+
+    SELECT MAX(a.Discount_Percent)
+    INTO   v_pct
+    FROM   Applies_To a
+    JOIN   Promotion  p ON p.Promo_ID = a.Promo_ID
+    WHERE  a.Barcode = p_barcode
+      AND  p_date BETWEEN a.Promo_Start_date AND a.Promo_End_date
+      AND  p.Status = 'ACTIVE'
+      AND  p.Expiry_Date >= p_date;
+
+    RETURN COALESCE(v_pct, 0.00);
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 1.3 fn_line_discount: Tien giam cua CA DONG hang tai ngay ban
+--     discount = ROUND(qty * price * pct / 100, 2), voi pct la cai
+--     fn_active_promo_pct tra ve tai ngay do.
+--
+--     Ham nay ton tai de bat bien G2 (plan/15 muc 3.3) chi la MOT LOI GOI
+--     HAM o ca hai cho: vong lap sinh seed trong 02_seed.sql, va quy tac R2
+--     trong 05_invariants.sql. Viet lai bieu thuc o hai cho la hai ban chep
+--     cua cung mot cong thuc, va mot ban sai thi ban kia dong y voi no.
+--
+--     Khop TUNG DONG voi NewInvoicePanel.lineDiscount cua Java -- kich ban
+--     #77 chot bang so tren luoi SL x gia x phan tram.
+-- ---------------------------------------------------------------------
+CREATE FUNCTION fn_line_discount(
+    p_barcode    VARCHAR(20),
+    p_date       DATE,
+    p_quantity   DECIMAL(10,3),
+    p_unit_price DECIMAL(12,2)
+)
+RETURNS DECIMAL(12,2)
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    RETURN ROUND(p_quantity * p_unit_price
+                 * fn_active_promo_pct(p_barcode, p_date) / 100, 2);
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 1.4 fn_next_invoice_id: Tự động sinh mã hóa đơn tiếp theo (INV-xxxx)
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_next_invoice_id()
 RETURNS VARCHAR(30)
@@ -110,7 +185,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.3 fn_next_payment_id: Tự động sinh mã thanh toán tiếp theo (PAY-xxxx)
+-- 1.5 fn_next_payment_id: Tự động sinh mã thanh toán tiếp theo (PAY-xxxx)
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_next_payment_id()
 RETURNS VARCHAR(20)
@@ -129,15 +204,18 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.4 fn_return_refund: Tien hoan lai cho p_quantity don vi cua MOT dong hoa don
+-- 1.6 fn_return_refund: Tien hoan lai cho p_quantity don vi cua MOT dong hoa don
 --     Tra bao nhieu phan cua dong thi hoan lai dung bay nhieu phan tien cua dong
 --     (giam gia cua dong cung duoc chia theo ty le do).
 --     DAY LA BAN DUY NHAT CUA CONG THUC NAY -- xem plan/12 muc 3.1.
 --     sp_get_invoice_returns va sp_report_big_returns deu goi vao day.
 --
 --     Luu y cho nguoi hoc: tien hoan KHONG bang SL_tra * Don_gia khi dong co
---     giam gia. Vi du INV-0001 dong 1 (mua 2, don gia 33.000, giam 6.600):
---     tra 1 don vi hoan 29.700 chu khong phai 26.400.
+--     giam gia. Vi du INV-0001 dong 1 cua seed (mua 2, don gia 28.000, giam
+--     4.480 -- thanh tien 51.520): tra 1 don vi hoan 25.760 chu khong phai
+--     23.520. INV-0001 la hoa don mau cua ca du an va seed ep no o trang thai
+--     'PAID' co 3 dong (02_seed.sql, tim 'v_sample'), nen vi du nay CHAY DUOC
+--     tren seed moi nap -- khong chi la mot con so trong comment.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_return_refund(
     p_invoice_id  VARCHAR(30),
@@ -164,7 +242,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.5 fn_next_return_id: So thu tu lan tra ke tiep CUA MOT DONG hoa don
+-- 1.7 fn_next_return_id: So thu tu lan tra ke tiep CUA MOT DONG hoa don
 --     Khoa chinh bang `Return` la (Invoice_ID, Line_Number, Return_ID) nen
 --     Return_ID chi can duy nhat trong pham vi mot dong -- dung nhu seed dang
 --     danh so (moi dong deu bat dau tu 1). AUTO_INCREMENT khong lam duoc viec nay.
@@ -193,7 +271,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.6 fn_invoice_amount_due: Tong so tien hoa don PHAI thu
+-- 1.8 fn_invoice_amount_due: Tong so tien hoa don PHAI thu
 --     Dung dung cong thuc cua sp_get_invoice_header (Tong_phai_tra).
 --     Hoa don khong co dong hang nao -> tra 0.00 (khong phai NULL), nen
 --     NGUOI GOI phai tu kiem "co dong hang hay khong" truoc khi so sanh:
@@ -219,7 +297,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.7 fn_invoice_amount_paid: Tong so tien DA GHI NHAN cho hoa don
+-- 1.9 fn_invoice_amount_paid: Tong so tien DA GHI NHAN cho hoa don
 --     Payment.Amount la so tien ghi nhan, KHONG phai tien khach dua
 --     (tien khach dua nam o Cash_Payment.Tendered_Amount).
 -- ---------------------------------------------------------------------
@@ -354,8 +432,27 @@ END$$
 --     join nen hoa don bi xoa het dong hang bien mat khoi bang -> khong chon
 --     duoc -> khong sua va khong xoa duoc bang giao dien (plan/13 loi #9).
 --     Tu khoi 4, 'OPEN' la trang thai thuc su nen day la duong di binh thuong.
+--
+--     THAM SO p_days THEM O KHOI 6 -- DAY LA MOT DOI HOP DONG
+--     (docs/05 Quy tac 2, plan/15 muc 5.2):
+--       p_days > 0  -> chi hoa don trong p_days ngay gan nhat
+--       0 hoac NULL -> TAT CA hoa don (nhu truoc khoi 6)
+--
+--     Vi sao can: ban cu khong co LIMIT va khong loc ngay, nen tab 3 nap
+--     MOI hoa don tung co. Voi 18 hoa don khong ai thay; voi ~550 hoa don
+--     trong mot bang khong co o loc nao (InvoiceViewPanel chi co RowSorter
+--     -- sap xep, khong loc) thi thay (plan/15 loi #18).
+--
+--     Vi sao la KHOANG NGAY chu khong phai LIMIT n: "gan day" cua mot danh
+--     sach hoa don la mot khoang thoi gian, va thu tuc da ten la 'recent'.
+--     Quan trong hon: voi LIMIT 200 thi ~350 hoa don cu nhat KHONG DEN DUOC
+--     bang giao dien, trong do co INV-0001 (03_queries.sql CAU 1 lay lam vi
+--     du mau) va hai hoa don INV-OLD-* ma bao cao bonus noi ve. Voi p_days
+--     thi chon "Tat ca" la moi hoa don van den duoc.
 -- ---------------------------------------------------------------------
-CREATE PROCEDURE sp_get_recent_invoices()
+CREATE PROCEDURE sp_get_recent_invoices(
+    IN p_days INT
+)
 BEGIN
     SELECT  i.Invoice_ID                                  AS Ma_HD,
             i.`Date`                                      AS Ngay,
@@ -371,6 +468,11 @@ BEGIN
     JOIN    Cashier      c  ON c.Cashier_ID   = i.Cashier_ID
     LEFT JOIN Customer   cu ON cu.Customer_ID = i.Customer_ID
     LEFT JOIN Invoice_Line l ON l.Invoice_ID  = i.Invoice_ID
+    -- COALESCE(p_days, 0) <= 0 la nhanh "tat ca": phep OR nay duoc danh gia
+    -- mot lan cho moi dong, nhung no khong phu thuoc dong nao nen MySQL
+    -- rut gon no thanh hang so.
+    WHERE   COALESCE(p_days, 0) <= 0
+       OR   i.`Date` >= DATE_SUB(CURDATE(), INTERVAL p_days DAY)
     GROUP BY i.Invoice_ID, i.`Date`, i.`Time`, s.Shop_ID,
              c.Name, cu.Name, i.Status
     ORDER BY i.`Date` DESC, i.`Time` DESC;
@@ -678,23 +780,42 @@ END$$
 
 -- ---------------------------------------------------------------------
 -- 4.5 sp_report_old_price_proof: Chứng minh hóa đơn cũ giữ giá cũ
+--
+--     DOI O KHOI 6 -- HAI VIEC, VA CA HAI LA DOI HOP DONG COT
+--     (plan/15 muc 5.3, chỗ gọi: ReportDao.oldPriceProof -> Ui.fill):
+--
+--     1. THEM WHERE. Ban cu KHONG CO WHERE nen no tra MOI DONG HANG CUA
+--        MOI HOA DON -- voi seed 91 ngay la ~1.200 dong, cho mot bao cao
+--        mang ten "chung minh" (plan/15 loi #19). Dieu kien dung la "don
+--        gia tren hoa don KHAC gia hom nay": do chinh la dinh nghia cua
+--        "giu gia cu".
+--        (Ban trong 03_queries.sql phan BONUS co WHERE ... LIKE 'INV-OLD%'
+--         -- hai ban chep da lech nhau TU TRUOC khoi 6. Nay ca hai deu loc
+--         theo "gia khac gia hom nay", nen chung noi cung mot chuyen.)
+--
+--     2. GOM THEO (san pham, don gia da dong bang) thay vi liet ke tung
+--        dong. Moi dong ket qua tra loi dung cau hoi cua de bai: "co bao
+--        nhieu dong hang dang ghi gia nay, va gia hom nay la bao nhieu".
+--        ~8 dong thay vi ~1.200.
+--
+--     3. Dung fn_get_product_price thay cho subquery chep tay -- MOT BAN
+--        CHEP NUA BIEN MAT. Ham do la dinh nghia cua "gia tai mot ngay",
+--        va bat bien R1 cua 05_invariants.sql cung dung chinh no.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_old_price_proof()
 BEGIN
-    SELECT  l.Invoice_ID     AS Ma_HD,
-            i.`Date`         AS Ngay_ban,
-            p.Name           AS San_pham,
-            l.Unit_Price     AS Gia_ghi_tren_HD,
-            (SELECT h.Price
-             FROM   Price_History h
-             WHERE  h.Barcode = l.Barcode
-               AND  h.Valid_From_Date <= CURDATE()
-             ORDER BY h.Valid_From_Date DESC
-             LIMIT 1)        AS Gia_hom_nay
+    SELECT  p.Name                                     AS San_pham,
+            l.Unit_Price                               AS Gia_ghi_tren_HD,
+            fn_get_product_price(l.Barcode, CURDATE()) AS Gia_hom_nay,
+            COUNT(*)                                   AS So_dong_hang,
+            MIN(i.`Date`)                              AS Ban_tu_ngay,
+            MAX(i.`Date`)                              AS Ban_den_ngay
     FROM    Invoice_Line l
-    JOIN    Invoice i ON i.Invoice_ID = l.Invoice_ID
-    JOIN    Product p ON p.Barcode    = l.Barcode
-    ORDER BY i.`Date`, l.Invoice_ID, l.Line_Number;
+    JOIN    Invoice      i ON i.Invoice_ID = l.Invoice_ID
+    JOIN    Product      p ON p.Barcode    = l.Barcode
+    WHERE   l.Unit_Price <> fn_get_product_price(l.Barcode, CURDATE())
+    GROUP BY p.Name, l.Unit_Price, l.Barcode
+    ORDER BY p.Name, l.Unit_Price;
 END$$
 
 

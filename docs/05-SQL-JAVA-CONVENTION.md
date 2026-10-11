@@ -174,6 +174,8 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | Tên Routine | Loại | Tham số | Ý nghĩa nghiệp vụ | Nơi gọi trong Java |
 |---|---|---|---|---|
 | `fn_get_product_price` | FUNCTION | `p_barcode`, `p_date` | Lấy đơn giá tại ngày bán | `ProductDao.priceOn()` |
+| `fn_active_promo_pct` | FUNCTION | `p_barcode`, `p_date` | Phần trăm giảm của khuyến mãi **tốt nhất** tại ngày bán; `0.00` nếu không có. **Bản chép thứ hai** của điều kiện chọn khuyến mãi (bản thứ nhất là `sp_get_active_promo`) — có chốt bằng số, kịch bản #76 | *(chỉ SQL — `sp_seed_demo_data` và `05_invariants.sql` gọi)* |
+| `fn_line_discount` | FUNCTION | `p_barcode`, `p_date`, `p_quantity`, `p_unit_price` | Tiền giảm của cả dòng: `ROUND(qty × price × pct / 100, 2)`. Khớp `NewInvoicePanel.lineDiscount` **từng đồng** — chốt bằng kịch bản #77 | *(chỉ SQL)* |
 | `fn_next_invoice_id` | FUNCTION | *(không)* | Tự sinh mã hóa đơn `INV-xxxx` | `InvoiceDao.nextInvoiceId()` |
 | `fn_next_payment_id` | FUNCTION | *(không)* | Tự sinh mã thanh toán `PAY-xxxx`. Gọi **trong** transaction, một lần cho mỗi dòng thanh toán | `InvoiceDao.createInvoice()` |
 | `fn_return_refund` | FUNCTION | `p_invoice_id`, `p_line_number`, `p_quantity` | **Bản duy nhất** của công thức tiền hoàn: `ROUND(n / Q * T, 2)`. Java không được tự tính | `InvoiceDao.returnRefund()` |
@@ -186,7 +188,7 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_search_customers_by_phone` | PROCEDURE | `p_prefix` | Tìm khách theo tiền tố số điện thoại, 3 cột, `LIMIT 20`. Trả **cột riêng**, không ghép chuỗi hiển thị | `LookupDao.searchCustomersByPhone()` |
 | `sp_get_all_products` | PROCEDURE | *(không)* | Danh mục tất cả sản phẩm | `ProductDao.findAll()` |
 | `sp_get_active_promo` | PROCEDURE | `p_barcode`, `p_date` | Khuyến mãi cao nhất ngày bán | `ProductDao.activePromoOn()` |
-| `sp_get_recent_invoices` | PROCEDURE | *(không)* | Hóa đơn gần đây + tổng tiền | `InvoiceDao.recentInvoices()` |
+| `sp_get_recent_invoices` | PROCEDURE | `p_days` | Hóa đơn gần đây + tổng tiền. **Tham số `p_days` thêm ở khối 6 — đó là một đổi hợp đồng** (Quy tắc 2): `> 0` lọc theo khoảng ngày, `0`/`NULL` là **tất cả**. Lọc bằng khoảng ngày chứ không `LIMIT n`, để `INV-0001` và `INV-OLD-*` vẫn đến được | `InvoiceDao.recentInvoices(int)` |
 | `sp_get_invoice_header` | PROCEDURE | `p_invoice_id` | Đầu hóa đơn và tổng tiền | `InvoiceDao.invoiceHeader()` |
 | `sp_get_invoice_lines` | PROCEDURE | `p_invoice_id` | Các dòng sản phẩm của hóa đơn | `InvoiceDao.invoiceLines()` |
 | `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn. **5 cột, đúng thứ tự** `Ma_TT, So_tien, Phuong_thuc, Chi_tiet, Tien_khach_dua`. `Tien_khach_dua` là cột **số** riêng (`NULL` cho thẻ/ví), không `CONCAT` vào `Chi_tiet` -- định dạng tiền là việc của Java | `InvoiceDao.invoicePayments()` |
@@ -198,7 +200,7 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_report_price_rise` | PROCEDURE | *(không)* | Báo cáo sản phẩm tăng giá > 10% | `ReportDao.priceRise()` |
 | `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc | `ReportDao.bestCashier()` |
 | `sp_report_big_returns` | PROCEDURE | *(không)* | Báo cáo hóa đơn trả hàng > 50% | `ReportDao.bigReturns()` |
-| `sp_report_old_price_proof`| PROCEDURE | *(không)* | Chứng minh hóa đơn cũ giữ giá | `ReportDao.oldPriceProof()` |
+| `sp_report_old_price_proof`| PROCEDURE | *(không)* | Chứng minh hóa đơn cũ giữ giá. **Đổi ở khối 6 — 6 cột, gộp theo (sản phẩm, đơn giá)**: `San_pham, Gia_ghi_tren_HD, Gia_hom_nay, So_dong_hang, Ban_tu_ngay, Ban_den_ngay`. Bản cũ không có `WHERE` nên với seed 91 ngày nó trả ~1.200 dòng cho một báo cáo mang tên *"chứng minh"* | `ReportDao.oldPriceProof()` |
 | `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **luôn là `OPEN`** -- chưa thu đủ tiền thì chưa `PAID` | `InvoiceDao.createInvoice()` |
 | `sp_add_invoice_line` | PROCEDURE | `(6 tham số)` | Ghi dòng chi tiết hóa đơn | `InvoiceDao.createInvoice()` |
 | `sp_add_payment` | PROCEDURE | `(6 tham số)` | Ghi thanh toán & rẽ nhánh bảng con | `InvoiceDao.createInvoice()` |
@@ -207,6 +209,7 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn không phải `PAID` | `InvoiceDao.processReturn()` |
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
 | `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |
+| `sp_check_seed` | PROCEDURE | `OUT p_violations` | 14 bất biến dữ liệu, mỗi quy tắc một dòng kèm số vi phạm; `OUT` là tổng. Nằm ở `sql/05_invariants.sql`, **không** ở `04_routines.sql`: nó là dụng cụ kiểm, app không gọi nó | `ContractCheck`, `check-seed.ps1` / `.sh` |
 
 ---
 
@@ -298,3 +301,79 @@ kiểm bằng tay (`plan/14` mục 9.3 ghi rõ cái nào đã chạy, cái nào 
 3 hoá đơn thật rồi xoá, không chạm dữ liệu seed. Sửa file đó thì đọc `plan/14`
 mục 9.4 trước -- tham số `-Djava.awt.headless=true` là bắt buộc, không phải
 tuỳ chọn.
+
+---
+
+## 8. Quy Ước Dữ Liệu Mẫu
+
+Bốn quy ước dưới đây sinh ra từ khối 6 (`plan/15`), sau khi phát hiện
+`02_seed.sql` là chỗ **duy nhất** trong cả dự án đi vòng qua mọi quy tắc nghiệp
+vụ mà năm khối trước đã dựng: nó `INSERT` thẳng vào bảng giao dịch với
+`Status`, `Unit_Price`, `Discount`, `Return_ID` **gõ tay**.
+
+> **Seed là dữ liệu mà app có thể tự tạo ra. Nếu một thủ tục của app từ chối
+> một dòng, seed không được có dòng đó.**
+
+### 8.1. Seed đi qua thủ tục của app, không `INSERT` thẳng vào bảng giao dịch
+
+**Bảy bảng giao dịch** (`Invoice`, `Invoice_Line`, `Payment` + 3 bảng con,
+`` `Return` ``) chỉ được ghi qua `sp_create_invoice_header`,
+`sp_add_invoice_line`, `sp_add_payment`, `sp_settle_invoice`,
+`sp_void_invoice`, `sp_add_return` -- **đúng** những thủ tục mà tab 1 đi qua.
+
+**Chín bảng danh mục** (`Shop`, `Counter`, `Cashier`, `Customer`, `Product`,
+`Price_History`, `Promotion`, `Applies_To`, `Account`) vẫn
+`INSERT ... VALUES` trực tiếp: không có thủ tục nào ghi chúng, nên không có
+hợp đồng nào để đi qua. Đó cũng là phần người học **đọc**.
+
+Hệ quả: `02_seed.sql` phải nạp **sau** `04_routines.sql`. Hai đường nạp của dự
+án (`db-setup.*` và `sql-create-db.* + sql-seed-data.*`) đều theo thứ tự
+**01 → 04 → 02**.
+
+### 8.2. Bốn con số không ai được gõ tay
+
+| Cột | Chủ của nó |
+|---|---|
+| `Invoice.Status` | `sp_settle_invoice` (→ `PAID`) / `sp_void_invoice` (→ `VOIDED`) |
+| `Invoice_Line.Unit_Price` | `fn_get_product_price(barcode, ngày bán)` |
+| `Invoice_Line.Discount` | `fn_line_discount(barcode, ngày bán, SL, đơn giá)` |
+| `Return.Return_ID` | `fn_next_return_id`, do `sp_add_return` gọi |
+
+Trạng thái là một **kết luận**, không phải dữ liệu vào. Seed không có một câu
+`UPDATE Invoice SET Status` nào.
+
+### 8.3. Mọi mốc ngày là `CURDATE() - n`, có đúng một ngoại lệ
+
+Ngoại lệ là **ngày đổi giá** `@new_day`, và nó bị kẹp theo năm dương lịch:
+`GREATEST(CURDATE() - 45, <1 tháng 1 năm nay>)`. Lý do: `sp_report_price_rise`
+lọc `YEAR(Valid_From_Date) = YEAR(CURDATE())`, nên mốc nằm ngoài năm nay là
+báo cáo câu 3 rỗng. Phép kẹp đó **không thể làm sai một dòng hàng nào**, vì
+đơn giá được *tra* tại ngày bán thay vì giả định sản phẩm nào mang giá nào.
+Có comment tại chỗ -- **đừng "dọn dẹp" nó**.
+
+Dữ liệu là **xác định**: không `RAND()`, kể cả `RAND(hằng số)`. Mọi lựa chọn
+"ngẫu nhiên" là một biểu thức `MOD` trên chỉ số vòng lặp, nên cùng một ngày
+chạy cho cùng một bộ dữ liệu **từng đồng** (`CHECKSUM TABLE` khớp).
+
+### 8.4. Mỗi bất biến có một dòng trong `05_invariants.sql`
+
+```powershell
+.\scripts\ps1\check-seed.ps1           # macOS/Linux: ./scripts/bash/check-seed.sh
+```
+
+14 quy tắc, mỗi quy tắc trả về **số dòng vi phạm**, tất cả phải bằng `0`; exit
+code khác 0 là có vi phạm. Không có bất biến nào chỉ tồn tại trong một câu
+văn. Chạy được **bất cứ lúc nào**, kể cả sau khi người dùng đã bấm chuột làm
+bẩn database -- đó là điểm khác quan trọng nhất so với "kiểm lúc nạp seed".
+
+Khối nào thêm một quy tắc nghiệp vụ thì **thêm một dòng vào đó**, đúng như
+khối 5 thêm phép kiểm vào `ContractCheck`.
+
+Hai phép kiểm **không** nằm được ở đó, vì chúng so SQL với Java nên chỉ chạy
+được ở chỗ gọi được cả hai -- chúng ở trong `ContractCheck`, nhóm *Seed*:
+kịch bản **#76** (`fn_active_promo_pct` trả đúng cái `sp_get_active_promo`
+trả) và **#77** (`fn_line_discount` khớp `NewInvoicePanel.lineDiscount` từng
+đồng). Hai kịch bản đó là **cái chốt** cho việc chấp nhận `fn_active_promo_pct`
+như một bản chép thứ hai: `fn_line_discount` được dùng bởi *cả* seed *và* quy
+tắc R2, nên nếu hàm sai thì R2 vẫn trả `0` -- hai bên sai khớp nhau. **Đừng
+sửa một bên.**

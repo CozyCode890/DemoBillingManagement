@@ -97,7 +97,9 @@ public class Ui {
      * Dùng cho {@code Quantity} / {@code Return_Quantity} -- {@code DECIMAL(10,3)}.
      *
      * <p>Làm tròn về số nguyên là nói sai về dữ liệu đang nằm trong database:
-     * {@code INV-0002} dòng 1 bán 1,5 KG thịt ba chỉ.
+     * hàng bán theo {@code KG} / {@code LITER} có số lượng thập phân thật, và
+     * từ khối 6 thì chúng rải khắp 91 ngày dữ liệu chứ không còn là một hoá
+     * đơn duy nhất (plan/15 mục 4.5).
      */
     public static String qty(Object v) {
         if (v == null)            return "0";

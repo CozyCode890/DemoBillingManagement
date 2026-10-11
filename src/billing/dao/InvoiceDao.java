@@ -274,9 +274,21 @@ public class InvoiceDao {
     //  PHẦN 2 -- ĐỌC DỮ LIỆU QUA CÁC STORED PROCEDURE
     // =================================================================
 
-    /** Danh sách hóa đơn gần đây kèm tổng tiền: sp_get_recent_invoices() */
-    public QueryResult recentInvoices() {
-        return QueryResult.call("{call sp_get_recent_invoices()}");
+    /**
+     * Danh sách hóa đơn gần đây kèm tổng tiền: {@code sp_get_recent_invoices(p_days)}.
+     *
+     * <p>Tham số {@code days} thêm ở khối 6 và đó là một <b>đổi hợp đồng</b>
+     * (docs/05 Quy tắc 2): {@code days > 0} là lọc theo khoảng ngày,
+     * {@code 0} là <b>tất cả</b> hóa đơn -- đúng hành vi trước khối 6.
+     *
+     * <p>Lý do: với seed 91 ngày thì bảng này có ~550 dòng, và tab 3 không có
+     * ô lọc nào (chỉ có {@code RowSorter} -- sắp xếp, không lọc). Lọc bằng
+     * khoảng ngày thay vì {@code LIMIT n} để mọi hóa đơn <b>vẫn đến được</b>
+     * khi người dùng chọn <i>Tất cả</i>: {@code INV-0001} và
+     * {@code INV-OLD-*} là dữ liệu mà tài liệu trỏ vào (plan/15 mục 5.2).
+     */
+    public QueryResult recentInvoices(int days) {
+        return QueryResult.call("{call sp_get_recent_invoices(?)}", days);
     }
 
     /** Các dòng của một hóa đơn: sp_get_invoice_lines(p_invoice_id) */

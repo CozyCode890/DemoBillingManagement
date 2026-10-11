@@ -199,11 +199,12 @@ DemoBillingManagement/
 │   │   ├── setup.ps1, mysql-start.ps1, mysql-stop.ps1
 │   │   ├── run.ps1, billing-stop.ps1, db-setup.ps1
 │   │   ├── check-contracts.ps1  <- kiểm 4 hợp đồng số/tiền bằng code
+│   │   ├── check-seed.ps1       <- kiểm 14 bất biến của dữ liệu bằng SQL
 │   │   └── sql-*.ps1, build-setup.ps1, build-launcher.ps1
 │   └── bash/               <- Script Bash cho macOS (Homebrew) & Linux
 │       ├── setup.sh, mysql-start.sh, mysql-stop.sh
 │       ├── run.sh, billing-stop.sh, db-setup.sh
-│       ├── check-contracts.sh
+│       ├── check-contracts.sh, check-seed.sh
 │       └── sql-*.sh, build-setup.sh, build-launcher.sh
 │
 ├── tools/launcher/         <- Mã nguồn của hai launcher (chỉ người bảo trì cần)
@@ -216,10 +217,11 @@ DemoBillingManagement/
 │   └── ContractCheck.java  <- đọc/hiện số, giảm giá, tiền mặt, mã QR
 │
 ├── sql/
-│   ├── 01_schema.sql       <- 15 bảng, có comment từng bảng
-│   ├── 02_seed.sql         <- dữ liệu mẫu (ngày tháng tự tính theo hôm nay)
+│   ├── 01_schema.sql       <- 16 bảng, có comment từng bảng
+│   ├── 02_seed.sql         <- dữ liệu mẫu 90 ngày, sinh bằng vòng lặp SQL
 │   ├── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
-│   └── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
+│   ├── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
+│   └── 05_invariants.sql   <- 14 bất biến của dữ liệu (sp_check_seed)
 │
 ├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
 │
@@ -237,13 +239,29 @@ Kiến trúc ba tầng: **ui → dao → db → MySQL**. Tầng giao diện khô
 
 ## Dữ liệu mẫu có sẵn
 
-- 3 cửa hàng, 4 quầy, 5 thu ngân, 4 khách hàng
-- 10 sản phẩm, trong đó **5 sản phẩm tăng giá hơn 10%** trong năm nay
-- 17 hóa đơn: 14 hóa đơn trong 7 ngày gần nhất, 1 hóa đơn bị hủy, **2 hóa đơn từ năm ngoái dùng giá cũ**
-- 1 hóa đơn thanh toán **tách làm hai phương thức** (tiền mặt + thẻ)
-- 3 lần trả hàng, trong đó **2 hóa đơn bị trả quá nửa giá trị**
+- 3 cửa hàng, 6 quầy (**2 quầy mỗi shop**), 5 thu ngân, 30 khách hàng
+- 20 sản phẩm, trong đó **5 sản phẩm tăng giá hơn 10%** trong năm nay
+- **91 ngày liên tục đều có hóa đơn** — khoảng 550 hóa đơn, mỗi shop 2 hóa đơn mỗi ngày
+- Cả **ba trạng thái** đều có hàng chục hóa đơn: đã thanh toán, đang lập (trả thiếu), đã hủy
+- Hàng trăm hóa đơn tiền mặt có **tiền thối** thật, và hàng chục hóa đơn thanh toán **tách làm hai phương thức**
+- Khoảng 50 lượt trả hàng, có cả **hai lượt trả trên cùng một dòng**, và vài hóa đơn bị trả quá nửa giá trị
+- 6 chương trình khuyến mãi phủ kín 91 ngày: hai đợt **gối nhau** trên cùng một sản phẩm (phải chọn mức cao hơn), một chương trình **tạm dừng** (có dòng trong bảng mà vẫn không được áp dụng), **2 hóa đơn từ năm ngoái dùng giá cũ**
 
-Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`, nên bạn chạy lúc nào thì báo cáo "7 ngày gần nhất" cũng có dữ liệu.
+Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`, nên bạn chạy lúc nào thì cả năm báo cáo cũng có dữ liệu đáng xem.
+
+Điểm đáng xem nhất: **ngày đổi giá nằm giữa cửa sổ 90 ngày**, nên cùng một sản phẩm xuất hiện ở **hai đơn giá khác nhau** trên hai hóa đơn mà bạn thấy cạnh nhau trong tab *Xem hóa đơn* — "hóa đơn cũ giữ giá cũ" không còn phải lùi 400 ngày mới thấy.
+
+Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những thủ tục mà tab *Lập hóa đơn* đi qua**, nên mọi con số trong database là con số mà app *có thể* đã tự tạo ra. Không `Status`, `Unit_Price`, `Discount` hay `Return_ID` nào được gõ tay. Kiểm bằng:
+
+```powershell
+.\scripts\ps1\check-seed.ps1
+```
+
+```bash
+./scripts/bash/check-seed.sh
+```
+
+Chi tiết quy ước: [docs/05-SQL-JAVA-CONVENTION.md](docs/05-SQL-JAVA-CONVENTION.md) mục 8.
 
 ---
 
@@ -259,6 +277,9 @@ Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`,
 | `Access denied for user 'root'@'localhost'` | Sai mật khẩu trong `config.properties` (mặc định là `root`) |
 | `Unknown database 'retail_billing'` | Chưa chạy script `sql-create-db` / `db-setup` |
 | App mở ra nhưng bảng trống | Chưa nạp `02_seed.sql` (bấm "Tạo dữ liệu mẫu" trong GUI) |
+| Nạp `02_seed.sql` báo `FUNCTION ... does not exist` | Nạp seed **trước** `04_routines.sql`. Từ khối 6 seed gọi các hàm/thủ tục trong đó, nên thứ tự bắt buộc là **01 → 04 → 02** (script `db-setup` đã đúng thứ tự này) |
+| `check-seed` báo `PROCEDURE sp_check_seed does not exist` | Chưa nạp `sql/05_invariants.sql` — nạp một lần là đủ, nó chỉ tạo một thủ tục |
+| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `plan/15` đang bị vi phạm. Nạp lại `02_seed.sql` là về 0 |
 
 Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
 
