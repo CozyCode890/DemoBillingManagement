@@ -22,24 +22,35 @@ cd "$(dirname "$0")" || exit 1
 APP="$PWD/Setup.app"
 LAUNCHER="$APP/Contents/MacOS/Setup"
 
-if [ ! -d "$APP" ]; then
-    echo "[LỖI] Không thấy Setup.app cạnh Setup.command."
-    echo "      Tải lại dự án hoặc chạy: java -jar SetupApp.jar"
-    read -r -p "Nhấn Enter để đóng..." _
-    exit 1
+# Gỡ cờ cách ly nếu có (trên toàn bộ thư mục dự án và Setup.app).
+if /usr/bin/xattr -p com.apple.quarantine "$PWD" >/dev/null 2>&1 || ([ -d "$APP" ] && /usr/bin/xattr -p com.apple.quarantine "$APP" >/dev/null 2>&1); then
+    echo "Đang gỡ cờ cách ly của macOS khỏi dự án..."
+    /usr/bin/xattr -dr com.apple.quarantine "$PWD" 2>/dev/null || true
 fi
 
-# Gỡ cờ cách ly nếu có (im lặng khi không có gì để gỡ).
-if /usr/bin/xattr -p com.apple.quarantine "$APP" >/dev/null 2>&1; then
-    echo "Đang gỡ cờ cách ly của macOS khỏi Setup.app..."
-    /usr/bin/xattr -dr com.apple.quarantine "$APP"
+# Đảm bảo quyền đọc cho SetupApp.jar nếu có
+if [ -f "$PWD/SetupApp.jar" ] && [ ! -r "$PWD/SetupApp.jar" ]; then
+    chmod +r "$PWD/SetupApp.jar" 2>/dev/null || true
 fi
 
-# Git và ZIP đôi khi làm mất quyền thực thi của file launcher bên trong.
-if [ ! -x "$LAUNCHER" ]; then
-    echo "Đang cấp lại quyền thực thi cho $LAUNCHER..."
-    chmod +x "$LAUNCHER"
+if [ -f "$LAUNCHER" ]; then
+    # Git và ZIP đôi khi làm mất quyền thực thi của file launcher bên trong.
+    if [ ! -x "$LAUNCHER" ]; then
+        echo "Đang cấp lại quyền thực thi cho $LAUNCHER..."
+        chmod +x "$LAUNCHER"
+    fi
+
+    echo "Đang khởi chạy Setup App qua Terminal..."
+    exec "$LAUNCHER" "$@"
 fi
 
-echo "Đang mở Setup.app..."
-/usr/bin/open "$APP"
+# Dự phòng khi thiếu Setup.app: chạy thẳng bằng lệnh java của hệ thống
+if [ -f "$PWD/SetupApp.jar" ]; then
+    echo "Không tìm thấy $LAUNCHER, chuyển sang chạy trực tiếp SetupApp.jar..."
+    exec java -Dfile.encoding=UTF-8 -jar "$PWD/SetupApp.jar" "$@"
+fi
+
+echo "[LỖI] Không thấy Setup.app hoặc SetupApp.jar cạnh Setup.command."
+echo "      Tải lại dự án hoặc chạy: bash scripts/bash/build-setup.sh"
+read -r -p "Nhấn Enter để đóng..." _
+exit 1

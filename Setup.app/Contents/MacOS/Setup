@@ -95,6 +95,14 @@ $ROOT
     exit 1
 fi
 
+# Gỡ cờ cách ly trên file JAR nếu có (tránh Gatekeeper chặn đọc file)
+/usr/bin/xattr -d com.apple.quarantine "$JAR" >/dev/null 2>&1 || true
+
+# Đảm bảo quyền đọc cho file JAR
+if [ ! -r "$JAR" ]; then
+    chmod +r "$JAR" 2>/dev/null || true
+fi
+
 # ---------------------------------------------------------------------
 #  Tìm Java
 # ---------------------------------------------------------------------
@@ -264,6 +272,40 @@ cd "$ROOT" || exit 1
 STATUS=$?
 
 if [ $STATUS -ne 0 ]; then
+    if /usr/bin/grep -q "Unable to access jarfile" "$LOG" 2>/dev/null; then
+        TCC_MSG="Setup App không thể đọc file SetupApp.jar.
+
+Nguyên nhân: Thư mục dự án đang nằm trong vùng bảo vệ quyền riêng tư của macOS (Desktop / Documents / Downloads).
+
+Bạn có thể:
+1. Bấm 'Mở bằng Terminal' để chạy app ngay lập tức (được cấp quyền tự động).
+2. Hoặc dời thư mục DemoBillingManagement vào thư mục cá nhân ($HOME) rồi bấm đúp lại Setup.app."
+
+        ACTION="$(ask_three_way "$TCC_MSG" "Thoát" "Xem nhật ký" "Mở bằng Terminal")"
+        case "$ACTION" in
+            "Mở bằng Terminal")
+                CMD="$ROOT/Setup.command"
+                if [ -f "$CMD" ]; then
+                    chmod +x "$CMD"
+                    /usr/bin/open "$CMD"
+                else
+                    /usr/bin/osascript \
+                        -e 'tell application "Terminal"' \
+                        -e 'activate' \
+                        -e "do script \"cd '$ROOT' && '$BEST_HOME/bin/java' -jar '$JAR'\"" \
+                        -e 'end tell' >/dev/null 2>&1
+                fi
+                exit 0
+                ;;
+            "Xem nhật ký")
+                show_error "Nhật ký đầy đủ ($LOG):
+
+$(tail -n 12 "$LOG")"
+                ;;
+        esac
+        exit $STATUS
+    fi
+
     show_error "Setup App đóng bất thường (mã lỗi $STATUS).
 
 $(tail -n 12 "$LOG")

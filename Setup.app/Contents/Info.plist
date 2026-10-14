@@ -51,5 +51,15 @@
     <!-- Thiếu khoá này thì cửa sổ Swing bị phóng to mờ trên màn Retina -->
     <key>NSHighResolutionCapable</key>
     <true/>
+
+    <!-- Quyền truy cập các thư mục được bảo vệ bởi macOS TCC -->
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Setup App cần quyền đọc thư mục Desktop để nạp cấu hình và khởi chạy bộ cài đặt Retail Billing.</string>
+
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Setup App cần quyền đọc thư mục Documents để nạp cấu hình và khởi chạy bộ cài đặt Retail Billing.</string>
+
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Setup App cần quyền đọc thư mục Downloads để nạp cấu hình và khởi chạy bộ cài đặt Retail Billing.</string>
 </dict>
 </plist>
