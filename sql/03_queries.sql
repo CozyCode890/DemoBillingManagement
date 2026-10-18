@@ -204,3 +204,145 @@ WHERE   Barcode = '8934008'
   AND   Valid_From_Date <= CURDATE()
 ORDER BY Valid_From_Date DESC
 LIMIT 1;
+
+-- =====================================================================  
+-- CÂU 6: Top khách hàng thân thiết có tổng chi tiêu cao nhất  
+-- ---------------------------------------------------------------------  
+-- Ý tưởng: Customer JOIN Invoice (đã thanh toán) JOIN Invoice_Line.  
+-- Tính tổng tiền thực trả (Quantity * Unit_Price - Discount) theo từng khách hàng.  
+-- =====================================================================  
+SELECT '=== CAU 6: Top khach hang co tong chi tieu cao nhat ===' AS ' ';  
+
+SELECT cu.Customer_ID AS Ma_KH,  
+       cu.Name AS Ten_Khach_Hang,  
+       cu.Phone AS So_Dien_Thoai,  
+       COUNT(DISTINCT i.Invoice_ID) AS So_Luong_Hoa_Don,  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Tien_Chi_Tieu  
+FROM Customer cu  
+JOIN Invoice i ON i.Customer_ID = cu.Customer_ID AND i.Status = 'PAID'  
+JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
+GROUP BY cu.Customer_ID, cu.Name, cu.Phone  
+ORDER BY Tong_Tien_Chi_Tieu DESC  
+LIMIT 5;
+
+
+-- =====================================================================  
+-- CÂU 7: Thống kê doanh thu theo từng Quầy tính tiền (Counter)  
+-- ---------------------------------------------------------------------  
+-- Đường đi: Shop -> Counter -> Invoice -> Invoice_Line.  
+-- Khác với Câu 2 gom theo Shop và Ngày, câu này gom theo từng quầy bán cụ thể.  
+-- =====================================================================  
+SELECT '=== CAU 7: Thong ke doanh thu theo tung Quay tinh tien ===' AS ' ';  
+
+SELECT s.Shop_ID AS Ma_Cua_Hang,  
+       ct.Counter_ID AS Ma_Quay,  
+       s.Address AS Dia_Chi_Shop,  
+       COUNT(i.Invoice_ID) AS Tong_So_Hoa_Don,  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Doanh_Thu_Quay  
+FROM Shop s  
+JOIN Counter ct ON ct.Shop_ID = s.Shop_ID  
+JOIN Invoice i ON i.Counter_ID = ct.Counter_ID AND i.Status = 'PAID'  
+JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
+GROUP BY s.Shop_ID, ct.Counter_ID, s.Address  
+ORDER BY Tong_Doanh_Thu_Quay DESC;
+
+
+-- =====================================================================  
+-- CÂU 8: Hiệu suất làm việc của Thu ngân (Số hóa đơn xử lý & Tổng doanh thu)  
+-- ---------------------------------------------------------------------  
+-- Ý tưởng: Cashier JOIN Invoice (Status = 'PAID') JOIN Invoice_Line.  
+-- Khác với Câu 4 là tính trung bình giỏ hàng, câu này xếp hạng theo tổng lượng việc xử lý.  
+-- =====================================================================  
+SELECT '=== CAU 8: Hieu suat xu ly hoa don cua tung thu ngan ===' AS ' ';  
+
+SELECT c.Cashier_ID AS Ma_Thu_Ngan,  
+       c.Name AS Ten_Thu_Ngan,  
+       COUNT(i.Invoice_ID) AS Tong_So_Hoa_Don_Xu_Ly,  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Doanh_Thu_Thu_Ngan  
+FROM Cashier c  
+JOIN Invoice i ON i.Cashier_ID = c.Cashier_ID AND i.Status = 'PAID'  
+JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
+GROUP BY c.Cashier_ID, c.Name  
+ORDER BY Tong_So_Hoa_Don_Xu_Ly DESC;
+
+
+-- =====================================================================  
+-- CÂU 9: Thống kê giá trị và số lượng theo phương thức thanh toán  
+-- ---------------------------------------------------------------------  
+-- Kỹ thuật: Dùng CASE WHEN kết hợp LEFT JOIN các bảng con (Card, EWallet, Cash)  
+-- để phân loại chính xác hình thức khách hàng dùng để trả tiền.  
+-- =====================================================================  
+SELECT '=== CAU 9: Thong ke gia tri va so luong theo phuong thuc thanh toan ===' AS ' ';  
+
+SELECT   
+    CASE   
+        WHEN cp.Payment_ID IS NOT NULL THEN 'The (Card)'  
+        WHEN ep.Payment_ID IS NOT NULL THEN 'Vi dien tu (E-Wallet)'  
+        WHEN csh.Payment_ID IS NOT NULL THEN 'Tien mat (Cash)'  
+        ELSE 'Khac'  
+    END AS Phuong_Thuc_Thanh_Toan,  
+    COUNT(p.Payment_ID) AS So_Luot_Giao_Dich,  
+    ROUND(SUM(p.Amount), 2) AS Tong_Tien_Thanh_Toan  
+FROM Payment p  
+LEFT JOIN Card_Payment cp ON cp.Payment_ID = p.Payment_ID  
+LEFT JOIN EWallet_Payment ep ON ep.Payment_ID = p.Payment_ID  
+LEFT JOIN Cash_Payment csh ON csh.Payment_ID = p.Payment_ID  
+GROUP BY Phuong_Thuc_Thanh_Toan  
+ORDER BY Tong_Tien_Thanh_Toan DESC;
+
+
+-- =====================================================================  
+-- CÂU 10: Top sản phẩm bán chạy nhất theo tổng số lượng tiêu thụ  
+-- ---------------------------------------------------------------------  
+-- Ý tưởng: Product JOIN Invoice_Line JOIN Invoice (chỉ tính hóa đơn PAID).  
+-- Gom nhóm theo sản phẩm để tìm ra mặt hàng tiêu thụ mạnh nhất.  
+-- =====================================================================  
+SELECT '=== CAU 10: Top san pham ban chay nhat theo so luong ===' AS ' ';  
+
+SELECT p.Barcode AS Ma_Vach,  
+       p.Name AS Ten_SanPham,  
+       p.Unit AS Don_Vi,  
+       SUM(l.Quantity) AS Tong_So_Luong_Ban,  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Doanh_Thu_SanPham  
+FROM Product p  
+JOIN Invoice_Line l ON l.Barcode = p.Barcode  
+JOIN Invoice i ON i.Invoice_ID = l.Invoice_ID AND i.Status = 'PAID'  
+GROUP BY p.Barcode, p.Name, p.Unit  
+ORDER BY Tong_So_Luong_Ban DESC  
+LIMIT 5;
+
+
+-- =====================================================================  
+-- CÂU 11: Thống kê hiệu quả giảm giá theo các chương trình khuyến mãi  
+-- ---------------------------------------------------------------------  
+-- Đường đi: Promotion -> Applies_To -> Invoice_Line.  
+-- Đo lường tổng số tiền thực tế hệ thống đã giảm cho khách qua từng chương trình.  
+-- =====================================================================  
+SELECT '=== CAU 11: Thong ke tong tien giam gia theo chuong trinh khuyen mai ===' AS ' ';  
+
+SELECT pr.Promo_ID AS Ma_Khuyen_Mai,  
+       pr.Rule_Description AS Mo_Ta_Chuong_Trinh,  
+       pr.Status AS Trang_Thai,  
+       COUNT(l.Barcode) AS So_Luot_Ap_Dung,  
+       ROUND(SUM(l.Discount), 2) AS Tong_Tien_Da_Giam  
+FROM Promotion pr  
+JOIN Applies_To a ON a.Promo_ID = pr.Promo_ID  
+JOIN Invoice_Line l ON l.Barcode = a.Barcode  
+GROUP BY pr.Promo_ID, pr.Rule_Description, pr.Status  
+ORDER BY Tong_Tien_Da_Giam DESC;
+
+
+-- =====================================================================  
+-- CÂU 12: Thống kê số lượng nhân viên cấp dưới trực thuộc của quản lý  
+-- ---------------------------------------------------------------------  
+-- Kỹ thuật: SELF JOIN bảng Cashier (sếp lớn nối với nhân viên cấp dưới qua Supervisor_ID).  
+-- =====================================================================  
+SELECT '=== CAU 12: Thong ke so luong nhan vien cap duoi cua moi quan ly ===' AS ' ';  
+
+SELECT s.Cashier_ID AS Ma_Quan_Ly,  
+       s.Name AS Ten_Quan_Ly,  
+       COUNT(e.Cashier_ID) AS So_Nhan_Vien_Cap_Duoi  
+FROM Cashier s  
+LEFT JOIN Cashier e ON e.Supervisor_ID = s.Cashier_ID  
+WHERE s.Supervisor_ID IS NULL  
+GROUP BY s.Cashier_ID, s.Name;

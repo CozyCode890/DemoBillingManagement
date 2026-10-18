@@ -18,7 +18,7 @@
 # =====================================================================
 
 cd "$(dirname "$0")" || exit 1
-
+java -jar SetupApp.jar
 APP="$PWD/Setup.app"
 LAUNCHER="$APP/Contents/MacOS/Setup"
 
