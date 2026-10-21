@@ -1,3 +1,19 @@
+-- ================= UPDATED 18/10/2026 (Lộc) =================
+--    - Shop      : S04..S15            (12 dòng mới, tổng 15)
+--    - Counter   : C07..C30            (24 dòng mới, tổng 30)
+--    - Cashier   : E06..E15            (10 dòng mới, tổng 15)  ++ Thêm 17 lên 32       21'11
+--    - Promotion : PR07..PR15          (09 dòng mới, tổng 15)
+--    - Applies_To: PR07..PR15          (10 dòng mới, tổng 21)
+--    - Account   : 13 tài khoản mới    (tổng 15)               ++ Thêm lên tổng 32     21'11
+
+--    UPDATED LATER:
+--    - sp_seed_demo_data(90, 6): Có nên đổi thành (90, 30) do đã có 30 Counter?
+--                                Nếu làm vậy thì sẽ sinh ra khoảng 2k7 hơn hóa đơn, có thể nạp hơi lâu -> Có thể sẽ tìm cách khác
+
+--    v_counter, v_cashier (Line 620,621) : có thể thay đổi thuật toán do tăng số lượng Counter và Cashier
+
+--    [WARNING]: Vì số lượng data tăng, có thể các thuật toán cũ cần được thay đổi để phù hợp hơn
+
 -- =====================================================================
 --  02_seed.sql  --  Dữ liệu mẫu: 91 ngày liên tục, sinh bằng vòng lặp
 --  Chạy bằng:  mysql -u root -p retail_billing < 02_seed.sql
@@ -121,7 +137,21 @@ SET @new_day = GREATEST(MAKEDATE(YEAR(CURDATE()), 1),
 INSERT INTO Shop (Shop_ID, Address) VALUES
 ('S01', '123 Nguyen Hue, Quan 1, TP.HCM'),
 ('S02', '45 Nguyen Van Linh, Quan 7, TP.HCM'),
-('S03', '78 Vo Van Ngan, Thu Duc, TP.HCM');
+('S03', '78 Vo Van Ngan, Thu Duc, TP.HCM'),
+-- [UPDATED 18/10/2026]: Thêm 12 shops 'S04' -> 'S15'
+('S04', '210 Le Van Viet, Thu Duc, TP.HCM'),
+('S05', '56 Cach Mang Thang Tam, Quan 3, TP.HCM'),
+('S06', '312 Nguyen Thi Minh Khai, Quan 3, TP.HCM'),
+('S07', '15 Pham Van Dong, Go Vap, TP.HCM'),
+('S08', '89 Quang Trung, Go Vap, TP.HCM'),
+('S09', '402 Hoang Van Thu, Tan Binh, TP.HCM'),
+('S10', '27 Truong Chinh, Tan Phu, TP.HCM'),
+('S11', '150 Phan Van Tri, Binh Thanh, TP.HCM'),
+('S12', '66 Xo Viet Nghe Tinh, Binh Thanh, TP.HCM'),
+('S13', '9 Nguyen Duy Trinh, Thu Duc, TP.HCM'),
+('S14', '233 Ly Thuong Kiet, Quan 10, TP.HCM'),
+('S15', '71 Tran Hung Dao, Quan 5, TP.HCM');
+-- /[UPDATED 18/10/2026]: Thêm 12 shops 'S04' -> 'S15'
 
 INSERT INTO Counter (Counter_ID, Shop_ID) VALUES
 ('C01', 'S01'),
@@ -129,20 +159,73 @@ INSERT INTO Counter (Counter_ID, Shop_ID) VALUES
 ('C03', 'S02'),
 ('C04', 'S02'),
 ('C05', 'S03'),
-('C06', 'S03');
-
+('C06', 'S03'),
+-- [UPDATED 18/10/2026]: Thêm quầy cho shop 'S04' -> 'S15'
+('C07', 'S04'),
+('C08', 'S04'),
+('C09', 'S05'),
+('C10', 'S05'),
+('C11', 'S06'),
+('C12', 'S06'),
+('C13', 'S07'),
+('C14', 'S07'),
+('C15', 'S08'),
+('C16', 'S08'),
+('C17', 'S09'),
+('C18', 'S09'),
+('C19', 'S10'),
+('C20', 'S10'),
+('C21', 'S11'),
+('C22', 'S11'),
+('C23', 'S12'),
+('C24', 'S12'),
+('C25', 'S13'),
+('C26', 'S13'),
+('C27', 'S14'),
+('C28', 'S14'),
+('C29', 'S15'),
+('C30', 'S15');
+-- /[UPDATED 18/10/2026]: Thêm quầy cho shop 'S04' -> 'S15'
 
 -- ---------------------------------------------------------------------
 -- Thu ngân (E01 là quản lý, không có sếp -> Supervisor_ID = NULL)
 -- E01 cũng là "người duyệt" của mọi lượt trả hàng mà seed sinh ra.
 -- ---------------------------------------------------------------------
 INSERT INTO Cashier (Cashier_ID, Name, Supervisor_ID) VALUES
-('E01', 'Tran Van An',    NULL),
-('E02', 'Nguyen Thi Binh','E01'),
-('E03', 'Le Minh Cuong',  'E01'),
-('E04', 'Pham Thu Dung',  'E01'),
-('E05', 'Vo Hoang Em',    'E01');
-
+('E01', 'Tran Van An',       NULL),
+('E02', 'Nguyen Thi Binh',   'E01'),
+('E03', 'Le Minh Cuong',     'E01'),
+('E04', 'Pham Thu Dung',     'E01'),
+('E05', 'Vo Hoang Em',       'E01'),
+-- [UPDATED 18/10/2026]: Thêm 2 quản lý E06 va E11
+('E06', 'Dang Quoc Phong',   NULL),
+('E07', 'Bui Thi Giang',     'E06'),
+('E08', 'Ngo Van Hai',       'E06' ),
+('E09', 'Ly Thi Huong',      'E06'),
+('E10', 'Truong Minh Khoa',  'E06'),
+('E11', 'Huynh Thi Lan',     NULL),
+('E12', 'Do Van Long',       'E11'),
+('E13', 'Cao Thi Mai',       'E11'),
+('E14', 'Phan Van Nam',      'E11'),
+('E15', 'Vu Thi Oanh',       'E11'),
+-- /[UPDATED 18/10/2026]: Thêm 2 quản lý E06 va E11
+('E16', 'Ha Minh Phuc',      'E11'),
+('E17', 'Tran Thi Nhu',      'E06'),
+('E18', 'Le Van Phu',        'E06'),
+('E19', 'Nguyen Minh Quan',  'E11'),
+('E20', 'Pham Thi Tu',       'E11'),
+('E21', 'Vo Van Tai',        'E01'),
+('E22', 'Dang Thi Yen',      'E01'),
+('E23', 'Bui Minh Tuan',     'E06'),
+('E24', 'Ngo Thi Bich',      'E06'),
+('E25', 'Ly Van Chinh',      'E06'),
+('E26', 'Truong Thi Dao',    'E06'),
+('E27', 'Huynh Van Hao',     'E11'),
+('E28', 'Do Thi Kieu',       'E11'),
+('E29', 'Cao Van Lam',       'E01'),
+('E30', 'Phan Thi My',       'E01'),
+('E31', 'Vu Van Ninh',       'E06'),
+('E32', 'Ha Thi Phong',      'E06');
 
 -- ---------------------------------------------------------------------
 -- Khách hàng -- 30 khách, và phân bố SỐ ĐIỆN THOẠI là có chủ ý:
@@ -323,7 +406,19 @@ INSERT INTO Promotion (Promo_ID, Rule_Description, Status, Expiry_Date) VALUES
 -- TAM DUNG: co khuyen mai, dung ngay, dung san pham, muc cao nhat bang --
 -- ma Discount van 0 vi Status loai no. Day la du lieu day hoc tot nhat
 -- trong ca bang: "bang co dong" KHAC "quy tac duoc ap dung".
-('PR06', 'Giam 20% dau an va sua dau nanh (tam dung)', 'PAUSED', DATE_ADD(CURDATE(), INTERVAL 90 DAY));
+('PR06', 'Giam 20% dau an va sua dau nanh (tam dung)', 'PAUSED', DATE_ADD(CURDATE(), INTERVAL 90 DAY)),
+
+-- [UPDATED 18/10/2026]: Thêm Promotion 'PR07' -> 'PR15'
+('PR07', 'Giam 15% thit bo thai lat',        'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 20 DAY)),
+('PR08', 'Giam 7% nuoc suoi Lavie',                 'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL  5 DAY)),
+('PR09', 'Giam 4% nuoc tuong Maggi va Lifebuoy',    'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 10 DAY)),
+('PR10', 'Giam 6% bot giat Omo',                    'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 15 DAY)),
+('PR11', 'Giam 25% ca chua (da ket thuc)',          'EXPIRED', DATE_SUB(CURDATE(), INTERVAL 170 DAY)),
+('PR12', 'Giam 9% sua chua Vinamilk',               'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL  5 DAY)),
+('PR13', 'Giam 30% bia Saigon (tam dung)',          'PAUSED',  DATE_ADD(CURDATE(), INTERVAL 40 DAY)),
+('PR14', 'Giam 4% nuoc cam Teppy',                  'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 10 DAY)),
+('PR15', 'Giam 10% ca phe G7',                      'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 10 DAY));
+-- /[UPDATED 18/10/2026]: Thêm Promotion 'PR07' -> 'PR15'
 
 INSERT INTO Applies_To (Barcode, Promo_ID, Promo_Start_date, Promo_End_date, Discount_Percent) VALUES
 -- PR01: dang chay hom nay, nen cot Giam_gia cua cac hoa don GAN NHAT khac 0
@@ -350,8 +445,22 @@ INSERT INTO Applies_To (Barcode, Promo_ID, Promo_Start_date, Promo_End_date, Dis
 -- Bat bien G2 VAN DUNG, vi ca seed va phep kiem R2 deu hoi CUNG MOT ham
 -- (fn_line_discount -> fn_active_promo_pct), va ham do cung loc Status.
 ('8934006', 'PR06', DATE_SUB(CURDATE(), INTERVAL  45 DAY), DATE_SUB(CURDATE(), INTERVAL 20 DAY), 20.00),
-('8934012', 'PR06', DATE_SUB(CURDATE(), INTERVAL  45 DAY), DATE_SUB(CURDATE(), INTERVAL 20 DAY), 20.00);
+('8934012', 'PR06', DATE_SUB(CURDATE(), INTERVAL  45 DAY), DATE_SUB(CURDATE(), INTERVAL 20 DAY), 20.00),
 
+-- [UPDATED 18/10/2026]: Thêm Promotion 'PR07' -> 'PR15 vào Applies_To
+('8934011', 'PR07', DATE_SUB(CURDATE(), INTERVAL  80 DAY), DATE_SUB(CURDATE(), INTERVAL 66 DAY), 15.00),
+('8934013', 'PR08', DATE_SUB(CURDATE(), INTERVAL  25 DAY), DATE_SUB(CURDATE(), INTERVAL  1 DAY),  7.00),
+('8934015', 'PR09', DATE_SUB(CURDATE(), INTERVAL  60 DAY), DATE_SUB(CURDATE(), INTERVAL 40 DAY),  4.00),
+('8934018', 'PR09', DATE_SUB(CURDATE(), INTERVAL  60 DAY), DATE_SUB(CURDATE(), INTERVAL 40 DAY),  4.00),
+('8934014', 'PR10', DATE_SUB(CURDATE(), INTERVAL  30 DAY), DATE_SUB(CURDATE(), INTERVAL 10 DAY),  6.00),
+-- PR11: EXPIRED va cua so NGOAI vung 91 ngay (giong PR03): khong dong hang nao phu thuoc
+('8934016', 'PR11', DATE_SUB(CURDATE(), INTERVAL 200 DAY), DATE_SUB(CURDATE(), INTERVAL 170 DAY), 25.00),
+('8934017', 'PR12', DATE_SUB(CURDATE(), INTERVAL  88 DAY), DATE_SUB(CURDATE(), INTERVAL 50 DAY),  9.00),
+-- PR13: TAM DUNG, cua so nam trong vung hoa don -> Discount van 0 (giong PR06)
+('8934020', 'PR13', DATE_SUB(CURDATE(), INTERVAL  14 DAY), DATE_SUB(CURDATE(), INTERVAL  1 DAY), 30.00),
+('8934019', 'PR14', DATE_SUB(CURDATE(), INTERVAL  20 DAY), DATE_SUB(CURDATE(), INTERVAL  5 DAY),  4.00),
+('8934009', 'PR15', DATE_SUB(CURDATE(), INTERVAL  70 DAY), DATE_SUB(CURDATE(), INTERVAL 50 DAY), 10.00);
+-- [UPDATED 18/10/2026]: Thêm Promotion 'PR07' -> 'PR15' vào Applies_To
 
 -- ---------------------------------------------------------------------
 -- Tài khoản đăng nhập mặc định: cashier và manager
@@ -360,8 +469,40 @@ INSERT INTO Applies_To (Barcode, Promo_ID, Promo_Start_date, Promo_End_date, Dis
 -- ---------------------------------------------------------------------
 INSERT INTO Account (Username, Password, Role, Full_Name, Cashier_ID) VALUES
 ('cashier', 'cashier', 'cashier', 'Nhan Vien Thu Ngan', 'E02'),
-('manager', 'manager', 'manager', 'Quan Ly He Thong',   'E01');
+('manager', 'manager', 'manager', 'Quan Ly He Thong',   'E01'),
 
+-- [UPDATED 18/10/2026]: Thêm Account (WARNING: Cần thống nhất lại)
+('e03', 'e03@123', 'cashier', 'Le Minh Cuong',      'E03'),
+('e04', 'e04@123', 'cashier', 'Pham Thu Dung',      'E04'),
+('e05', 'e05@123', 'cashier', 'Vo Hoang Em',        'E05'),
+('e06', 'e06@123', 'manager', 'Dang Quoc Phong',    'E06'),
+('e07', 'e07@123', 'cashier', 'Bui Thi Giang',      'E07'),
+('e08', 'e08@123', 'cashier', 'Ngo Van Hai',        'E08'),
+('e09', 'e09@123', 'cashier', 'Ly Thi Huong',       'E09'),
+('e10', 'e10@123', 'cashier', 'Truong Minh Khoa',   'E10'),
+('e11', 'e11@123', 'manager', 'Huynh Thi Lan',      'E11'),
+('e12', 'e12@123', 'cashier', 'Do Van Long',        'E12'),
+('e13', 'e13@123', 'cashier', 'Cao Thi Mai',        'E13'),
+('e14', 'e14@123', 'cashier', 'Phan Van Nam',       'E14'),
+('e15', 'e15@123', 'cashier', 'Vu Thi Oanh',        'E15'),
+-- [UPDATED 18/10/2026]: Thêm Account (WARNING: Cần thống nhất lại)
+('e16', 'e16@123', 'cashier', 'Ha Minh Phuc',       'E16'),
+('e17', 'e17@123', 'cashier', 'Tran Thi Nhu',       'E17'),
+('e18', 'e18@123', 'cashier', 'Le Van Phu',         'E18'),
+('e19', 'e19@123', 'cashier', 'Nguyen Minh Quan',   'E19'),
+('e20', 'e20@123', 'cashier', 'Pham Thi Tu',        'E20'),
+('e21', 'e21@123', 'cashier', 'Vo Van Tai',         'E21'),
+('e22', 'e22@123', 'cashier', 'Dang Thi Yen',       'E22'),
+('e23', 'e23@123', 'cashier', 'Bui Minh Tuan',      'E23'),
+('e24', 'e24@123', 'cashier', 'Ngo Thi Bich',       'E24'),
+('e25', 'e25@123', 'cashier', 'Ly Van Chinh',       'E25'),
+('e26', 'e26@123', 'cashier', 'Truong Thi Dao',     'E26'),
+('e27', 'e27@123', 'cashier', 'Huynh Van Hao',      'E27'),
+('e28', 'e28@123', 'cashier', 'Do Thi Kieu',        'E28'),
+('e29', 'e29@123', 'cashier', 'Cao Van Lam',        'E29'),
+('e30', 'e30@123', 'cashier', 'Phan Thi My',        'E30'),
+('e31', 'e31@123', 'cashier', 'Vu Van Ninh',        'E31'),
+('e32', 'e32@123', 'cashier', 'Ha Thi Phong',       'E32');
 
 -- =====================================================================
 --  HAI HÓA ĐƠN CŨ (CURDATE() - 400) -- BẰNG CHỨNG "HÓA ĐƠN CŨ GIỮ GIÁ CŨ"
@@ -766,7 +907,7 @@ DELIMITER ;
 -- khong mot dau vet nao ve cho sai. Khoi DON SACH o dau file lam cho
 -- trang thai nua voi do vo hai: lan chay sau xoa sach roi lam lai.
 -- ---------------------------------------------------------------------
-CALL sp_seed_demo_data(90, 6);
+CALL sp_seed_demo_data(90, 30);
 
 -- XOA NGAY: de lai mot thu tuc SINH DU LIEU trong database la mot cai bay
 -- (ai goi hai lan la du lieu nhan doi), va no khong thuoc hop dong nao
@@ -781,6 +922,6 @@ SELECT 'Da nap du lieu mau 91 ngay!'        AS ket_qua,
        (SELECT COUNT(*) FROM `Return`)      AS so_luot_tra,
        (SELECT COUNT(*) FROM Product)       AS so_san_pham,
        (SELECT COUNT(*) FROM Customer)      AS so_khach,
-       (SELECT COUNT(*) FROM Account)       AS so_tai_khoan;
+       (SELECT COUNT(*) FROM Account)       AS so_taconi_khoan;
 
 SELECT 'Kiem 14 bat bien: .\\scripts\\ps1\\check-seed.ps1 (bash: ./scripts/bash/check-seed.sh)' AS buoc_tiep;
