@@ -369,8 +369,8 @@ public class InvoiceViewPanel extends JPanel {
 
             // Nói ra số dòng VÀ phạm vi: một bảng bị cắt phải nói là đang bị
             // cắt, nếu không nó đang nói sai (plan/15 mục 5.2).
-            lbInvoiceCount.setText("Dang hien " + Ui.integer(qr.rows.size()) + " hoa don ("
-                    + (days == 0 ? "tat ca" : days + " ngay gan nhat") + ")");
+            lbInvoiceCount.setText(I18n.richText("Dang hien " + Ui.integer(qr.rows.size()) + " hoa don ("
+                    + (days == 0 ? "tat ca" : days + " ngay gan nhat") + ")"));
         } catch (Exception ex) {
             lbInvoiceCount.setText(" ");
             Ui.error(this, ex);
@@ -413,7 +413,7 @@ public class InvoiceViewPanel extends JPanel {
                     sb.append(String.format("%-18s : %s%n", h.columns.get(i), formatted));
                 }
             }
-            taHeader.setText(sb.toString());
+            taHeader.setText(I18n.richText(sb.toString()));
             taHeader.setCaretPosition(0);
 
             // --- 2, 3, 4 -------------------------------------------
@@ -462,7 +462,7 @@ public class InvoiceViewPanel extends JPanel {
     private void onEditInvoice() {
         String invoiceId = getSelectedInvoiceId();
         if (invoiceId == null) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot hoa don de chinh sua!", "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
+            I18n.showMessageDialog(this, "Vui long chon mot hoa don de chinh sua!", "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -474,7 +474,7 @@ public class InvoiceViewPanel extends JPanel {
             // thứ tự cũ nên các chỉ số r[1]..r[6] bên dưới không phải sửa.
             QueryResult qr = dao.invoiceEditFields(invoiceId);
             if (qr.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Khong tim thay hoa don " + invoiceId, "Loi", JOptionPane.ERROR_MESSAGE);
+                I18n.showMessageDialog(this, "Khong tim thay hoa don " + invoiceId, "Loi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
@@ -516,12 +516,12 @@ public class InvoiceViewPanel extends JPanel {
     private void onVoidInvoice() {
         final String invoiceId = getSelectedInvoiceId();
         if (invoiceId == null) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot hoa don de huy!",
+            I18n.showMessageDialog(this, "Vui long chon mot hoa don de huy!",
                     "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        int choice = JOptionPane.showConfirmDialog(this,
+        int choice = I18n.showConfirmDialog(this,
                 "Huy hoa don " + invoiceId + "?\n\n"
               + "Huy KHAC Xoa:\n"
               + "  - Du lieu van con nguyen: dong hang, thanh toan, tra hang\n"
@@ -551,7 +551,7 @@ public class InvoiceViewPanel extends JPanel {
                     return;
                 }
 
-                JOptionPane.showMessageDialog(InvoiceViewPanel.this,
+                I18n.showMessageDialog(InvoiceViewPanel.this,
                         "Da huy hoa don " + invoiceId + ".\n"
                       + "Du lieu van con trong database, chi khong tinh vao bao cao nua.",
                         "Da huy hoa don", JOptionPane.INFORMATION_MESSAGE);
@@ -569,11 +569,11 @@ public class InvoiceViewPanel extends JPanel {
     private void onDeleteInvoice() {
         String invoiceId = getSelectedInvoiceId();
         if (invoiceId == null) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot hoa don de xoa!", "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
+            I18n.showMessageDialog(this, "Vui long chon mot hoa don de xoa!", "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        int choice = JOptionPane.showConfirmDialog(this,
+        int choice = I18n.showConfirmDialog(this,
                 "Ban co chac chan muon XOA VINH VIEN hoa don " + invoiceId + " khoi Database?\n\n"
               + "Thao tac nay se xoa sach:\n"
               + "  1. Cac luot tra hang lien quan (Return)\n"
@@ -589,7 +589,7 @@ public class InvoiceViewPanel extends JPanel {
         if (choice == JOptionPane.YES_OPTION) {
             try {
                 dao.deleteInvoice(invoiceId);
-                JOptionPane.showMessageDialog(this, "Da xoa thanh cong hoa don " + invoiceId + " khoi Database!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                I18n.showMessageDialog(this, "Da xoa thanh cong hoa don " + invoiceId + " khoi Database!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
 
                 // Xóa trắng khung chi tiết.
                 // Bản cũ chạy ba câu QueryResult.run("SELECT '' WHERE 1=0") chỉ
@@ -612,7 +612,7 @@ public class InvoiceViewPanel extends JPanel {
         String invoiceId = getSelectedInvoiceId();
         int row = tbLines.getSelectedRow();
         if (invoiceId == null || row < 0) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot dong hang trong bang 'Cac dong hang' de chinh sua!", "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
+            I18n.showMessageDialog(this, "Vui long chon mot dong hang trong bang 'Cac dong hang' de chinh sua!", "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -626,7 +626,7 @@ public class InvoiceViewPanel extends JPanel {
             // nó sai thầm lặng. Thứ tự 4 cột là hợp đồng: r[0]..r[3].
             QueryResult qr = dao.invoiceLineEditFields(invoiceId, lineNo);
             if (qr.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Khong tim thay dong hang so " + lineNo, "Loi", JOptionPane.ERROR_MESSAGE);
+                I18n.showMessageDialog(this, "Khong tim thay dong hang so " + lineNo, "Loi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
@@ -663,19 +663,19 @@ public class InvoiceViewPanel extends JPanel {
         String invoiceId = getSelectedInvoiceId();
         int row = tbLines.getSelectedRow();
         if (invoiceId == null || row < 0) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot dong hang de xoa!", "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
+            I18n.showMessageDialog(this, "Vui long chon mot dong hang de xoa!", "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         int lineNo = Integer.parseInt(String.valueOf(tbLines.getValueAt(row, 0)));
-        int choice = JOptionPane.showConfirmDialog(this,
+        int choice = I18n.showConfirmDialog(this,
                 "Ban co chac chan muon xoa dong hang so " + lineNo + " khoi hoa don " + invoiceId + "?",
                 "Xac nhan xoa dong hang", JOptionPane.YES_NO_OPTION);
 
         if (choice == JOptionPane.YES_OPTION) {
             try {
                 dao.deleteInvoiceLine(invoiceId, lineNo);
-                JOptionPane.showMessageDialog(this, "Da xoa thanh cong dong hang " + lineNo + "!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                I18n.showMessageDialog(this, "Da xoa thanh cong dong hang " + lineNo + "!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
                 // reload() xoá selection -> chọn lại rồi vẽ lại chi tiết, nên
                 // bảng dòng hàng VÀ tổng tiền ở khung trên cập nhật ngay (lỗi #30).
                 reload();
@@ -689,7 +689,7 @@ public class InvoiceViewPanel extends JPanel {
 
     /** Nút thử xóa giá trị (Set NULL) để minh họa cơ chế cảnh báo của Database */
     private void onTryClearLineValue() {
-        JOptionPane.showMessageDialog(this,
+        I18n.showMessageDialog(this,
                 "CANH BAO DATABASE:\n\n"
               + "Toan bo cac truong trong bang Invoice_Line (Quantity, Unit_Price, Barcode, Line_Number)\n"
               + "deu duoc dinh nghia rang buoc [NOT NULL] trong Schema!\n\n"
@@ -925,7 +925,7 @@ public class InvoiceViewPanel extends JPanel {
     private void onReturnLine() {
         final String invoiceId = getSelectedInvoiceId();
         if (invoiceId == null) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot hoa don de tra hang!",
+            I18n.showMessageDialog(this, "Vui long chon mot hoa don de tra hang!",
                     "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -933,7 +933,7 @@ public class InvoiceViewPanel extends JPanel {
         // --- 1. Người duyệt phải là một nhân viên thật ----------------
         Account user = UserSession.getCurrentUser();
         if (user == null || user.getCashierId() == null || user.getCashierId().isBlank()) {
-            JOptionPane.showMessageDialog(this,
+            I18n.showMessageDialog(this,
                 "Tai khoan '" + (user == null ? "?" : user.getUsername()) + "' chua duoc gan voi nhan vien\n"
               + "nao trong bang Cashier, nen khong the dung lam nguoi duyet tra hang.\n\n"
               + "Cach sua: chay lai .\\scripts\\ps1\\db-setup.ps1 (xoa sach du lieu),\n"
@@ -961,7 +961,7 @@ public class InvoiceViewPanel extends JPanel {
             // chặn (sp_add_return), đây chỉ là lớp thông báo sớm.
             InvoiceStatus st = InvoiceStatus.of(status);
             if (st != InvoiceStatus.PAID) {
-                JOptionPane.showMessageDialog(this,
+                I18n.showMessageDialog(this,
                         "Hoa don " + invoiceId + " dang o trang thai "
                       + (st == null ? status : st.display())
                       + ".\nChi hoa don da thanh toan (PAID) moi tra hang duoc.",
@@ -972,7 +972,7 @@ public class InvoiceViewPanel extends JPanel {
             // --- 3. Các dòng còn trả được ----------------------------
             QueryResult linesQr = dao.returnableLines(invoiceId);
             if (linesQr.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Hoa don khong co dong hang nao de tra!",
+                I18n.showMessageDialog(this, "Hoa don khong co dong hang nao de tra!",
                         "Thong bao", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
@@ -983,13 +983,13 @@ public class InvoiceViewPanel extends JPanel {
 
             // --- 4. Dựng hộp thoại -----------------------------------
             final JDialog returnDialog = new JDialog(SwingUtilities.getWindowAncestor(this),
-                    "Tra hang -- hoa don " + invoiceId, Dialog.ModalityType.APPLICATION_MODAL);
+                    I18n.richText("Tra hang -- hoa don ") + invoiceId, Dialog.ModalityType.APPLICATION_MODAL);
             returnDialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
             returnDialog.setLayout(new BorderLayout(10, 10));
             ((JPanel) returnDialog.getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            JLabel headerLabel = new JLabel("Hoa don: " + invoiceId
-                    + "  |  Ngay: " + invoiceDate + "  |  Trang thai: " + status);
+            JLabel headerLabel = new JLabel(I18n.richText("Hoa don: " + invoiceId
+                    + "  |  Ngay: " + invoiceDate + "  |  Trang thai: " + status));
             headerLabel.setFont(Ui.BOLD);
             JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
             headerPanel.add(headerLabel);
@@ -1075,7 +1075,7 @@ public class InvoiceViewPanel extends JPanel {
             btnAdd.addActionListener(e -> {
                 int row = availableTable.getSelectedRow();
                 if (row < 0) {
-                    JOptionPane.showMessageDialog(returnDialog,
+                    I18n.showMessageDialog(returnDialog,
                             "Vui long chon mot dong hang o bang ben trai de them!",
                             "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
                     return;
@@ -1085,7 +1085,7 @@ public class InvoiceViewPanel extends JPanel {
                 // Chặn trùng theo SỐ DÒNG, không theo tên sản phẩm: một hóa đơn
                 // được phép có cùng một sản phẩm ở hai dòng (plan/12 lỗi #9).
                 if (rowsModel.indexOfLine(line.lineNumber) >= 0) {
-                    JOptionPane.showMessageDialog(returnDialog,
+                    I18n.showMessageDialog(returnDialog,
                             "Dong " + line.lineNumber + " (" + line.productName + ") da co trong danh sach se tra.\n\n"
                           + "Muon doi so luong: chon muc do o bang ben phai, bam '<< Xoa',\n"
                           + "roi 'Them >>' lai voi so luong khac.",
@@ -1095,7 +1095,7 @@ public class InvoiceViewPanel extends JPanel {
 
                 BigDecimal remaining = line.remaining.subtract(rowsModel.selectedFor(line.lineNumber));
                 if (remaining.signum() <= 0) {
-                    JOptionPane.showMessageDialog(returnDialog,
+                    I18n.showMessageDialog(returnDialog,
                             "Dong " + line.lineNumber + " (" + line.productName + ") da tra het "
                           + Ui.qty(line.bought) + " " + line.unit + " da mua,\n"
                           + "khong con gi de tra.",
@@ -1105,7 +1105,7 @@ public class InvoiceViewPanel extends JPanel {
 
                 // Điền sẵn số còn lại -> trường hợp phổ biến nhất (trả hết phần
                 // còn lại) chỉ còn một lần Enter.
-                Object answer = JOptionPane.showInputDialog(returnDialog,
+                Object answer = I18n.showInputDialog(returnDialog,
                         "San pham: " + line.productName + "\n"
                       + "Da mua: " + Ui.qty(line.bought) + " " + line.unit
                       + "   |   Da tra: " + Ui.qty(line.returned)
@@ -1135,7 +1135,7 @@ public class InvoiceViewPanel extends JPanel {
             btnRemove.addActionListener(e -> {
                 int row = returnTable.getSelectedRow();
                 if (row < 0) {
-                    JOptionPane.showMessageDialog(returnDialog,
+                    I18n.showMessageDialog(returnDialog,
                             "Vui long chon mot muc o bang ben phai de xoa!",
                             "Chua chon muc nao", JOptionPane.WARNING_MESSAGE);
                     return;
@@ -1147,7 +1147,7 @@ public class InvoiceViewPanel extends JPanel {
             // --- "Xac nhan tra hang" --------------------------------
             btnConfirm.addActionListener(e -> {
                 if (rowsModel.getRowCount() == 0) {
-                    JOptionPane.showMessageDialog(returnDialog,
+                    I18n.showMessageDialog(returnDialog,
                             "Khong co san pham nao de tra!",
                             "Danh sach trong", JOptionPane.WARNING_MESSAGE);
                     return;      // không gọi DB
@@ -1156,7 +1156,7 @@ public class InvoiceViewPanel extends JPanel {
                 final BigDecimal total = rowsModel.totalRefund();
                 final List<ReturnItem> items = rowsModel.toReturnItems();
 
-                int choice = JOptionPane.showConfirmDialog(returnDialog,
+                int choice = I18n.showConfirmDialog(returnDialog,
                         "Ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + "?\n\n"
                       + "Tong tien phai tra lai: " + Ui.money(total) + "\n"
                       + "Nguoi duyet: " + approverLabel,
@@ -1184,7 +1184,7 @@ public class InvoiceViewPanel extends JPanel {
                         }
 
                         returnDialog.dispose();
-                        JOptionPane.showMessageDialog(InvoiceViewPanel.this,
+                        I18n.showMessageDialog(InvoiceViewPanel.this,
                                 "Da ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + ".\n"
                               + "Tong tien tra lai: " + Ui.money(total),
                                 "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
@@ -1203,6 +1203,7 @@ public class InvoiceViewPanel extends JPanel {
             // --- 5. Kích thước: đo BẰNG SỐ, không bằng mắt -----------
             // Bảng bên trái có 9 cột; plan/09 mục 7.1 ghi 6/8 lỗi của tab Git là
             // lỗi kích thước, và "nhìn thấy ổn" đã sai một lần rồi (plan/11 rủi ro #4).
+            I18n.refreshTree(returnDialog.getContentPane());
             returnDialog.pack();
             Dimension pref = returnDialog.getPreferredSize();
             Rectangle work = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
@@ -1246,7 +1247,7 @@ public class InvoiceViewPanel extends JPanel {
     static void showSqlFailure(Component parent, Throwable ex, String title) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
             if (t instanceof SQLException && "45000".equals(((SQLException) t).getSQLState())) {
-                JOptionPane.showMessageDialog(parent, t.getMessage(),
+                I18n.showMessageDialog(parent, t.getMessage(),
                         title, JOptionPane.WARNING_MESSAGE);
                 return;
             }
@@ -1279,7 +1280,7 @@ public class InvoiceViewPanel extends JPanel {
         String invoiceId = getSelectedInvoiceId();
         int row = tbReturns.getSelectedRow();
         if (invoiceId == null || row < 0) {
-            JOptionPane.showMessageDialog(this,
+            I18n.showMessageDialog(this,
                     "Vui long chon mot luot tra trong bang 'Tra hang (Return)' de huy!",
                     "Chua chon luot tra", JOptionPane.WARNING_MESSAGE);
             return;
@@ -1291,7 +1292,7 @@ public class InvoiceViewPanel extends JPanel {
             lineNo   = Integer.parseInt(String.valueOf(tbReturns.getValueAt(row, 0)).trim());
             returnId = Integer.parseInt(String.valueOf(tbReturns.getValueAt(row, 1)).trim());
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this,
+            I18n.showMessageDialog(this,
                     "Khong doc duoc so dong / lan tra cua hang dang chon.",
                     "Loi", JOptionPane.ERROR_MESSAGE);
             return;
@@ -1301,7 +1302,7 @@ public class InvoiceViewPanel extends JPanel {
         String quantity = String.valueOf(tbReturns.getValueAt(row, 4));
         String refund = String.valueOf(tbReturns.getValueAt(row, 5));
 
-        int choice = JOptionPane.showConfirmDialog(this,
+        int choice = I18n.showConfirmDialog(this,
                 "Huy luot tra nay khoi Database?\n\n"
               + "  Hoa don : " + invoiceId + "\n"
               + "  Dong    : " + lineNo + " (" + product + ")\n"
@@ -1317,12 +1318,12 @@ public class InvoiceViewPanel extends JPanel {
         try {
             int affected = dao.deleteReturn(invoiceId, lineNo, returnId);
             if (affected == 0) {
-                JOptionPane.showMessageDialog(this,
+                I18n.showMessageDialog(this,
                         "Khong tim thay luot tra lan " + returnId + " cua dong " + lineNo
                       + " (co the ai khac da huy truoc).",
                         "Khong co gi bi huy", JOptionPane.WARNING_MESSAGE);
             } else {
-                JOptionPane.showMessageDialog(this,
+                I18n.showMessageDialog(this,
                         "Da huy luot tra lan " + returnId + " cua dong " + lineNo + ".",
                         "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
             }

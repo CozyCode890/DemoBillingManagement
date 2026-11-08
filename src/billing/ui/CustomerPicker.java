@@ -334,7 +334,7 @@ public class CustomerPicker extends JPanel {
     private void updateStatus() {
         CustomerRef c = getSelected();
         if (c == null) {
-            lbStatus.setText("(khach vang lai)");
+            lbStatus.setText(I18n.text("(khach vang lai)"));
             lbStatus.setForeground(Color.GRAY);
             lbStatus.setFont(new Font("Segoe UI", Font.ITALIC, 12));
         } else {

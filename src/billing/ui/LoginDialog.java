@@ -49,6 +49,7 @@ public class LoginDialog extends JDialog {
     private final JLabel lbStatus = new JLabel(" ");
     private final JButton btLogin = new JButton("Dang nhap");
     private final JButton btExit  = new JButton("Thoat");
+    private final JButton btLanguage = new JButton();
 
     /** Các nút nhanh, giữ lại để {@link #setBusy} khoá/mở được cả hàng. */
     private final List<JButton> quickButtons = new ArrayList<>();
@@ -66,7 +67,7 @@ public class LoginDialog extends JDialog {
      *               sao mình vẫn đang đứng ở màn hình đăng nhập.
      */
     public LoginDialog(Frame parent, String notice) {
-        super(parent, "Dang nhap he thong -- Retail Invoicing", true);
+        super(parent, I18n.text("Dang nhap he thong -- Retail Invoicing"), true);
         setLayout(new BorderLayout(10, 10));
         setResizable(false);
 
@@ -108,6 +109,9 @@ public class LoginDialog extends JDialog {
         btLogin.setFont(Ui.BOLD);
         btLogin.addActionListener(e -> doLogin());
         btExit.addActionListener(e -> System.exit(0));
+        btLanguage.setFocusPainted(false);
+        btLanguage.setToolTipText("Chuyen ngon ngu giao dien");
+        btLanguage.addActionListener(e -> switchLanguage());
 
         add(form, BorderLayout.CENTER);
         add(southPanel(), BorderLayout.SOUTH);
@@ -124,6 +128,8 @@ public class LoginDialog extends JDialog {
             setStatus(notice, COLOR_NOTICE);
         }
 
+        btLanguage.setText(I18n.otherLanguageName());
+        I18n.refreshTree(this);
         pack();
         setLocationRelativeTo(parent);
 
@@ -211,6 +217,7 @@ public class LoginDialog extends JDialog {
         lbStatus.setForeground(COLOR_INFO);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 6));
+        buttons.add(btLanguage);
         buttons.add(btLogin);
         buttons.add(btExit);
 
@@ -312,14 +319,23 @@ public class LoginDialog extends JDialog {
             // sẽ nhảy lên nhảy xuống mỗi lần đổi thông báo.
             lbStatus.setText(" ");
         } else if (message.length() <= 60) {
-            lbStatus.setText(message);
+            lbStatus.setText(I18n.richText(message));
         } else {
             // Thông báo dài (ví dụ lý do auto-login thất bại) được ngắt dòng.
             // Chỉ xảy ra với thông báo truyền vào hàm dựng, tức là TRƯỚC pack(),
             // nên dialog vẫn đủ cao để hiện 2-3 dòng.
             lbStatus.setText("<html><div style='width:" + STATUS_WRAP_PX + "px'>"
-                + escapeHtml(message) + "</div></html>");
+                + escapeHtml(I18n.richText(message)) + "</div></html>");
         }
+    }
+
+    private void switchLanguage() {
+        I18n.setLanguage(I18n.otherLanguage());
+        setTitle(I18n.text("Dang nhap he thong -- Retail Invoicing"));
+        btLanguage.setText(I18n.otherLanguageName());
+        I18n.refreshTree(this);
+        pack();
+        setLocationRelativeTo(getOwner());
     }
 
     /** Giá trị trong config.properties có thể chứa {@code < > &} -- đừng để nó thành thẻ HTML. */

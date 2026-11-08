@@ -565,8 +565,8 @@ public class NewInvoicePanel extends JPanel {
     }
 
     private void hint(LocalDate date, Priced pr, String extra) {
-        lbHint.setText("Gia ngay " + date + " = " + Ui.money(pr.price)
-                + (pr.note.isEmpty() ? "  (khong co KM)" : "  " + pr.note) + extra);
+        lbHint.setText(I18n.richText("Gia ngay " + date + " = " + Ui.money(pr.price)
+                + (pr.note.isEmpty() ? "  (khong co KM)" : "  " + pr.note) + extra));
     }
 
     private void setAddBusy(boolean busy) {
@@ -590,7 +590,7 @@ public class NewInvoicePanel extends JPanel {
             return;
         }
         final CartLine line = cart.get(row);
-        String input = JOptionPane.showInputDialog(this,
+        String input = I18n.showInputDialog(this,
                 "So luong moi cho \"" + line.product.name + "\" (" + line.product.unit + "):\n\n"
               + "Dau , hoac . la dau thap phan, toi da 3 chu so.",
                 Ui.qtyInput(line.quantity));
@@ -658,7 +658,7 @@ public class NewInvoicePanel extends JPanel {
      */
     private void onMethodChanged() {
         PayMethod m = method();
-        lbAmount.setText(m.amountFieldLabel() + ":");
+        lbAmount.setText(I18n.richText(m.amountFieldLabel() + ":"));
         btQr.setEnabled(m == PayMethod.EWALLET);
     }
 
@@ -930,7 +930,7 @@ public class NewInvoicePanel extends JPanel {
         if (paid.compareTo(due) < 0) {
             // Đây là chỗ DUY NHẤT người dùng gặp trạng thái OPEN lần đầu.
             // Không nói rõ hậu quả thì họ sẽ tưởng app vừa đánh mất hóa đơn.
-            int ok = JOptionPane.showConfirmDialog(this,
+            int ok = I18n.showConfirmDialog(this,
                     "Tong hoa don " + Ui.money(due) + " nhung chi thanh toan "
                   + Ui.money(paid) + " (thieu " + Ui.money(due.subtract(paid)) + ").\n\n"
                   + "Van luu, nhung hoa don se o trang thai DANG LAP (OPEN):\n"
@@ -979,7 +979,7 @@ public class NewInvoicePanel extends JPanel {
 
     private void setSaving(boolean saving) {
         btSave.setEnabled(!saving);
-        btSave.setText(saving ? "Dang luu..." : "XUAT HOA DON  (INSERT + COMMIT)");
+        btSave.setText(I18n.text(saving ? "Dang luu..." : "XUAT HOA DON  (INSERT + COMMIT)"));
         btAddPay.setEnabled(!saving);
         btPayAll.setEnabled(!saving);
         btAdd.setEnabled(!saving);
@@ -1085,10 +1085,10 @@ public class NewInvoicePanel extends JPanel {
         BigDecimal left   = remaining();
         BigDecimal change = totalChange();
 
-        lbTotal.setText("Tong: " + Ui.money(due));
-        lbPaid.setText("Da thu: " + Ui.money(paid));
-        lbLeft.setText("Con thieu: " + Ui.money(left));
-        lbChange.setText("Tien thoi: " + Ui.money(change));
+        lbTotal.setText(I18n.richText("Tong: " + Ui.money(due)));
+        lbPaid.setText(I18n.richText("Da thu: " + Ui.money(paid)));
+        lbLeft.setText(I18n.richText("Con thieu: " + Ui.money(left)));
+        lbChange.setText(I18n.richText("Tien thoi: " + Ui.money(change)));
         lbLeft.setForeground(left.signum() > 0 ? Color.RED.darker() : new Color(0, 110, 0));
     }
 }

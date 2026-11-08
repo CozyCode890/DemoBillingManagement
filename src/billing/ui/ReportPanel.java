@@ -121,13 +121,13 @@ public class ReportPanel extends JPanel {
         b.addActionListener(e -> {
             taSql.setText(sql);
             taSql.setCaretPosition(0);
-            taWhat.setText(explain);
+            taWhat.setText(I18n.richText(explain));
             taWhat.setCaretPosition(0);
 
             // Khoá cả năm nút và đổi nhãn nút đang chạy: một cửa sổ không
             // phản hồi mà không nói gì thì người dùng tưởng app treo.
             setButtonsEnabled(false);
-            b.setText(label + " -- dang chay...");
+            b.setText(I18n.richText(label + " -- dang chay..."));
 
             new SwingWorker<QueryResult, Void>() {
                 @Override
@@ -137,13 +137,13 @@ public class ReportPanel extends JPanel {
 
                 @Override
                 protected void done() {
-                    b.setText(label);
+                    b.setText(I18n.richText(label));
                     setButtonsEnabled(true);
                     try {
                         QueryResult qr = get();   // ném lại lỗi của doInBackground
                         Ui.fill(tbData, qr);
                         if (qr.isEmpty()) {
-                            JOptionPane.showMessageDialog(ReportPanel.this,
+                            I18n.showMessageDialog(ReportPanel.this,
                                     "Cau lenh chay xong nhung khong co dong nao thoa dieu kien.");
                         }
                     } catch (Exception ex) {

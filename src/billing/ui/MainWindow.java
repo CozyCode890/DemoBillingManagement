@@ -40,8 +40,12 @@ public class MainWindow extends JFrame {
     private final JLabel lbInfo = new JLabel();
 
     private final JButton btSwitchRole = new JButton("Doi vai tro ▾");
+    private final JButton btLanguage = new JButton();
     private final JButton btLogout     = new JButton("Dang xuat");
     private final JPopupMenu switchRoleMenu = new JPopupMenu();
+    private final JMenu languageMenu = new JMenu("Ngon ngu");
+    private final JRadioButtonMenuItem englishMenuItem = new JRadioButtonMenuItem("English");
+    private final JRadioButtonMenuItem vietnameseMenuItem = new JRadioButtonMenuItem("Tiếng Việt");
 
     /** Hàm dựng cũ -- giữ lại để không phá chỗ gọi nào khác. */
     public MainWindow() {
@@ -54,11 +58,12 @@ public class MainWindow extends JFrame {
      *                  {@code (DANG NHAP TU DONG)} màu cam
      */
     public MainWindow(boolean autoLogin) {
-        super("Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8");
+        super(I18n.text("Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8"));
         this.autoLogin = autoLogin;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1280, 820);
         setLocationRelativeTo(null);
+        setJMenuBar(buildMenuBar());
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(Ui.BOLD);
@@ -75,6 +80,7 @@ public class MainWindow extends JFrame {
         tabs.addChangeListener(e -> {
             if (tabs.getSelectedComponent() == viewPanel) {
                 viewPanel.applyRolePermissions();
+                I18n.refreshTree(viewPanel);
             }
         });
 
@@ -83,6 +89,22 @@ public class MainWindow extends JFrame {
 
         // Áp dụng quyền người dùng cho tab xem hóa đơn
         viewPanel.applyRolePermissions();
+        updateLanguageControls();
+        I18n.refreshTree(getContentPane());
+        I18n.refreshTree(getJMenuBar());
+    }
+
+    private JMenuBar buildMenuBar() {
+        ButtonGroup languages = new ButtonGroup();
+        languages.add(englishMenuItem);
+        languages.add(vietnameseMenuItem);
+        englishMenuItem.addActionListener(e -> setLanguage(I18n.Language.ENGLISH));
+        vietnameseMenuItem.addActionListener(e -> setLanguage(I18n.Language.VIETNAMESE));
+        languageMenu.add(englishMenuItem);
+        languageMenu.add(vietnameseMenuItem);
+        JMenuBar menuBar = new JMenuBar();
+        menuBar.add(languageMenu);
+        return menuBar;
     }
 
     // ------------------------------------------------------------------
@@ -132,6 +154,11 @@ public class MainWindow extends JFrame {
             switchRoleMenu.show(btSwitchRole, 0, -d.height);
         });
 
+        btLanguage.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        btLanguage.setFocusPainted(false);
+        btLanguage.setToolTipText("Chuyen ngon ngu giao dien");
+        btLanguage.addActionListener(e -> setLanguage(I18n.otherLanguage()));
+
         btLogout.setFont(new Font("Segoe UI", Font.BOLD, 11));
         btLogout.setForeground(new Color(180, 40, 40));
         btLogout.setFocusPainted(false);
@@ -140,6 +167,7 @@ public class MainWindow extends JFrame {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         right.setOpaque(false);
         right.add(btSwitchRole);
+        right.add(btLanguage);
         right.add(btLogout);
 
         // Nhan nguoi dung o CENTER chu khong phai WEST: BorderLayout cap cho WEST
@@ -157,11 +185,12 @@ public class MainWindow extends JFrame {
     private void refreshUserInfo() {
         Account user = UserSession.getCurrentUser();
         String userInfo = (user != null)
-                ? user.getFullName() + "  [Vai tro: " + user.getRole().toUpperCase() + "]"
-                : "(Chua dang nhap)";
-        lbInfo.setText("  Nguoi dung: " + userInfo);
-        // Tooltip de doc du khi cua so hep lam chu bi cat.
-        lbInfo.setToolTipText("Nguoi dung: " + userInfo);
+                ? user.getFullName() + "  [" + I18n.text("Vai tro:") + " " + user.getRole().toUpperCase() + "]"
+                : I18n.text("(Chua dang nhap)");
+        String prefix = I18n.text("Nguoi dung: ");
+        I18n.setPreservedText(lbInfo, "  " + prefix + userInfo);
+        // Keep the account's display name and role exactly as configured.
+        I18n.setPreservedToolTip(lbInfo, prefix + userInfo);
     }
 
     /**
@@ -200,6 +229,22 @@ public class MainWindow extends JFrame {
                 parent.repaint();
             }
         }
+        I18n.refreshTree(switchRoleMenu);
+    }
+
+    private void setLanguage(I18n.Language language) {
+        I18n.setLanguage(language);
+        setTitle(I18n.text("Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8"));
+        refreshUserInfo();
+        updateLanguageControls();
+        I18n.refreshTree(getContentPane());
+        I18n.refreshTree(getJMenuBar());
+    }
+
+    private void updateLanguageControls() {
+        btLanguage.setText(I18n.otherLanguageName());
+        englishMenuItem.setSelected(I18n.language() == I18n.Language.ENGLISH);
+        vietnameseMenuItem.setSelected(I18n.language() == I18n.Language.VIETNAMESE);
     }
 
     // ------------------------------------------------------------------
@@ -248,17 +293,18 @@ public class MainWindow extends JFrame {
                 }
                 if (acc == null) {
                     // Phiên hiện tại giữ nguyên -- không rơi về trạng thái chưa đăng nhập.
-                    JOptionPane.showMessageDialog(MainWindow.this,
-                        "Tai khoan '" + target.getUsername() + "' trong config.properties khong dang nhap duoc.\n"
+                    I18n.showMessageDialog(MainWindow.this,
+                        I18n.richText("Tai khoan '") + target.getUsername() + I18n.richText("' trong config.properties khong dang nhap duoc.\n"
                       + "Co the mat khau trong bang Account da bi doi.\n\n"
-                      + "Phien hien tai van duoc giu nguyen.",
-                        "Doi vai tro that bai", JOptionPane.WARNING_MESSAGE);
+                      + "Phien hien tai van duoc giu nguyen."),
+                        I18n.text("Doi vai tro that bai"), JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 UserSession.setCurrentUser(acc);     // 1. đổi phiên
                 refreshUserInfo();                   // 2. vẽ lại nhãn thanh trạng thái
                 viewPanel.applyRolePermissions();    // 3. khoá/mở lại các nút
                 rebuildSwitchRoleMenu();             // 4. tài khoản hiện tại không còn trong menu
+                I18n.refreshTree(getContentPane());  // role-dependent tooltips follow current language
             }
         }.execute();
     }
@@ -272,23 +318,23 @@ public class MainWindow extends JFrame {
 
     /** Xử lý hành động Đăng xuất: đóng MainWindow và quay lại LoginDialog */
     private void doLogout() {
-        String question = "Ban co chac chan muon dang xuat khoi he thong?";
-        String pending = newInvoice.pendingWorkSummary();
+        String question = I18n.richText("Ban co chac chan muon dang xuat khoi he thong?");
+        String pending = I18n.richText(newInvoice.pendingWorkSummary());
 
         if (!pending.isEmpty()) {
             // Bản cũ chỉ hỏi "Ban co chac chan..." rồi dispose() -- xoá sạch giỏ
             // hàng đang nhập mà không hề nói. Dòng gợi ý phía dưới quan trọng hơn
             // vẻ ngoài của nó: nó dạy người dùng rằng đã có đường không mất dữ
             // liệu, đúng lúc họ đang định đi đường mất dữ liệu.
-            question =
+            question = I18n.richText(
                 "Tab \"Lap hoa don\" dang co " + pending + " chua luu.\n"
               + "Dang xuat se mat toan bo. Van dang xuat?\n\n"
               + "Goi y: muon xem giao dien cua vai tro khac ma khong mat gio hang\n"
-              + "thi dung nut \"Doi vai tro\" ben canh.";
+              + "thi dung nut \"Doi vai tro\" ben canh.");
         }
 
-        int choice = JOptionPane.showConfirmDialog(this, question,
-                "Xac nhan dang xuat", JOptionPane.YES_NO_OPTION);
+        int choice = I18n.showConfirmDialog(this, question,
+                I18n.text("Xac nhan dang xuat"), JOptionPane.YES_NO_OPTION);
 
         if (choice == JOptionPane.YES_OPTION) {
             this.dispose();           // Đóng cửa sổ chính hiện tại

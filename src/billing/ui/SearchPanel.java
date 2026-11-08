@@ -724,7 +724,7 @@ public class SearchPanel extends JPanel {
 
             populateTable(rs);
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this,
+            I18n.showMessageDialog(this,
                     "Lỗi khi tải dữ liệu từ bảng '" + tableName + "':\n" + ex.getMessage(),
                     "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
             ex.printStackTrace();
@@ -818,7 +818,7 @@ public class SearchPanel extends JPanel {
                     }
                 }
             } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this,
+                I18n.showMessageDialog(this,
                         "Lỗi khi xác định cột tìm kiếm:\n" + ex.getMessage(),
                         "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
                 ex.printStackTrace();
@@ -851,7 +851,7 @@ public class SearchPanel extends JPanel {
                 populateTable(rs);
             }
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this,
+            I18n.showMessageDialog(this,
                     "Lỗi khi thực hiện tìm kiếm:\n" + ex.getMessage(),
                     "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
             ex.printStackTrace();
@@ -982,10 +982,10 @@ public class SearchPanel extends JPanel {
     private void updateRowCount() {
         int rows = table.getModel().getRowCount();
         if (lastResultTruncated) {
-            lbRowCount.setText("Đang hiện " + Ui.integer(rows)
-                    + " dòng đầu (bảng còn nhiều hơn — dùng bộ lọc để thu hẹp)");
+            lbRowCount.setText(I18n.richText("Đang hiện " + Ui.integer(rows)
+                    + " dòng đầu (bảng còn nhiều hơn — dùng bộ lọc để thu hẹp)"));
         } else {
-            lbRowCount.setText("Tổng số hàng: " + Ui.integer(rows) + " dòng");
+            lbRowCount.setText(I18n.richText("Tổng số hàng: " + Ui.integer(rows) + " dòng"));
         }
     }
 

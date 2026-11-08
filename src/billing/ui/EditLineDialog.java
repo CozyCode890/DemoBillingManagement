@@ -45,7 +45,7 @@ public class EditLineDialog extends JDialog {
     public EditLineDialog(Window owner, InvoiceDao dao, String invoiceId, int lineNumber,
                           String barcode, BigDecimal quantity,
                           BigDecimal unitPrice, BigDecimal discount) {
-        super(owner, "Chinh sua Dong hang: " + lineNumber + " (HD: " + invoiceId + ")", ModalityType.APPLICATION_MODAL);
+        super(owner, I18n.richText("Chinh sua Dong hang: ") + lineNumber + " (HD: " + invoiceId + ")", ModalityType.APPLICATION_MODAL);
         this.dao = dao;
         this.invoiceId = invoiceId;
         this.lineNumber = lineNumber;
@@ -107,6 +107,7 @@ public class EditLineDialog extends JDialog {
         add(form, BorderLayout.CENTER);
         add(buttons, BorderLayout.SOUTH);
 
+        I18n.refreshTree(this);
         pack();
         setLocationRelativeTo(owner);
     }
@@ -179,9 +180,9 @@ public class EditLineDialog extends JDialog {
 
         try {
             dao.updateInvoiceLine(invoiceId, lineNumber, barcode, quantity, unitPrice, discount);
-            JOptionPane.showMessageDialog(this,
-                    "Cap nhat dong hang " + lineNumber + " thanh cong trong Database!",
-                    "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+            I18n.showMessageDialog(this,
+                    I18n.richText("Cap nhat dong hang ") + lineNumber + I18n.text(" thanh cong trong Database!"),
+                    I18n.text("Thanh cong"), JOptionPane.INFORMATION_MESSAGE);
             saved = true;
             dispose();
         } catch (Exception ex) {
@@ -190,10 +191,10 @@ public class EditLineDialog extends JDialog {
     }
 
     private void showNotNullWarning(String fieldName) {
-        JOptionPane.showMessageDialog(this,
-                "CANH BAO DATABASE: Cot '" + fieldName + "' co rang buoc NOT NULL trong Database!\n"
-              + "Ban khong duoc phep xoa gia tri nay ve NULL hoac de trong.",
-                "Canh bao rang buoc NOT NULL", JOptionPane.WARNING_MESSAGE);
+        I18n.showMessageDialog(this,
+                I18n.richText("CANH BAO DATABASE: Cot '") + fieldName + I18n.richText("' co rang buoc NOT NULL trong Database!\n"
+              + "Ban khong duoc phep xoa gia tri nay ve NULL hoac de trong."),
+                I18n.text("Canh bao rang buoc NOT NULL"), JOptionPane.WARNING_MESSAGE);
     }
 
     public boolean isSaved() {

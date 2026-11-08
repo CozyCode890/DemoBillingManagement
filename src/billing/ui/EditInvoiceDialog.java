@@ -52,7 +52,7 @@ public class EditInvoiceDialog extends JDialog {
     public EditInvoiceDialog(Window owner, InvoiceDao dao, String invoiceId,
                              String date, String time, String status,
                              String counterId, String cashierId, String customerId) {
-        super(owner, "Chinh sua Hoa don: " + invoiceId, ModalityType.APPLICATION_MODAL);
+        super(owner, I18n.richText("Chinh sua Hoa don: ") + invoiceId, ModalityType.APPLICATION_MODAL);
         this.dao = dao;
         this.invoiceId = invoiceId;
         this.originalStatus = status;
@@ -112,9 +112,9 @@ public class EditInvoiceDialog extends JDialog {
         btSetNullCustomer.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         btSetNullCustomer.addActionListener(e -> {
             tfCustomerId.setText("");
-            JOptionPane.showMessageDialog(this,
-                    "Customer_ID la truong cho phep NULL (khach vang lai).\nGia tri nay se duoc cap nhat thanh NULL trong database.",
-                    "Thong bao", JOptionPane.INFORMATION_MESSAGE);
+            I18n.showMessageDialog(this,
+                    I18n.richText("Customer_ID la truong cho phep NULL (khach vang lai).\nGia tri nay se duoc cap nhat thanh NULL trong database."),
+                    I18n.text("Thong bao"), JOptionPane.INFORMATION_MESSAGE);
         });
         gbc.gridx = 2;
         form.add(btSetNullCustomer, gbc);
@@ -140,6 +140,7 @@ public class EditInvoiceDialog extends JDialog {
         add(form, BorderLayout.CENTER);
         add(buttons, BorderLayout.SOUTH);
 
+        I18n.refreshTree(this);
         pack();
         setLocationRelativeTo(owner);
 
@@ -190,10 +191,10 @@ public class EditInvoiceDialog extends JDialog {
                     return;
                 }
 
-                lbMoneyGap.setText("<html><b>Da thu " + Ui.money(paid) + " / "
+                lbMoneyGap.setText(I18n.richText("<html><b>Da thu ") + Ui.money(paid) + " / "
                         + Ui.money(due) + "  --  LECH " + Ui.money(due.subtract(paid))
-                        + "</b><br>Sua dong hang xong lam lech so tien. "
-                        + "Trang thai KHONG tu doi nguoc -- xem plan/13 muc 2.3.</html>");
+                        + I18n.richText("</b><br>Sua dong hang xong lam lech so tien. "
+                        + "Trang thai KHONG tu doi nguoc -- xem plan/13 muc 2.3.</html>"));
                 pack();
             }
         }.execute();
@@ -246,7 +247,7 @@ public class EditInvoiceDialog extends JDialog {
         try {
             date = LocalDate.parse(dateStr);
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Ngay lap phai dung dinh dang YYYY-MM-DD!", "Loi dinh dang", JOptionPane.WARNING_MESSAGE);
+            I18n.showMessageDialog(this, I18n.text("Ngay lap phai dung dinh dang YYYY-MM-DD!"), I18n.text("Loi dinh dang"), JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -254,7 +255,7 @@ public class EditInvoiceDialog extends JDialog {
         try {
             time = LocalTime.parse(timeStr);
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Gio lap phai dung dinh dang HH:MM:SS!", "Loi dinh dang", JOptionPane.WARNING_MESSAGE);
+            I18n.showMessageDialog(this, I18n.text("Gio lap phai dung dinh dang HH:MM:SS!"), I18n.text("Loi dinh dang"), JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -275,9 +276,9 @@ public class EditInvoiceDialog extends JDialog {
 
         try {
             dao.updateInvoiceHeader(invoiceId, date, time, status, counterId, cashierId, customerId);
-            JOptionPane.showMessageDialog(this,
-                    "Cap nhat hoa don " + invoiceId + " thanh cong trong Database!",
-                    "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+            I18n.showMessageDialog(this,
+                    I18n.richText("Cap nhat hoa don ") + invoiceId + I18n.text(" thanh cong trong Database!"),
+                    I18n.text("Thanh cong"), JOptionPane.INFORMATION_MESSAGE);
             saved = true;
             dispose();
         } catch (Exception ex) {
@@ -291,10 +292,10 @@ public class EditInvoiceDialog extends JDialog {
 
     /** Bật cảnh báo vi phạm ràng buộc NOT NULL */
     private void showNotNullWarning(String fieldName) {
-        JOptionPane.showMessageDialog(this,
-                "CANH BAO DATABASE: Truong '" + fieldName + "' co rang buoc NOT NULL!\n"
-              + "Ban khong duoc phep xoa gia tri nay ve NULL hoac de trong.",
-                "Canh bao rang buoc NOT NULL", JOptionPane.WARNING_MESSAGE);
+        I18n.showMessageDialog(this,
+                I18n.richText("CANH BAO DATABASE: Truong '") + fieldName + I18n.richText("' co rang buoc NOT NULL!\n"
+              + "Ban khong duoc phep xoa gia tri nay ve NULL hoac de trong."),
+                I18n.text("Canh bao rang buoc NOT NULL"), JOptionPane.WARNING_MESSAGE);
     }
 
     public boolean isSaved() {

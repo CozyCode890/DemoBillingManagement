@@ -356,7 +356,7 @@ public class Ui {
 
     /** Cảnh báo gọn một dòng. Bản dời của {@code InvoiceViewPanel.warn}. */
     public static void warn(Component parent, String message, String title) {
-        JOptionPane.showMessageDialog(parent, message, title, JOptionPane.WARNING_MESSAGE);
+        I18n.showMessageDialog(parent, I18n.richText(message), I18n.richText(title), JOptionPane.WARNING_MESSAGE);
     }
 
     // =================================================================
@@ -400,6 +400,7 @@ public class Ui {
 
     /** Giãn cột cho vừa nội dung. */
     public static void autoSize(JTable table) {
+        I18n.installTableTranslation(table);
         for (int c = 0; c < table.getColumnCount(); c++) {
             int width = 80;
             Object header = table.getColumnModel().getColumn(c).getHeaderValue();
@@ -424,7 +425,7 @@ public class Ui {
         ta.setWrapStyleWord(true);
         JScrollPane sp = new JScrollPane(ta);
         sp.setPreferredSize(new Dimension(650, 220));
-        JOptionPane.showMessageDialog(parent, sp, "Co loi xay ra", JOptionPane.ERROR_MESSAGE);
+        I18n.showMessageDialog(parent, sp, I18n.text("Co loi xay ra"), JOptionPane.ERROR_MESSAGE);
     }
 
     public static JPanel titled(String title, JComponent inner) {

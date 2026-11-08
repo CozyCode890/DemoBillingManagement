@@ -4,6 +4,7 @@ import billing.db.Db;
 import billing.db.SqlLog;
 import billing.model.UserSession;
 import billing.ui.AppFlow;
+import billing.ui.I18n;
 
 import javax.swing.*;
 
@@ -40,7 +41,7 @@ public class Main {
               + "  3. Mat khau trong file config.properties da dung chua?\n"
               + "  4. Neu loi 'No suitable driver': thieu file mysql-connector-j.jar\n"
               + "     trong thu muc lib/. Chay setup.ps1 de tai ve.\n";
-            JOptionPane.showMessageDialog(null, help, "Loi ket noi", JOptionPane.ERROR_MESSAGE);
+            I18n.showMessageDialog(null, help, "Loi ket noi", JOptionPane.ERROR_MESSAGE);
             return;
         }
 

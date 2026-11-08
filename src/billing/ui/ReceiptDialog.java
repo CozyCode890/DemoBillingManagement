@@ -88,14 +88,14 @@ public class ReceiptDialog {
 
     private static void display(Component parent, String invoiceId, Data d) {
         Window owner = (parent == null) ? null : SwingUtilities.getWindowAncestor(parent);
-        JDialog dialog = new JDialog(owner, "HOA DON BAN LE -- " + invoiceId,
+        JDialog dialog = new JDialog(owner, I18n.richText("HOA DON BAN LE -- ") + invoiceId,
                                      Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.getContentPane().setLayout(new BorderLayout());
 
         JTextPane pane = new JTextPane();
         pane.setContentType("text/html");
-        pane.setText(buildHtml(d));
+        pane.setText(I18n.richText(buildHtml(d)));
         pane.setEditable(false);
         pane.setBackground(Color.WHITE);
         pane.setCaretPosition(0);
@@ -121,6 +121,7 @@ public class ReceiptDialog {
         dialog.getRootPane().registerKeyboardAction(e -> dialog.dispose(),
                 KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
+        I18n.refreshTree(dialog.getContentPane());
         dialog.pack();
         dialog.setLocationRelativeTo(parent);
         dialog.setVisible(true);

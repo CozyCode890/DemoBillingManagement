@@ -78,7 +78,7 @@ public class QrPaymentDialog {
         }
 
         Window owner = (parent == null) ? null : SwingUtilities.getWindowAncestor(parent);
-        JDialog dialog = new JDialog(owner, "Thanh toan bang ma QR (VietQR)",
+        JDialog dialog = new JDialog(owner, I18n.text("Thanh toan bang ma QR (VietQR)"),
                                      Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout(10, 10));
@@ -124,6 +124,7 @@ public class QrPaymentDialog {
         dialog.getRootPane().registerKeyboardAction(e -> dialog.dispose(),
                 KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
+        I18n.refreshTree(dialog.getContentPane());
         dialog.pack();
         dialog.setLocationRelativeTo(parent);
         dialog.setVisible(true);
