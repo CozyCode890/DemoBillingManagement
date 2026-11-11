@@ -62,7 +62,7 @@ public final class LoginPrefs {
             String v = p.getProperty(KEY, "");
             return v.trim();
         } catch (Exception e) {
-            fail("doc", e);
+            fail("đọc", e);
             return "";
         }
     }
@@ -86,7 +86,7 @@ public final class LoginPrefs {
             try (OutputStream out = Files.newOutputStream(FILE,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE)) {
-                p.store(out, "Ten dang nhap gan nhat. KHONG chua mat khau -- xem billing.util.LoginPrefs.");
+                p.store(out, "Tên đăng nhập gần nhất. KHÔNG chứa mật khẩu -- xem billing.util.LoginPrefs.");
             }
         } catch (Exception e) {
             fail("ghi", e);
@@ -95,8 +95,8 @@ public final class LoginPrefs {
 
     private static void fail(String what, Exception e) {
         disabled = true;
-        System.err.println("[LoginPrefs] Khong " + what + " duoc " + FILE.toAbsolutePath()
-            + " -- tat viec nho ten dang nhap cho phien nay. Ly do: " + e.getMessage());
+        System.err.println("[LoginPrefs] Không " + what + " được " + FILE.toAbsolutePath()
+            + " -- tắt việc nhớ tên đăng nhập cho phiên này. Lý do: " + e.getMessage());
     }
 
     private LoginPrefs() { }

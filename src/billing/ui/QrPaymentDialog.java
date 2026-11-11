@@ -78,7 +78,7 @@ public class QrPaymentDialog {
         }
 
         Window owner = (parent == null) ? null : SwingUtilities.getWindowAncestor(parent);
-        JDialog dialog = new JDialog(owner, I18n.text("Thanh toan bang ma QR (VietQR)"),
+        JDialog dialog = new JDialog(owner, I18n.text("Thanh toán bằng mã QR (VietQR)"),
                                      Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout(10, 10));
@@ -93,14 +93,14 @@ public class QrPaymentDialog {
         info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
         info.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
 
-        info.add(centered("So tien trong ma QR: " + Ui.money(rounded), Ui.BOLD, null));
+        info.add(centered("Số tiền trong mã QR: " + Ui.money(rounded), Ui.BOLD, null));
         if (!holder.isEmpty()) {
-            info.add(centered("Chuyen toi: " + holder, null, null));
+            info.add(centered("Chuyển tới: " + holder, null, null));
         }
-        info.add(centered("Tai khoan: " + account + "  (BIN " + bin + ")", null, Color.DARK_GRAY));
-        info.add(centered("Noi dung CK (Transaction_Ref): " + ref, null, Color.DARK_GRAY));
+        info.add(centered("Tài khoản: " + account + "  (BIN " + bin + ")", null, Color.DARK_GRAY));
+        info.add(centered("Nội dung CK (Transaction_Ref): " + ref, null, Color.DARK_GRAY));
         info.add(Box.createRigidArea(new Dimension(0, 6)));
-        info.add(centered("Ban demo: viec doi soat la THU CONG -- bam \"Xac nhan\" khi da thay tien vao.",
+        info.add(centered("Bản demo: việc đối soát là THU CÔNG -- bấm \"Xác nhận\" khi đã thấy tiền vào.",
                           new Font("Segoe UI", Font.ITALIC, 12), Color.GRAY));
         dialog.add(info, BorderLayout.SOUTH);
 
@@ -108,8 +108,8 @@ public class QrPaymentDialog {
         final Result[] out = new Result[1];
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
-        JButton btConfirm = new JButton("Xac nhan da nhan tien");
-        JButton btCancel  = new JButton("Huy bo");
+        JButton btConfirm = new JButton("Xác nhận đã nhận tiền");
+        JButton btCancel  = new JButton("Hủy bỏ");
         btConfirm.setFont(Ui.BOLD);
         btConfirm.addActionListener(e -> {
             out[0] = new Result(rounded.setScale(2, RoundingMode.HALF_UP), ref);

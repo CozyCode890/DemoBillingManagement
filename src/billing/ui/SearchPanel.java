@@ -518,7 +518,7 @@ public class SearchPanel extends JPanel {
 
             // Row 2: Price range
             JPanel priceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
-            priceRow.add(new JLabel("Khoáng giá sản phẩm: "));
+            priceRow.add(new JLabel("Khoảng giá sản phẩm: "));
             String[] priceRanges = {"Tất cả", "< 20k", "20k - 50k", "> 50k"};
             cbPriceRange = new JComboBox<>(priceRanges);
             priceRow.add(cbPriceRange);

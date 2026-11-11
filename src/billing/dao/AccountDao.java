@@ -53,7 +53,7 @@ public class AccountDao {
             return null;
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi xac thuc tai khoan: " + e.getMessage(), e);
+            throw new RuntimeException("Lỗi khi xác thực tài khoản: " + e.getMessage(), e);
         }
     }
 
@@ -64,7 +64,7 @@ public class AccountDao {
      * Nếu gọi thẳng rs.getString("Cashier_ID") trên một ResultSet không có cột
      * đó, JDBC ném SQLException và KHÔNG AI đăng nhập được nữa -- hỏng cả app
      * chỉ vì một tính năng trả hàng. Thiếu cột thì cashierId = null, đăng nhập
-     * vẫn chạy, chỉ nút "Tra hang" báo lỗi kèm cách sửa.
+     * vẫn chạy, chỉ nút "Trả hàng" báo lỗi kèm cách sửa.
      */
     private static boolean hasColumn(ResultSet rs, String name) throws SQLException {
         ResultSetMetaData md = rs.getMetaData();

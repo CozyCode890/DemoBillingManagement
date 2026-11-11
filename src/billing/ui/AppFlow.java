@@ -102,8 +102,8 @@ public final class AppFlow {
 
         if (!QuickLogin.isEnabled()) {
             if (fromArgs != null) {
-                System.out.println("[AUTO-LOGIN] Bo qua tham so --login=" + fromArgs
-                    + " vi quick.login.enabled=false trong config.properties.");
+                System.out.println("[AUTO-LOGIN] Bỏ qua tham số --login=" + fromArgs
+                    + " vì quick.login.enabled=false trong config.properties.");
             }
             return AutoLoginResult.none();
         }
@@ -120,22 +120,22 @@ public final class AppFlow {
                 // khi nhóm đã tự thêm tài khoản vào DB.
                 username = fromArgs.substring(0, colon).trim();
                 password = fromArgs.substring(colon + 1);   // KHÔNG trim mật khẩu
-                source = "tham so --login=<user>:<pass>";
+                source = "tham số --login=<user>:<pass>";
                 if (username.isEmpty() || password.isEmpty()) {
                     return AutoLoginResult.failed(username,
-                        "Tham so --login=" + fromArgs + " thieu ten dang nhap hoac mat khau"
-                      + " -- hay dang nhap bang tay.");
+                        "Tham số --login=" + fromArgs + " thiếu tên đăng nhập hoặc mật khẩu"
+                      + " -- hãy đăng nhập bằng tay.");
                 }
             } else {
                 QuickAccount q = QuickLogin.find(fromArgs);
                 if (q == null) {
                     return AutoLoginResult.failed(fromArgs,
-                        "Khong tim thay tai khoan '" + fromArgs + "' trong quick.login.accounts"
-                      + " -- hay dang nhap bang tay.");
+                        "Không tìm thấy tài khoản '" + fromArgs + "' trong quick.login.accounts"
+                      + " -- hãy đăng nhập bằng tay.");
                 }
                 username = q.getUsername();
                 password = q.getPassword();
-                source = "tham so --login";
+                source = "tham số --login";
             }
         } else {
             String auto = QuickLogin.autoUsername();
@@ -145,8 +145,8 @@ public final class AppFlow {
             QuickAccount q = QuickLogin.find(auto);
             if (q == null) {
                 return AutoLoginResult.failed(auto,
-                    "Khong tim thay tai khoan '" + auto + "' trong quick.login.accounts"
-                  + " (khoa quick.login.auto) -- hay dang nhap bang tay.");
+                    "Không tìm thấy tài khoản '" + auto + "' trong quick.login.accounts"
+                  + " (khóa quick.login.auto) -- hãy đăng nhập bằng tay.");
             }
             username = q.getUsername();
             password = q.getPassword();
@@ -157,14 +157,14 @@ public final class AppFlow {
             Account acc = new AccountDao().authenticate(username, password);
             if (acc == null) {
                 return AutoLoginResult.failed(username,
-                    "Tai khoan '" + username + "' sai mat khau -- hay dang nhap bang tay.");
+                    "Tài khoản '" + username + "' sai mật khẩu -- hãy đăng nhập bằng tay.");
             }
             LoginPrefs.saveLastUsername(acc.getUsername());
             return AutoLoginResult.success(acc, source);
         } catch (Exception ex) {
             return AutoLoginResult.failed(username,
-                "Khong xac thuc duoc '" + username + "': " + ex.getMessage()
-              + " -- hay dang nhap bang tay.");
+                "Không xác thực được '" + username + "': " + ex.getMessage()
+              + " -- hãy đăng nhập bằng tay.");
         }
     }
 
@@ -189,8 +189,8 @@ public final class AppFlow {
             if (a.startsWith(ARG_PREFIX)) {
                 value = a.substring(ARG_PREFIX.length()).trim();
             } else {
-                System.out.println("[LOI THAM SO] Khong hieu tham so '" + a
-                    + "'. Chi ho tro --login=<username>[:<password>].");
+                System.out.println("[LỖI THAM SỐ] Không hiểu tham số '" + a
+                    + "'. Chỉ hỗ trợ --login=<username>[:<password>].");
             }
         }
         return (value == null || value.isEmpty()) ? null : value;
@@ -205,9 +205,9 @@ public final class AppFlow {
      * {@code MainWindow} (mục 3.3).
      */
     public static void announceAutoLogin(AutoLoginResult r) {
-        System.out.println("[AUTO-LOGIN] Da dang nhap san bang '" + r.username()
-            + "' (nguon: " + r.source() + ")."
-            + " Dat quick.login.auto= trong config.properties de tat.");
+        System.out.println("[AUTO-LOGIN] Đã đăng nhập sẵn bằng '" + r.username()
+            + "' (nguồn: " + r.source() + ")."
+            + " Đặt quick.login.auto= trong config.properties để tắt.");
     }
 
     // ------------------------------------------------------------------

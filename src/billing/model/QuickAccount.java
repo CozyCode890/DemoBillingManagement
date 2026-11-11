@@ -18,7 +18,7 @@ public class QuickAccount {
 
     private final String username;
     private final String password;
-    private final String label;      // nhãn hiển thị, ví dụ "Thu ngan"
+    private final String label;      // nhãn hiển thị, ví dụ "Thu ngân"
 
     public QuickAccount(String username, String password, String label) {
         this.username = username;
@@ -29,7 +29,7 @@ public class QuickAccount {
     /**
      * Phân tích chuỗi cấu hình thành danh sách tài khoản nhanh.
      *
-     * <p>Cú pháp: {@code "user1:pass1:Nhan 1,user2:pass2:Nhan 2"}
+     * <p>Cú pháp: {@code "user1:pass1:Nhãn 1,user2:pass2:Nhãn 2"}
      *
      * <p>Quy tắc, viết rõ ra đây để người sau không phải đoán:
      * <ul>
@@ -67,8 +67,8 @@ public class QuickAccount {
             String password = (f.length >= 2) ? f[1] : null;
 
             if (username.isEmpty() || password == null || password.isEmpty()) {
-                System.out.println("[quick.login.accounts] Bo qua muc sai cu phap: '" + item.trim()
-                    + "'. Dung cu phap: <username>:<password>[:<nhan>]");
+                System.out.println("[quick.login.accounts] Bỏ qua mục sai cú pháp: '" + item.trim()
+                    + "'. Đúng cú pháp: <username>:<password>[:<nhãn>]");
                 continue;
             }
 
@@ -78,7 +78,7 @@ public class QuickAccount {
         return list;
     }
 
-    /** Nhãn đầy đủ cho nút: {@code "Thu ngan (cashier)"}. Không bao giờ chứa mật khẩu. */
+    /** Nhãn đầy đủ cho nút: {@code "Thu ngân (cashier)"}. Không bao giờ chứa mật khẩu. */
     public String getButtonLabel() {
         return label + " (" + username + ")";
     }

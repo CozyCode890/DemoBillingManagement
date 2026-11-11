@@ -21,7 +21,7 @@ import java.math.BigDecimal;
  *    <li>#4 số lượng bị làm tròn về số nguyên ({@code quantity.intValue()}) --
  *        {@code 1,5 KG} thịt in thành {@code 1};</li>
  *    <li>#5 nhánh tiền mặt là CODE CHẾT: so {@code "Tiền mặt"} (có dấu) với
- *        {@code methodLabel()} trả {@code "Tien mat"} (không dấu), nên 12 dòng
+ *        {@code methodLabel()} trả {@code "Tiền mặt"} (không dấu), nên 12 dòng
  *        "Tiền khách đưa / Tiền thừa thối lại" <b>chưa từng chạy một lần nào</b>;</li>
  *    <li>#6 chỉ đọc {@code payments.get(0)} -- mất hẳn lần thanh toán thứ hai,
  *        trên một khung mang tên "một hoá đơn có thể có NHIỀU dòng thanh toán";</li>
@@ -74,9 +74,9 @@ public class ReceiptDialog {
                     return;
                 }
                 if (d.header.isEmpty()) {
-                    Ui.warn(parent, "Da luu hoa don " + invoiceId
-                                  + " nhung khong doc lai duoc de in.",
-                            "Khong doc duoc hoa don");
+                    Ui.warn(parent, "Đã lưu hóa đơn " + invoiceId
+                                  + " nhưng không đọc lại được để in.",
+                            "Không đọc được hóa đơn");
                     return;
                 }
                 display(parent, invoiceId, d);
@@ -107,10 +107,10 @@ public class ReceiptDialog {
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 10));
 
-        JButton btPrint = new JButton("In hoa don");
+        JButton btPrint = new JButton("In hóa đơn");
         btPrint.addActionListener(e -> doPrint(dialog, pane));
 
-        JButton btClose = new JButton("Dong");
+        JButton btClose = new JButton("Đóng");
         btClose.addActionListener(e -> dialog.dispose());
 
         buttons.add(btPrint);
@@ -190,7 +190,7 @@ public class ReceiptDialog {
         if (!address.isEmpty()) {
             s.append("<font size=\"-1\" color=\"#555555\">").append(esc(address)).append("</font><br/>");
         }
-        s.append("<font size=\"+1\"><b>HOA DON BAN LE</b></font>");
+        s.append("<font size=\"+1\"><b>HÓA ĐƠN BÁN LẺ</b></font>");
         s.append("</div>");
         s.append(dash());
 
@@ -199,11 +199,11 @@ public class ReceiptDialog {
         s.append(dash());
 
         // --- Thông tin giao dịch ---------------------------------------
-        s.append(kv("Ma HD",      esc(invoiceId)));
-        s.append(kv("Thoi gian",  esc(date) + " " + esc(time)));
-        s.append(kv("Quay",       esc(counter)));
-        s.append(kv("Thu ngan",   esc(cashier)));
-        s.append(kv("Khach hang", esc(customer)));
+        s.append(kv("Mã HD",      esc(invoiceId)));
+        s.append(kv("Thời gian",  esc(date) + " " + esc(time)));
+        s.append(kv("Quầy",       esc(counter)));
+        s.append(kv("Thu ngân",   esc(cashier)));
+        s.append(kv("Khách hàng", esc(customer)));
         s.append(dash());
 
         // --- Các dòng hàng: SL qua Ui.qty (lỗi #4), VAT qua Ui.percent ---
@@ -212,12 +212,12 @@ public class ReceiptDialog {
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:12px;\">");
         s.append("<tr style=\"color:#666666;\">")
-         .append("<th align=\"left\">Ten hang</th>")
+         .append("<th align=\"left\">Tên hàng</th>")
          .append("<th align=\"right\" nowrap>SL</th>")
          .append("<th align=\"left\">DVT</th>")
-         .append("<th align=\"right\" nowrap>Don gia</th>")
-         .append("<th align=\"right\" nowrap>Giam gia</th>")
-         .append("<th align=\"right\" nowrap>Thanh tien</th>")
+         .append("<th align=\"right\" nowrap>Đơn giá</th>")
+         .append("<th align=\"right\" nowrap>Giảm giá</th>")
+         .append("<th align=\"right\" nowrap>Thành tiền</th>")
          .append("<th align=\"right\" nowrap>VAT %</th>")
          .append("</tr>");
         for (Object[] l : d.lines.rows) {
@@ -234,16 +234,16 @@ public class ReceiptDialog {
         }
         s.append("</table>");
         s.append("<div align=\"right\"><font size=\"-2\" color=\"#888888\">")
-         .append("don gia da gom VAT -- thue suat chi la thong tin")
+         .append("đơn giá đã gồm VAT -- thuế suất chỉ là thông tin")
          .append("</font></div>");
         s.append(dash());
 
         // --- Tổng tiền: ba con số của sp_get_invoice_header -------------
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:13px;\">");
-        s.append(row2("Tong tien hang", Ui.money(beforeDisc), false));
-        s.append(row2("Giam gia / Khuyen mai", Ui.money(totalDisc), false));
-        s.append(row2("TONG CONG", Ui.money(due), true));
+        s.append(row2("Tổng tiền hàng", Ui.money(beforeDisc), false));
+        s.append(row2("Giảm giá / Khuyến mãi", Ui.money(totalDisc), false));
+        s.append(row2("Tổng cộng", Ui.money(due), true));
         s.append("</table>");
         s.append(dash());
 
@@ -253,15 +253,15 @@ public class ReceiptDialog {
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:12px;\">");
         s.append("<tr style=\"color:#666666;\">")
-         .append("<th align=\"left\">Phuong thuc</th>")
-         .append("<th align=\"right\" nowrap>So tien</th>")
-         .append("<th align=\"right\" nowrap>Khach dua</th>")
-         .append("<th align=\"right\" nowrap>Tien thoi</th>")
-         .append("<th align=\"left\">Chi tiet</th>")
+         .append("<th align=\"left\">Phương thức</th>")
+         .append("<th align=\"right\" nowrap>Số tiền</th>")
+         .append("<th align=\"right\" nowrap>Khách đưa</th>")
+         .append("<th align=\"right\" nowrap>Tiền thối</th>")
+         .append("<th align=\"left\">Chi tiết</th>")
          .append("</tr>");
         if (d.payments.rows.isEmpty()) {
             s.append("<tr><td colspan=\"5\" style=\"color:#999999;\">")
-             .append("(chua co dong thanh toan nao)</td></tr>");
+             .append("(chưa có dòng thanh toán nào)</td></tr>");
         }
         for (Object[] p : d.payments.rows) {
             BigDecimal amt  = Ui.dec(p[1]);
@@ -282,15 +282,15 @@ public class ReceiptDialog {
 
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:13px;\">");
-        s.append(row2("Tien khach dua", Ui.money(tendered), false));
-        s.append(row2("Da ghi nhan", Ui.money(recorded), false));
-        s.append(row2("Tien thoi lai", Ui.money(change), true));
+        s.append(row2("Tiền khách đưa", Ui.money(tendered), false));
+        s.append(row2("Đã ghi nhận", Ui.money(recorded), false));
+        s.append(row2("Tiền thối lại", Ui.money(change), true));
         s.append("</table>");
 
         // --- Chân hoá đơn ----------------------------------------------
         s.append(dash());
         s.append("<div align=\"center\"><font size=\"-1\" color=\"#777777\">")
-         .append("Cam on Quy khach &amp; Hen gap lai!")
+         .append("Cảm ơn Quý khách &amp; Hẹn gặp lại!")
          .append("</font></div>");
 
         s.append("</body></html>");
@@ -317,7 +317,7 @@ public class ReceiptDialog {
         } else if (st == InvoiceStatus.OPEN) {
             text  = st.display().toUpperCase();
             if (missing.signum() > 0) {
-                text += " -- con thieu " + Ui.money(missing);
+                text += " -- còn thiếu " + Ui.money(missing);
             }
             color = "#d35400";
         } else {

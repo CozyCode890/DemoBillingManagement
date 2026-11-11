@@ -33,7 +33,7 @@ public class Db {
         try (InputStream in = new FileInputStream("config.properties")) {
             p.load(in);
         } catch (Exception e) {
-            System.out.println("[Db] Khong doc duoc config.properties, dung gia tri mac dinh.");
+            System.out.println("[Db] Không đọc được config.properties, dùng giá trị mặc định.");
         }
         url      = p.getProperty("db.url",
                      "jdbc:mysql://localhost:3306/retail_billing"
@@ -62,7 +62,7 @@ public class Db {
     /** Thử kết nối -- dùng lúc khởi động app để báo lỗi sớm và rõ ràng. */
     public static String testConnection() {
         try (Connection c = Db.getConnection()) {
-            return "OK - da ket noi toi " + c.getMetaData().getURL();
+            return "OK - đã kết nối tới " + c.getMetaData().getURL();
         } catch (SQLException e) {
             return "LOI - " + e.getMessage();
         }

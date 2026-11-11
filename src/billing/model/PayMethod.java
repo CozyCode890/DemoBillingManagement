@@ -19,9 +19,9 @@ package billing.model;
  */
 public enum PayMethod {
 
-    CASH   ("Tien mat",      true),    // co tien khach dua -> co tien thoi
-    CARD   ("The ngan hang", false),
-    EWALLET("Vi dien tu",    false);
+    CASH   ("Tiền mặt",      true),    // co tien khach dua -> co tien thoi
+    CARD   ("Thẻ ngân hàng", false),
+    EWALLET("Ví điện tử",    false);
 
     private final String  label;
     private final boolean hasChange;
@@ -38,7 +38,7 @@ public enum PayMethod {
     public String label() { return label; }
 
     /**
-     * Phuong thuc nay co "tien khach dua" va do do co "tien thoi" hay khong.
+     * Phuong thuc nay co "tien khach dua" va do do co "Tiền thối" hay khong.
      *
      * CHO DUY NHAT tra loi cau hoi do -- thay cho phep so sanh
      * methodIndex == 0 rai khap NewInvoicePanel (plan/14 muc 3.1 diem 1-2).
@@ -53,7 +53,7 @@ public enum PayMethod {
      * tai lieu moi biet.
      */
     public String amountFieldLabel() {
-        return hasChange ? "Khach dua" : "So tien";
+        return hasChange ? "Khách đưa" : "Số tiền";
     }
 
     /**

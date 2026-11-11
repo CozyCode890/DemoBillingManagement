@@ -70,15 +70,15 @@ public class NewInvoicePanel extends JPanel {
     private final JComboBox<IdName> cbCashier = new JComboBox<>();
     private final CustomerPicker    customer  = new CustomerPicker(lookupDao);
     private final JSpinner          spDate;
-    private final JButton           btReloadLookups = new JButton("Tai lai");
+    private final JButton           btReloadLookups = new JButton("Tải lại");
 
     // --- Khung 2: thêm sản phẩm -------------------------------------
     private final JComboBox<Product> cbProduct = new JComboBox<>();
     private final JTextField         tfQty     = new JTextField("1", 6);
     private final JLabel             lbHint    = new JLabel(" ");
-    private final JButton            btAdd     = new JButton("Them vao hoa don");
-    private final JButton            btEditQty = new JButton("Sua so luong");
-    private final JButton            btDelLine = new JButton("Xoa dong dang chon");
+    private final JButton            btAdd     = new JButton("Thêm vào hóa đơn");
+    private final JButton            btEditQty = new JButton("Sửa số lượng");
+    private final JButton            btDelLine = new JButton("Xóa dòng đang chọn");
 
     // --- Khung 3: các dòng hàng -------------------------------------
     private final JTable tbCart = Ui.readOnlyTable();
@@ -89,18 +89,18 @@ public class NewInvoicePanel extends JPanel {
     private final JTextField tfAmount  = new JTextField(12);
     private final JLabel     lbEcho;
     private final JTable     tbPay     = Ui.readOnlyTable();
-    private final JButton    btAddPay  = new JButton("Them thanh toan");
-    private final JButton    btPayAll  = new JButton("Khach tra du bang tien mat");
-    private final JButton    btQr      = new JButton("Tao ma QR");
-    private final JButton    btDelPay  = new JButton("Xoa dong dang chon");
-    private final JButton    btClrPay  = new JButton("Xoa het");
+    private final JButton    btAddPay  = new JButton("Thêm thanh toán");
+    private final JButton    btPayAll  = new JButton("Khách trả đủ bằng tiền mặt");
+    private final JButton    btQr      = new JButton("Tạo mã QR");
+    private final JButton    btDelPay  = new JButton("Xóa dòng đang chọn");
+    private final JButton    btClrPay  = new JButton("Xóa hết");
 
     // --- Hàng tổng + nút lưu ----------------------------------------
     private final JLabel  lbTotal  = new JLabel();
     private final JLabel  lbPaid   = new JLabel();
     private final JLabel  lbLeft   = new JLabel();
     private final JLabel  lbChange = new JLabel();
-    private final JButton btSave   = new JButton("XUAT HOA DON  (INSERT + COMMIT)");
+    private final JButton btSave   = new JButton("XUẤT HÓA ĐƠN  (INSERT + COMMIT)");
 
     private final List<CartLine>     cart     = new ArrayList<>();
     private final List<PaymentEntry> payments = new ArrayList<>();
@@ -147,7 +147,7 @@ public class NewInvoicePanel extends JPanel {
     }
 
     /**
-     * Mô tả ngắn phần chưa lưu, ví dụ {@code "3 dong hang, 1 lan thanh toan"};
+     * Mô tả ngắn phần chưa lưu, ví dụ {@code "3 dòng hàng, 1 lần thanh toán"};
      * chuỗi rỗng nếu không có gì.
      *
      * <p>Hộp thoại đăng xuất cần nói rõ <i>sẽ mất bao nhiêu</i> -- "bạn có dữ
@@ -159,13 +159,13 @@ public class NewInvoicePanel extends JPanel {
         }
         StringBuilder sb = new StringBuilder();
         if (!cart.isEmpty()) {
-            sb.append(cart.size()).append(" dong hang");
+            sb.append(cart.size()).append(" dòng hàng");
         }
         if (!payments.isEmpty()) {
             if (sb.length() > 0) {
                 sb.append(", ");
             }
-            sb.append(payments.size()).append(" lan thanh toan");
+            sb.append(payments.size()).append(" lần thanh toán");
         }
         return sb.toString();
     }
@@ -178,7 +178,7 @@ public class NewInvoicePanel extends JPanel {
         spDate.setEditor(new JSpinner.DateEditor(spDate, "dd/MM/yyyy"));
 
         JPanel p = new JPanel(new GridBagLayout());
-        p.setBorder(BorderFactory.createTitledBorder("1. Thong tin hoa don"));
+        p.setBorder(BorderFactory.createTitledBorder("1. Thông tin hóa đơn"));
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(3, 6, 3, 6);
         g.anchor = GridBagConstraints.WEST;
@@ -189,23 +189,23 @@ public class NewInvoicePanel extends JPanel {
 
         // Hàng 1
         g.gridy = 0;
-        g.gridx = 0; p.add(new JLabel("Quay:"), g);
+        g.gridx = 0; p.add(new JLabel("Quầy:"), g);
         g.gridx = 1; p.add(cbCounter, g);
-        g.gridx = 2; p.add(new JLabel("Thu ngan:"), g);
+        g.gridx = 2; p.add(new JLabel("Thu ngân:"), g);
         g.gridx = 3; p.add(cbCashier, g);
         g.gridx = 4; p.add(btReloadLookups, g);
 
         // Hàng 2
         g.gridy = 1;
-        g.gridx = 0; p.add(new JLabel("Ngay ban:"), g);
+        g.gridx = 0; p.add(new JLabel("Ngày bán:"), g);
         g.gridx = 1; p.add(spDate, g);
-        g.gridx = 2; p.add(new JLabel("Khach (SDT):"), g);
+        g.gridx = 2; p.add(new JLabel("Khách (SDT):"), g);
         g.gridx = 3; g.gridwidth = 2; p.add(customer, g);
         g.gridwidth = 1;
 
         // Hàng 3: dòng mẹo -- thứ cả app sinh ra để minh hoạ, GIỮ NGUYÊN
-        JLabel note = new JLabel("<html><i>Meo: doi 'Ngay ban' ve nam ngoai "
-                + "roi them san pham -> don gia se lay theo GIA CU trong Price_History.</i></html>");
+        JLabel note = new JLabel("<html><i>Mẹo: đổi 'Ngày bán' về năm ngoái "
+                + "rồi thêm sản phẩm -> đơn giá sẽ lấy theo GIÁ CŨ trong Price_History.</i></html>");
         g.gridy = 2; g.gridx = 0; g.gridwidth = 5;
         p.add(note, g);
         return p;
@@ -213,22 +213,22 @@ public class NewInvoicePanel extends JPanel {
 
     private JComponent buildCenter() {
         JPanel bar = new JPanel(new GridBagLayout());
-        bar.setBorder(BorderFactory.createTitledBorder("2. Them san pham"));
+        bar.setBorder(BorderFactory.createTitledBorder("2. Thêm sản phẩm"));
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(3, 6, 3, 6);
         g.anchor = GridBagConstraints.WEST;
 
         cbProduct.setPreferredSize(new Dimension(360, 26));
-        tfQty.setToolTipText("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN"
-                + " (toi da 3 chu so) -- KHONG phai dau tach nghin.<br>"
-                + "Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br>"
-                + "<i>Khac hẳn o tien ben duoi, noi dau <b>.</b> la dau tach nghin.</i><br>"
-                + "Enter = Them vao hoa don.</html>");
+        tfQty.setToolTipText("<html>Dấu <b>,</b> hoặc <b>.</b> là dấu THẬP PHÂN"
+                + " (tối đa 3 chữ số) -- KHÔNG phải dấu tách nghìn.<br>"
+                + "Đúng: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br>"
+                + "<i>Khác hẳn ở tiền bên dưới, nơi dấu <b>.</b> là dấu tách nghìn.</i><br>"
+                + "Enter = Thêm vào hóa đơn.</html>");
 
         g.gridy = 0;
-        g.gridx = 0; bar.add(new JLabel("San pham:"), g);
+        g.gridx = 0; bar.add(new JLabel("Sản phẩm:"), g);
         g.gridx = 1; bar.add(cbProduct, g);
-        g.gridx = 2; bar.add(new JLabel("So luong:"), g);
+        g.gridx = 2; bar.add(new JLabel("Số lượng:"), g);
         g.gridx = 3; bar.add(tfQty, g);
         g.gridx = 4; bar.add(btAdd, g);
         g.gridx = 5; bar.add(btEditQty, g);
@@ -240,7 +240,7 @@ public class NewInvoicePanel extends JPanel {
 
         JScrollPane sp = new JScrollPane(tbCart);
         sp.setBorder(BorderFactory.createTitledBorder(
-                "3. Cac dong hang (se thanh bang Invoice_Line)"));
+                "3. Các dòng hàng (sẽ thành bảng Invoice_Line)"));
 
         JPanel center = new JPanel(new BorderLayout(6, 6));
         center.add(bar, BorderLayout.NORTH);
@@ -260,21 +260,21 @@ public class NewInvoicePanel extends JPanel {
     private JComponent buildFooter() {
         JPanel pay = new JPanel(new GridBagLayout());
         pay.setBorder(BorderFactory.createTitledBorder(
-                "4. Thanh toan (mot hoa don co the co NHIEU dong thanh toan)"));
+                "4. Thanh toán (một hóa đơn có thể có NHIỀU dòng thanh toán)"));
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(3, 6, 3, 6);
         g.anchor = GridBagConstraints.WEST;
 
-        tfAmount.setToolTipText("<html>Dau <b>.</b> la dau TACH NGHIN (phai du 3 chu so),"
-                + " dau <b>,</b> la dau thap phan.<br>"
+        tfAmount.setToolTipText("<html>Dấu <b>.</b> là dấu TÁCH NGHÌN (phải đủ 3 chữ số),"
+                + " dấu <b>,</b> là dấu thập phân.<br>"
                 + "Dung: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>"
                 + "Sai : <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br>"
-                + "<i>Khac hẳn o so luong o tren, noi dau <b>.</b> la dau thap phan.</i><br>"
-                + "Enter = Them thanh toan.</html>");
+                + "<i>Khác hẳn ở số lượng ở trên, nơi dấu <b>.</b> là dấu thập phân.</i><br>"
+                + "Enter = Thêm thanh toán.</html>");
 
         // Hàng 1: phương thức + ô tiền + nhãn vọng lại
         g.gridy = 0;
-        g.gridx = 0; pay.add(new JLabel("Phuong thuc:"), g);
+        g.gridx = 0; pay.add(new JLabel("Phương thức:"), g);
         g.gridx = 1; pay.add(cbMethod, g);
         g.gridx = 2; pay.add(lbAmount, g);
         g.gridx = 3; pay.add(tfAmount, g);
@@ -508,9 +508,9 @@ public class NewInvoicePanel extends JPanel {
     private void addToCart() {
         final Product p = (Product) cbProduct.getSelectedItem();
         if (p == null) {
-            Ui.warn(this, "Chua chon san pham nao.\n"
-                        + "Neu o chon trong: bam \"Tai lai\" o khung 1 de nap lai danh muc.",
-                    "Chua chon san pham");
+            Ui.warn(this, "Chưa chọn sản phẩm nào.\n"
+                        + "Nếu ô chọn trống: bấm \"Tải lại\" ở khung 1 để nạp lại danh mục.",
+                    "Chưa chọn sản phẩm");
             return;
         }
         final BigDecimal qty = Ui.readQuantity(this, tfQty.getText(), null, p.unit);
@@ -536,9 +536,9 @@ public class NewInvoicePanel extends JPanel {
                 }
                 if (pr.price == null) {
                     Ui.warn(NewInvoicePanel.this,
-                            "San pham nay chua co gia nao co hieu luc truoc ngay "
-                          + date + ".\nHay chon ngay muon hon.",
-                            "Khong co gia tai ngay ban");
+                            "Sản phẩm này chưa có giá nào có hiệu lực trước ngày "
+                          + date + ".\nHãy chọn ngày muộn hơn.",
+                            "Không có giá tại ngày bán");
                     return;
                 }
 
@@ -550,9 +550,9 @@ public class NewInvoicePanel extends JPanel {
                     hint(date, pr, "");
                 } else if (existing != null) {
                     cart.add(priceLine(p, qty, pr));
-                    hint(date, pr, "  Gia ngay " + date + " (" + Ui.money(pr.price)
-                            + ") khac don gia cua dong da co (" + Ui.money(existing.unitPrice)
-                            + ") -> them dong moi.");
+                    hint(date, pr, "  Giá ngày " + date + " (" + Ui.money(pr.price)
+                            + ") khác đơn giá của dòng đã có (" + Ui.money(existing.unitPrice)
+                            + ") -> thêm dòng mới.");
                 } else {
                     cart.add(priceLine(p, qty, pr));
                     hint(date, pr, "");
@@ -565,8 +565,8 @@ public class NewInvoicePanel extends JPanel {
     }
 
     private void hint(LocalDate date, Priced pr, String extra) {
-        lbHint.setText(I18n.richText("Gia ngay " + date + " = " + Ui.money(pr.price)
-                + (pr.note.isEmpty() ? "  (khong co KM)" : "  " + pr.note) + extra));
+        lbHint.setText(I18n.richText("Giá ngày " + date + " = " + Ui.money(pr.price)
+                + (pr.note.isEmpty() ? "  (không có KM)" : "  " + pr.note) + extra));
     }
 
     private void setAddBusy(boolean busy) {
@@ -577,7 +577,7 @@ public class NewInvoicePanel extends JPanel {
     /**
      * Sửa số lượng của dòng đang chọn.
      *
-     * <p>KHÔNG mượn ô "So luong" của khung 2 nữa -- một nửa nguyên nhân của lỗi
+     * <p>KHÔNG mượn ô "Số lượng" của khung 2 nữa -- một nửa nguyên nhân của lỗi
      * #2 là chỗ đó: ô kia dùng cho việc thêm, nên người dùng không trông đợi nó
      * cũng là ô sửa. Hộp thoại điền sẵn {@code Ui.qtyInput(...)} (không dấu
      * nghìn, vì ô nhập hiểu {@code '.'} là dấu thập phân) và đọc bằng
@@ -586,13 +586,13 @@ public class NewInvoicePanel extends JPanel {
     private void editQuantity() {
         int row = tbCart.getSelectedRow();
         if (row < 0 || row >= cart.size()) {
-            Ui.warn(this, "Chua chon dong hang nao de sua.", "Chua chon dong hang");
+            Ui.warn(this, "Chưa chọn dòng hàng nào để sửa.", "Chưa chọn dòng hàng");
             return;
         }
         final CartLine line = cart.get(row);
         String input = I18n.showInputDialog(this,
-                "So luong moi cho \"" + line.product.name + "\" (" + line.product.unit + "):\n\n"
-              + "Dau , hoac . la dau thap phan, toi da 3 chu so.",
+                "Số lượng mới cho \"" + line.product.name + "\" (" + line.product.unit + "):\n\n"
+              + "Dấu , hoặc . là dấu thập phân, tối đa 3 chữ số.",
                 Ui.qtyInput(line.quantity));
         final BigDecimal newQty = Ui.readQuantity(this, input, null, line.product.unit);
         if (newQty == null) return;
@@ -618,8 +618,8 @@ public class NewInvoicePanel extends JPanel {
                 }
                 if (pr.price == null) {
                     Ui.warn(NewInvoicePanel.this,
-                            "San pham nay khong co gia nao co hieu luc truoc ngay " + date + ".",
-                            "Khong co gia tai ngay ban");
+                            "Sản phẩm này không có giá nào có hiệu lực trước ngày " + date + ".",
+                            "Không có giá tại ngày bán");
                     return;
                 }
                 int i = cart.indexOf(line);
@@ -727,7 +727,7 @@ public class NewInvoicePanel extends JPanel {
      * </pre>
      *
      * <p>Tách ra vì đây là chỗ dễ <b>hiểu ngược</b> nhất của cả khối (plan/14
-     * rủi ro #2: ai đó đọc "Khach dua" thành "số tiền ghi nhận" rồi đặt
+     * rủi ro #2: ai đó đọc "Khách đưa" thành "số tiền ghi nhận" rồi đặt
      * {@code recorded = tendered} trở lại). Một hàm thuần thì kiểm được trực
      * tiếp, không cần dựng cả màn hình.
      *
@@ -772,29 +772,29 @@ public class NewInvoicePanel extends JPanel {
      */
     private boolean addPayment(PayMethod m, BigDecimal typed, String detail1, String detail2) {
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao, chua biet phai thu bao nhieu.",
-                    "Chua co dong hang");
+            Ui.warn(this, "Hóa đơn chưa có dòng hàng nào, chưa biết phải thu bao nhiêu.",
+                    "Chưa có dòng hàng");
             return false;
         }
         BigDecimal left = remaining();
         if (left.signum() <= 0) {
-            Ui.warn(this, "Hoa don nay da thu du tien (" + Ui.money(totalDue()) + ").\n"
-                        + "Khong can them dong thanh toan nao nua.",
-                    "Da thu du tien");
+            Ui.warn(this, "Hóa đơn này đã thu đủ tiền (" + Ui.money(totalDue()) + ").\n"
+                        + "Không cần thêm dòng thanh toán nào nữa.",
+                    "Đã thu đủ tiền");
             return false;
         }
 
         Split split = splitPayment(m, typed, left);
         if (split == null) {
             Ui.warn(this,
-                    m.label() + " " + Ui.money(typed) + " nhieu hon so con thieu "
+                    m.label() + " " + Ui.money(typed) + " nhiều hơn số còn thiếu "
                   + Ui.money(left) + ".\n\n"
-                  + "Khong co duong tra lai cho " + m.label().toLowerCase()
-                  + ": bang Payment khong co cot tien thoi cho phuong thuc nay,\n"
-                  + "va phieu hoan tien nam ngoai pham vi ban demo.\n\n"
-                  + "Hay go dung " + Ui.money(left)
-                  + ", hoac chon \"Tien mat\" neu khach dua thua.",
-                    "So tien vuot qua so con thieu");
+                  + "Không có đường trả lại cho " + m.label().toLowerCase()
+                  + ": bảng Payment không có cột tiền thối cho phương thức này,\n"
+                  + "và phiếu hoàn tiền nằm ngoài phạm vi bản demo.\n\n"
+                  + "Hãy gõ đúng " + Ui.money(left)
+                  + ", hoặc chọn \"Tiền mặt\" nếu khách đưa thừa.",
+                    "Số tiền vượt quá số còn thiếu");
             return false;
         }
 
@@ -822,11 +822,11 @@ public class NewInvoicePanel extends JPanel {
     private void payRestInCash() {
         BigDecimal left = remaining();
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao.", "Chua co dong hang");
+            Ui.warn(this, "Hóa đơn chưa có dòng hàng nào.", "Chưa có dòng hàng");
             return;
         }
         if (left.signum() <= 0) {
-            Ui.warn(this, "Hoa don nay da thu du tien.", "Da thu du tien");
+            Ui.warn(this, "Hóa đơn này đã thu đủ tiền.", "Đã thu đủ tiền");
             return;
         }
         addPayment(PayMethod.CASH, left, null, null);
@@ -841,12 +841,12 @@ public class NewInvoicePanel extends JPanel {
      */
     private void showQr() {
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao.", "Chua co dong hang");
+            Ui.warn(this, "Hóa đơn chưa có dòng hàng nào.", "Chưa có dòng hàng");
             return;
         }
         BigDecimal left = remaining();
         if (left.signum() <= 0) {
-            Ui.warn(this, "Hoa don nay da thu du tien.", "Da thu du tien");
+            Ui.warn(this, "Hóa đơn này đã thu đủ tiền.", "Đã thu đủ tiền");
             return;
         }
 
@@ -855,13 +855,13 @@ public class NewInvoicePanel extends JPanel {
         if (typed.isEmpty()) {
             amount = left;
         } else {
-            amount = Ui.readMoney(this, typed, "So tien");
+            amount = Ui.readMoney(this, typed, "Số tiền");
             if (amount == null) return;
             if (amount.compareTo(left) > 0) {
-                Ui.warn(this, "So tien " + Ui.money(amount) + " nhieu hon so con thieu "
+                Ui.warn(this, "Số tiền " + Ui.money(amount) + " nhiều hơn số còn thiếu "
                             + Ui.money(left) + ".\n"
-                            + "Vi dien tu khong co tien thoi, hay go dung " + Ui.money(left) + ".",
-                        "So tien vuot qua so con thieu");
+                            + "Ví điện tử không có tiền thối, hãy gõ đúng " + Ui.money(left) + ".",
+                        "Số tiền vượt quá số còn thiếu");
                 return;
             }
         }
@@ -894,7 +894,7 @@ public class NewInvoicePanel extends JPanel {
      *       lệnh gọi thủ tục; chạy trên EDT thì MySQL chậm hoặc tắt là cả cửa
      *       sổ đứng hình. Giỏ hàng <b>còn nguyên</b> sau khi lỗi, để lưu lại.</li>
      *   <li>#17 bấm hai lần nhanh cho ra hai hoá đơn cho cùng một giỏ hàng.
-     *       Nút đổi nhãn thành {@code "Dang luu..."}, không chỉ mờ đi: một nút
+     *       Nút đổi nhãn thành {@code "Đang lưu..."}, không chỉ mờ đi: một nút
      *       mờ không giải thích gì thì người dùng bấm tiếp.</li>
      *   <li>#20 {@code counter.id} khi {@code loadLookups()} thất bại là một
      *       {@code NullPointerException} trần.</li>
@@ -902,7 +902,7 @@ public class NewInvoicePanel extends JPanel {
      */
     private void save() {
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao.", "Chua co dong hang");
+            Ui.warn(this, "Hóa đơn chưa có dòng hàng nào.", "Chưa có dòng hàng");
             return;
         }
         // Phép kiểm "chưa có thanh toán nào" phải đi TRƯỚC: giỏ có hàng mà
@@ -910,7 +910,7 @@ public class NewInvoicePanel extends JPanel {
         // dùng bấm Yes, rồi mới bị từ chối vì "Chua co dong thanh toan nao"
         // -- một câu hỏi vô ích (plan/13 mục 5.7).
         if (payments.isEmpty()) {
-            Ui.warn(this, "Chua co dong thanh toan nao.", "Chua co thanh toan");
+            Ui.warn(this, "Chưa có dòng thanh toán nào.", "Chưa có thanh toán");
             return;
         }
 
@@ -919,9 +919,9 @@ public class NewInvoicePanel extends JPanel {
         final IdName counter = (IdName) cbCounter.getSelectedItem();
         final IdName cashier = (IdName) cbCashier.getSelectedItem();
         if (counter == null || cashier == null) {
-            Ui.warn(this, "Chua nap duoc danh sach quay / thu ngan.\n"
-                        + "Kiem tra ket noi MySQL roi bam \"Tai lai\" o khung 1.",
-                    "Thieu du lieu danh muc");
+            Ui.warn(this, "Chưa nạp được danh sách quầy / thu ngân.\n"
+                        + "Kiểm tra kết nối MySQL rồi bấm \"Tải lại\" ở khung 1.",
+                    "Thiếu dữ liệu danh mục");
             return;                                  // thay cho NPE (loi #20)
         }
 
@@ -931,14 +931,14 @@ public class NewInvoicePanel extends JPanel {
             // Đây là chỗ DUY NHẤT người dùng gặp trạng thái OPEN lần đầu.
             // Không nói rõ hậu quả thì họ sẽ tưởng app vừa đánh mất hóa đơn.
             int ok = I18n.showConfirmDialog(this,
-                    "Tong hoa don " + Ui.money(due) + " nhung chi thanh toan "
-                  + Ui.money(paid) + " (thieu " + Ui.money(due.subtract(paid)) + ").\n\n"
-                  + "Van luu, nhung hoa don se o trang thai DANG LAP (OPEN):\n"
-                  + "  - Khong duoc tinh vao bao cao doanh thu\n"
-                  + "  - Khong tra hang duoc\n"
-                  + "  - Tu chuyen sang DA THANH TOAN khi thu du tien\n\n"
-                  + "Luu chu?",
-                    "Thieu tien -- hoa don se la OPEN", JOptionPane.YES_NO_OPTION);
+                    "Tổng hóa đơn " + Ui.money(due) + " nhưng chỉ thanh toán "
+                  + Ui.money(paid) + " (thiếu " + Ui.money(due.subtract(paid)) + ").\n\n"
+                  + "Vẫn lưu, nhưng hóa đơn sẽ ở trạng thái ĐANG LẬP (OPEN):\n"
+                  + "  - Không được tính vào báo cáo doanh thu\n"
+                  + "  - Không trả hàng được\n"
+                  + "  - Tự chuyển sang ĐÃ THANH TOÁN khi thu đủ tiền\n\n"
+                  + "Lưu chứ?",
+                    "Thiếu tiền -- hóa đơn sẽ là OPEN", JOptionPane.YES_NO_OPTION);
             if (ok != JOptionPane.YES_OPTION) return;
         }
 
@@ -979,7 +979,7 @@ public class NewInvoicePanel extends JPanel {
 
     private void setSaving(boolean saving) {
         btSave.setEnabled(!saving);
-        btSave.setText(I18n.text(saving ? "Dang luu..." : "XUAT HOA DON  (INSERT + COMMIT)"));
+        btSave.setText(I18n.text(saving ? "Đang lưu..." : "XUẤT HÓA ĐƠN  (INSERT + COMMIT)"));
         btAddPay.setEnabled(!saving);
         btPayAll.setEnabled(!saving);
         btAdd.setEnabled(!saving);
@@ -1026,8 +1026,8 @@ public class NewInvoicePanel extends JPanel {
      * nào dùng tới thuế suất, nên cột này kèm tooltip nói rõ điều đó.
      */
     private void refreshCartTable() {
-        String[] cols = {"Dong", "San pham", "SL", "DVT",
-                         "Don gia", "Giam gia", "Thanh tien", "VAT %"};
+        String[] cols = {"Dòng", "Sản phẩm", "SL", "DVT",
+                         "Đơn giá", "Giảm giá", "Thành tiền", "VAT %"};
         Object[][] data = new Object[cart.size()][cols.length];
         for (int i = 0; i < cart.size(); i++) {
             CartLine c = cart.get(i);
@@ -1043,8 +1043,8 @@ public class NewInvoicePanel extends JPanel {
         }
         ((DefaultTableModel) tbCart.getModel()).setDataVector(data, cols);
         Ui.autoSize(tbCart);
-        tbCart.setToolTipText("Cot VAT % la thue suat cua san pham;"
-                + " don gia trong Price_History DA GOM VAT.");
+        tbCart.setToolTipText("Cột VAT % là thuế suất của sản phẩm;"
+                + " đơn giá trong Price_History ĐÃ GỒM VAT.");
         refreshTotals();
     }
 
@@ -1053,7 +1053,7 @@ public class NewInvoicePanel extends JPanel {
      * thẻ / ví -- ba con số của hợp đồng mục 3.1 nhìn thấy được cùng lúc.
      */
     private void refreshPayTable() {
-        String[] cols = {"Phuong thuc", "So tien", "Khach dua", "Tien thoi", "Chi tiet"};
+        String[] cols = {"Phương thức", "Số tiền", "Khách đưa", "Tiền thối", "Chi tiết"};
         Object[][] data = new Object[payments.size()][cols.length];
         for (int i = 0; i < payments.size(); i++) {
             PaymentEntry p = payments.get(i);
@@ -1085,10 +1085,10 @@ public class NewInvoicePanel extends JPanel {
         BigDecimal left   = remaining();
         BigDecimal change = totalChange();
 
-        lbTotal.setText(I18n.richText("Tong: " + Ui.money(due)));
-        lbPaid.setText(I18n.richText("Da thu: " + Ui.money(paid)));
-        lbLeft.setText(I18n.richText("Con thieu: " + Ui.money(left)));
-        lbChange.setText(I18n.richText("Tien thoi: " + Ui.money(change)));
+        lbTotal.setText(I18n.richText("Tổng: " + Ui.money(due)));
+        lbPaid.setText(I18n.richText("Đã thu: " + Ui.money(paid)));
+        lbLeft.setText(I18n.richText("Còn thiếu: " + Ui.money(left)));
+        lbChange.setText(I18n.richText("Tiền thối: " + Ui.money(change)));
         lbLeft.setForeground(left.signum() > 0 ? Color.RED.darker() : new Color(0, 110, 0));
     }
 }

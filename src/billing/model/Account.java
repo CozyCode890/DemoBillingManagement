@@ -37,7 +37,7 @@ public class Account {
     /**
      * Mã nhân viên trong bảng Cashier, hoặc null nếu tài khoản không gắn với
      * nhân viên nào. Cột `Return.Approved_By` đòi đúng một `Cashier_ID`, nên
-     * đây là giá trị duy nhất dùng được làm "người duyệt" khi trả hàng.
+     * đây là giá trị duy nhất dùng được làm "Người duyệt" khi trả hàng.
      */
     public String getCashierId() {
         return cashierId;

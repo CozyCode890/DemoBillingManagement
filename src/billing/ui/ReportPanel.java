@@ -21,7 +21,7 @@ public class ReportPanel extends JPanel {
 
     private final ReportDao dao = new ReportDao();
 
-    private final JTextArea taSql   = Ui.sqlBox("-- Bam mot nut o tren de chay bao cao");
+    private final JTextArea taSql   = Ui.sqlBox("-- Bấm một nút ở trên để chạy báo cáo");
     private final JTextArea taWhat  = new JTextArea(3, 40);
     private final JTable    tbData  = Ui.readOnlyTable();
 
@@ -45,32 +45,32 @@ public class ReportPanel extends JPanel {
         taWhat.setMargin(new Insets(8, 8, 8, 8));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
-        buttons.setBorder(BorderFactory.createTitledBorder("Chon bao cao"));
+        buttons.setBorder(BorderFactory.createTitledBorder("Chọn báo cáo"));
 
-        buttons.add(makeButton("2. Doanh thu 7 ngay / cua hang",
+        buttons.add(makeButton("2. Doanh thu 7 ngày / cửa hàng",
                 ReportDao.SQL_DAILY_TAKINGS,
-                "Doanh thu tung NGAY cua tung CUA HANG trong 7 ngay gan nhat. "
-              + "Hoa don khong noi thang toi Shop nen phai di vong: Invoice -> Counter -> Shop. "
-              + "GROUP BY hai cot (shop, ngay) nen moi dong ket qua la mot o trong bang cheo.",
+                "Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất. "
+              + "Hóa đơn không nối thẳng tới Shop nên phải đi vòng: Invoice -> Counter -> Shop. "
+              + "GROUP BY hai cột (shop, ngày) nên mỗi dòng kết quả là một ô trong bảng chéo.",
                 dao::dailyTakings));
 
-        buttons.add(makeButton("3. San pham tang gia > 10%",
+        buttons.add(makeButton("3. Sản phẩm tăng giá > 10%",
                 ReportDao.SQL_PRICE_RISE,
-                "SELF JOIN: noi bang Price_History voi CHINH NO de dat gia moi canh gia cu. "
-              + "Subquery MAX(...) tim moc gia LIEN TRUOC cua cung san pham. "
-              + "Dieu kien: gia moi > gia cu * 1.10 va nam trong nam nay.",
+                "SELF JOIN: nối bảng Price_History với CHÍNH NÓ để đặt giá mới cạnh giá cũ. "
+              + "Subquery MAX(...) tìm mốc giá LIỀN TRƯỚC của cùng sản phẩm. "
+              + "Điều kiện: giá mới > giá cũ * 1.10 và nằm trong năm nay.",
                 dao::priceRise));
 
-        buttons.add(makeButton("4. Thu ngan gio hang TB cao nhat",
+        buttons.add(makeButton("4. Thu ngân có giá trị hóa đơn trung bình cao nhất",
                 ReportDao.SQL_BEST_CASHIER,
-                "Bay pho bien: AVG thang tren Invoice_Line se ra trung binh moi DONG chu khong phai moi HOA DON. "
-              + "Phai tinh tong tien tung hoa don truoc (subquery), roi moi AVG theo thu ngan.",
+                "Bẫy phổ biến: AVG thẳng trên Invoice_Line sẽ ra trung bình mỗi DÒNG chứ không phải mỗi HÓA ĐƠN. "
+              + "Phải tính tổng tiền từng hóa đơn trước (subquery), rồi mới AVG theo thu ngân.",
                 dao::bestCashier));
 
-        buttons.add(makeButton("5. Hoa don tra hang > 50%",
+        buttons.add(makeButton("5. Hóa đơn trả hàng > 50%",
                 ReportDao.SQL_BIG_RETURNS,
-                "Hai subquery: mot tinh tong hoa don, mot tinh tien tra lai. "
-              + "Tien tra lai tinh theo TY LE (SL tra / SL mua) nhan thanh tien, de phan giam gia cung duoc hoan dung ty le.",
+                "Hai subquery: một tính tổng hóa đơn, một tính tiền trả lại. "
+              + "Tiền trả lại tính theo TỶ LỆ (SL trả / SL mua) nhân thành tiền, để phần giảm giá cũng được hoàn đúng tỷ lệ.",
                 dao::bigReturns));
 
         // Chữ giải thích SỬA Ở KHỐI 6 cùng lúc với câu truy vấn: bản cũ nói
@@ -79,14 +79,14 @@ public class ReportPanel extends JPanel {
         // trăm dòng, và báo cáo gộp chúng lại (plan/15 mục 5.3).
         // Một chữ giải thích ghim bằng tay thì không có gì báo khi nó hết
         // đúng -- nên nó phải được sửa CÙNG LÚC với thủ tục.
-        buttons.add(makeButton("Bonus: hoa don cu giu gia cu",
+        buttons.add(makeButton("Bonus: hóa đơn cũ giữ giá cũ",
                 ReportDao.SQL_OLD_PRICE_PROOF,
-                "Cot 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). "
-              + "Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). "
-              + "Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: "
-              + "'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, "
-              + "va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai "
-              + "hoa don INV-OLD-* tu nam truoc.",
+                "Cột 'Gia_ghi_tren_HD' lấy từ Invoice_Line (đã đóng băng lúc bán). "
+              + "Cột 'Gia_hom_nay' gọi fn_get_product_price(barcode, CURDATE()). "
+              + "Báo cáo GOM theo (sản phẩm, đơn giá đã đóng băng), nên mỗi dòng trả lời: "
+              + "'có bao nhiêu dòng hàng đang ghi giá này, bán từ ngày nào đến ngày nào, "
+              + "và giá hôm nay là bao nhiêu'. Dòng có 'Ban_tu_ngay' xa nhất chính là hai "
+              + "hóa đơn INV-OLD-* từ năm trước.",
                 dao::oldPriceProof));
 
         JScrollPane spSql = new JScrollPane(taSql);
@@ -94,11 +94,11 @@ public class ReportPanel extends JPanel {
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
         top.add(buttons, BorderLayout.NORTH);
-        top.add(Ui.titled("Y nghia cau truy van", new JScrollPane(taWhat)), BorderLayout.CENTER);
-        top.add(Ui.titled("Cau SQL dang chay", spSql), BorderLayout.SOUTH);
+        top.add(Ui.titled("Ý nghĩa câu truy vấn", new JScrollPane(taWhat)), BorderLayout.CENTER);
+        top.add(Ui.titled("Câu SQL đang chạy", spSql), BorderLayout.SOUTH);
 
         add(top, BorderLayout.NORTH);
-        add(Ui.titled("Ket qua", new JScrollPane(tbData)), BorderLayout.CENTER);
+        add(Ui.titled("Kết quả", new JScrollPane(tbData)), BorderLayout.CENTER);
     }
 
     /**
@@ -127,7 +127,7 @@ public class ReportPanel extends JPanel {
             // Khoá cả năm nút và đổi nhãn nút đang chạy: một cửa sổ không
             // phản hồi mà không nói gì thì người dùng tưởng app treo.
             setButtonsEnabled(false);
-            b.setText(I18n.richText(label + " -- dang chay..."));
+            b.setText(I18n.richText(label + " -- đang chạy..."));
 
             new SwingWorker<QueryResult, Void>() {
                 @Override
@@ -144,7 +144,7 @@ public class ReportPanel extends JPanel {
                         Ui.fill(tbData, qr);
                         if (qr.isEmpty()) {
                             I18n.showMessageDialog(ReportPanel.this,
-                                    "Cau lenh chay xong nhung khong co dong nao thoa dieu kien.");
+                                    "Câu lệnh chạy xong nhưng không có dòng nào thỏa điều kiện.");
                         }
                     } catch (Exception ex) {
                         Ui.error(ReportPanel.this, ex);

@@ -32,7 +32,7 @@ public final class AppConfig {
         try (InputStream in = new FileInputStream("config.properties")) {
             P.load(in);
         } catch (Exception e) {
-            System.out.println("[AppConfig] Khong doc duoc config.properties, dung gia tri mac dinh.");
+            System.out.println("[AppConfig] Không đọc được config.properties, dùng giá trị mặc định.");
         }
     }
 

@@ -26,22 +26,22 @@ public class Main {
         } catch (Exception ignore) { }
 
         System.out.println("=== Demo Retail Invoicing ===");
-        System.out.println("Dang thu ket noi: " + Db.getUrl());
+        System.out.println("Đang thử kết nối: " + Db.getUrl());
 
         String status = Db.testConnection();
         System.out.println(status);
 
         if (status.startsWith("LOI")) {
             String help =
-                "Khong ket noi duoc MySQL.\n\n"
+                "Không kết nối được MySQL.\n\n"
               + status + "\n\n"
-              + "Kiem tra lan luot:\n"
-              + "  1. MySQL 8 da chay chua?  (Services -> MySQL80 -> Running)\n"
-              + "  2. Da tao database chua?  Chay file sql/01_schema.sql va sql/02_seed.sql\n"
-              + "  3. Mat khau trong file config.properties da dung chua?\n"
-              + "  4. Neu loi 'No suitable driver': thieu file mysql-connector-j.jar\n"
-              + "     trong thu muc lib/. Chay setup.ps1 de tai ve.\n";
-            I18n.showMessageDialog(null, help, "Loi ket noi", JOptionPane.ERROR_MESSAGE);
+              + "Kiểm tra lần lượt:\n"
+              + "  1. MySQL 8 đã chạy chưa?  (Services -> MySQL80 -> Running)\n"
+              + "  2. Đã tạo database chưa?  Chạy file sql/01_schema.sql và sql/02_seed.sql\n"
+              + "  3. Mật khẩu trong file config.properties đã đúng chưa?\n"
+              + "  4. Nếu lỗi 'No suitable driver': thiếu file mysql-connector-j.jar\n"
+              + "     trong thư mục lib/. Chạy setup.ps1 để tải về.\n";
+            I18n.showMessageDialog(null, help, "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
             return;
         }
 

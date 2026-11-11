@@ -220,7 +220,7 @@ public class Ui {
      * {@code new BigDecimal("500.000") = 500}, ghi vào {@code Payment} 500
      * đồng, không một cảnh báo nào (plan/14 lỗi #1).
      *
-     * @param fieldLabel tên ô để ghép vào thông báo, ví dụ {@code "So tien"}
+     * @param fieldLabel tên ô để ghép vào thông báo, ví dụ {@code "Số tiền"}
      */
     public static BigDecimal readMoney(Component parent, String input, String fieldLabel) {
         return readMoneyInternal(parent, input, fieldLabel, false);
@@ -231,22 +231,22 @@ public class Ui {
         if (input == null) return null;                       // bấm Cancel
         String s = normalizeMoney(input);
         if (s.isEmpty()) {
-            warn(parent, "Chua nhap " + fieldLabel + ".", "Chua nhap so tien");
+            warn(parent, "Chưa nhập " + fieldLabel + ".", "Chưa nhập số tiền");
             return null;
         }
         if (!MONEY_IN.matcher(s).matches()) {
-            warn(parent, fieldLabel + " khong doc duoc: \"" + input + "\"\n\n"
-                       + "Dau . la dau tach nghin (phai du 3 chu so),\n"
-                       + "dau , la dau thap phan (toi da 2 chu so).\n\n"
-                       + "Dung:  500.000   |   1.234,50   |   500000\n"
+            warn(parent, fieldLabel + " không đọc được: \"" + input + "\"\n\n"
+                       + "Dấu . là dấu tách nghìn (phải đủ 3 chữ số),\n"
+                       + "dấu , là dấu thập phân (tối đa 2 chữ số).\n\n"
+                       + "Đúng:  500.000   |   1.234,50   |   500000\n"
                        + "Sai :  500.00    |   1.2.3      |   1,234",
-                    "So tien khong hop le");
+                    "Số tiền không hợp lệ");
             return null;
         }
         BigDecimal v = new BigDecimal(s.replace(".", "").replace(',', '.'));
         if (allowZero ? v.signum() < 0 : v.signum() <= 0) {
-            warn(parent, fieldLabel + (allowZero ? " khong duoc am." : " phai lon hon 0."),
-                    "So tien khong hop le");
+            warn(parent, fieldLabel + (allowZero ? " không được âm." : " phải lớn hơn 0."),
+                    "Số tiền không hợp lệ");
             return null;
         }
         return v.setScale(2, RoundingMode.HALF_UP);           // DECIMAL(12,2)
@@ -284,37 +284,37 @@ public class Ui {
         if (input == null) return null;                       // bấm Cancel
         String s = input.trim().replace(',', '.');
         if (s.isEmpty()) {
-            warn(parent, "Chua nhap so luong.", "So luong khong hop le");
+            warn(parent, "Chưa nhập số lượng.", "Số lượng không hợp lệ");
             return null;
         }
         if (s.indexOf('.') != s.lastIndexOf('.')) {
-            warn(parent, "Chi duoc mot dau thap phan trong so luong: " + input,
-                    "So luong khong hop le");
+            warn(parent, "Chỉ được một dấu thập phân trong số lượng: " + input,
+                    "Số lượng không hợp lệ");
             return null;
         }
         BigDecimal q;
         try {
             q = new BigDecimal(s);
         } catch (NumberFormatException ex) {
-            warn(parent, "So luong khong hop le: " + input
-                       + "\n\nDau , hoac . la dau thap phan, KHONG phai dau tach nghin.\n"
-                       + "Dung:  2   |   1,5   |   1.5   |   0,25",
-                    "So luong khong hop le");
+            warn(parent, "Số lượng không hợp lệ: " + input
+                       + "\n\nDấu , hoặc . là dấu thập phân, KHÔNG phải dấu tách nghìn.\n"
+                       + "Đúng:  2   |   1,5   |   1.5   |   0,25",
+                    "Số lượng không hợp lệ");
             return null;
         }
         if (q.scale() > 3) {
-            warn(parent, "Toi da 3 chu so thap phan (cot DECIMAL(10,3)).\n"
-                       + "Ban go: " + input,
-                    "So luong khong hop le");
+            warn(parent, "Tối đa 3 chữ số thập phân (cột DECIMAL(10,3)).\n"
+                       + "Bạn gõ: " + input,
+                    "Số lượng không hợp lệ");
             return null;
         }
         if (q.signum() <= 0) {
-            warn(parent, "So luong phai lon hon 0.", "So luong khong hop le");
+            warn(parent, "Số lượng phải lớn hơn 0.", "Số lượng không hợp lệ");
             return null;
         }
         if (max != null && q.compareTo(max) > 0) {
-            warn(parent, "Chi con " + qty(max) + " " + unit + " co the tra.",
-                    "So luong khong hop le");
+            warn(parent, "Chỉ còn " + qty(max) + " " + unit + " có thể trả.",
+                    "Số lượng không hợp lệ");
             return null;
         }
         return q;
@@ -425,7 +425,7 @@ public class Ui {
         ta.setWrapStyleWord(true);
         JScrollPane sp = new JScrollPane(ta);
         sp.setPreferredSize(new Dimension(650, 220));
-        I18n.showMessageDialog(parent, sp, I18n.text("Co loi xay ra"), JOptionPane.ERROR_MESSAGE);
+        I18n.showMessageDialog(parent, sp, I18n.text("Có lỗi xảy ra"), JOptionPane.ERROR_MESSAGE);
     }
 
     public static JPanel titled(String title, JComponent inner) {

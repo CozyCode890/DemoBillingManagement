@@ -39,11 +39,11 @@ public class MainWindow extends JFrame {
     /** Giữ làm field để {@link #refreshUserInfo()} vẽ lại được khi đổi vai trò. */
     private final JLabel lbInfo = new JLabel();
 
-    private final JButton btSwitchRole = new JButton("Doi vai tro ▾");
+    private final JButton btSwitchRole = new JButton("Đổi vai trò ▾");
     private final JButton btLanguage = new JButton();
-    private final JButton btLogout     = new JButton("Dang xuat");
+    private final JButton btLogout     = new JButton("Đăng xuất");
     private final JPopupMenu switchRoleMenu = new JPopupMenu();
-    private final JMenu languageMenu = new JMenu("Ngon ngu");
+    private final JMenu languageMenu = new JMenu("Ngôn ngữ");
     private final JRadioButtonMenuItem englishMenuItem = new JRadioButtonMenuItem("English");
     private final JRadioButtonMenuItem vietnameseMenuItem = new JRadioButtonMenuItem("Tiếng Việt");
 
@@ -71,10 +71,10 @@ public class MainWindow extends JFrame {
         // Lưu hóa đơn xong thì danh sách bên tab 2 tự tải lại.
         newInvoice = new NewInvoicePanel(viewPanel::reload);
 
-        tabs.addTab("1. Lap hoa don",  newInvoice);
+        tabs.addTab("1. Lập hóa đơn",  newInvoice);
         tabs.addTab("2. Tra cứu dữ liệu",  searchPanel);
-        tabs.addTab("3. Xem hoa don (Database)",  viewPanel);
-        tabs.addTab("4. Bao cao",      new ReportPanel());
+        tabs.addTab("3. Xem hóa đơn (Database)",  viewPanel);
+        tabs.addTab("4. Báo cáo",      new ReportPanel());
 
         // Mỗi lần chuyển sang tab xem hoa đơn thì cập nhật quyền.
         tabs.addChangeListener(e -> {
@@ -134,12 +134,12 @@ public class MainWindow extends JFrame {
         // luận "app này không có đăng nhập". Dấu hiệu còn lại là dòng
         // [AUTO-LOGIN] in ra console lúc khởi động.
         if (autoLogin) {
-            JLabel lbAuto = new JLabel("(DANG NHAP TU DONG)");
+            JLabel lbAuto = new JLabel("(ĐĂNG NHẬP TỰ ĐỘNG)");
             lbAuto.setFont(new Font("Consolas", Font.BOLD, 12));
             lbAuto.setForeground(COLOR_AUTO_LOGIN);
             lbAuto.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
-            lbAuto.setToolTipText("App da dang nhap san, khong qua man hinh dang nhap."
-                + " Dat quick.login.auto= (de trong) trong config.properties de tat.");
+            lbAuto.setToolTipText("App đã đăng nhập sẵn, không qua màn hình đăng nhập."
+                + " Đặt quick.login.auto= (để trống) trong config.properties để tắt.");
             left.add(lbAuto);
         }
         left.add(Box.createHorizontalGlue());
@@ -147,7 +147,7 @@ public class MainWindow extends JFrame {
         btSwitchRole.setFont(new Font("Segoe UI", Font.BOLD, 11));
         btSwitchRole.setForeground(new Color(40, 90, 160));
         btSwitchRole.setFocusPainted(false);
-        btSwitchRole.setToolTipText("Doi sang tai khoan khac ma KHONG mat du lieu dang nhap o tab 1");
+        btSwitchRole.setToolTipText("Đổi sang tài khoản khác mà KHÔNG mất dữ liệu đang nhập ở tab 1");
         btSwitchRole.addActionListener(e -> {
             Dimension d = switchRoleMenu.getPreferredSize();
             // Hiện lên PHÍA TRÊN nút: thanh trạng thái nằm sát đáy cửa sổ.
@@ -156,7 +156,7 @@ public class MainWindow extends JFrame {
 
         btLanguage.setFont(new Font("Segoe UI", Font.BOLD, 11));
         btLanguage.setFocusPainted(false);
-        btLanguage.setToolTipText("Chuyen ngon ngu giao dien");
+        btLanguage.setToolTipText("Chuyển ngôn ngữ giao diện");
         btLanguage.addActionListener(e -> setLanguage(I18n.otherLanguage()));
 
         btLogout.setFont(new Font("Segoe UI", Font.BOLD, 11));
@@ -185,9 +185,9 @@ public class MainWindow extends JFrame {
     private void refreshUserInfo() {
         Account user = UserSession.getCurrentUser();
         String userInfo = (user != null)
-                ? user.getFullName() + "  [" + I18n.text("Vai tro:") + " " + user.getRole().toUpperCase() + "]"
-                : I18n.text("(Chua dang nhap)");
-        String prefix = I18n.text("Nguoi dung: ");
+                ? user.getFullName() + "  [" + I18n.text("Vai trò:") + " " + user.getRole().toUpperCase() + "]"
+                : I18n.text("(Chưa đăng nhập)");
+        String prefix = I18n.text("Người dùng: ");
         I18n.setPreservedText(lbInfo, "  " + prefix + userInfo);
         // Keep the account's display name and role exactly as configured.
         I18n.setPreservedToolTip(lbInfo, prefix + userInfo);
@@ -294,10 +294,10 @@ public class MainWindow extends JFrame {
                 if (acc == null) {
                     // Phiên hiện tại giữ nguyên -- không rơi về trạng thái chưa đăng nhập.
                     I18n.showMessageDialog(MainWindow.this,
-                        I18n.richText("Tai khoan '") + target.getUsername() + I18n.richText("' trong config.properties khong dang nhap duoc.\n"
-                      + "Co the mat khau trong bang Account da bi doi.\n\n"
-                      + "Phien hien tai van duoc giu nguyen."),
-                        I18n.text("Doi vai tro that bai"), JOptionPane.WARNING_MESSAGE);
+                        I18n.richText("Tài khoản '") + target.getUsername() + I18n.richText("' trong config.properties không đăng nhập được.\n"
+                      + "Có thể mật khẩu trong bảng Account đã bị đổi.\n\n"
+                      + "Phiên hiện tại vẫn được giữ nguyên."),
+                        I18n.text("Đổi vai trò thất bại"), JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 UserSession.setCurrentUser(acc);     // 1. đổi phiên
@@ -318,7 +318,7 @@ public class MainWindow extends JFrame {
 
     /** Xử lý hành động Đăng xuất: đóng MainWindow và quay lại LoginDialog */
     private void doLogout() {
-        String question = I18n.richText("Ban co chac chan muon dang xuat khoi he thong?");
+        String question = I18n.richText("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?");
         String pending = I18n.richText(newInvoice.pendingWorkSummary());
 
         if (!pending.isEmpty()) {
@@ -327,14 +327,14 @@ public class MainWindow extends JFrame {
             // vẻ ngoài của nó: nó dạy người dùng rằng đã có đường không mất dữ
             // liệu, đúng lúc họ đang định đi đường mất dữ liệu.
             question = I18n.richText(
-                "Tab \"Lap hoa don\" dang co " + pending + " chua luu.\n"
-              + "Dang xuat se mat toan bo. Van dang xuat?\n\n"
-              + "Goi y: muon xem giao dien cua vai tro khac ma khong mat gio hang\n"
-              + "thi dung nut \"Doi vai tro\" ben canh.");
+                "Tab \"Lập hóa đơn\" đang có " + pending + " chưa lưu.\n"
+              + "Đăng xuất sẽ mất toàn bộ. Vẫn đăng xuất?\n\n"
+              + "Gợi ý: muốn xem giao diện của vai trò khác mà không mất giỏ hàng\n"
+              + "thì dùng nút \"Đổi vai trò\" bên cạnh.");
         }
 
         int choice = I18n.showConfirmDialog(this, question,
-                I18n.text("Xac nhan dang xuat"), JOptionPane.YES_NO_OPTION);
+                I18n.text("Xác nhận đăng xuất"), JOptionPane.YES_NO_OPTION);
 
         if (choice == JOptionPane.YES_OPTION) {
             this.dispose();           // Đóng cửa sổ chính hiện tại

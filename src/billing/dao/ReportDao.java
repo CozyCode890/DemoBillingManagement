@@ -24,7 +24,7 @@ public class ReportDao {
     //  đóng gói trong Stored Procedure: sp_report_daily_takings()
     // -----------------------------------------------------------------
     public static final String SQL_DAILY_TAKINGS =
-            "-- [Goi Stored Procedure do Dev SQL thiet ke trong 04_routines.sql]\n" +
+            "-- [Gọi Stored Procedure do Dev SQL thiết kế trong 04_routines.sql]\n" +
             "CALL sp_report_daily_takings();";
 
     public QueryResult dailyTakings() {
@@ -38,7 +38,7 @@ public class ReportDao {
     //  Kỹ thuật SELF JOIN được đóng gói trong: sp_report_price_rise()
     // -----------------------------------------------------------------
     public static final String SQL_PRICE_RISE =
-            "-- [Goi Stored Procedure do Dev SQL thiet ke trong 04_routines.sql]\n" +
+            "-- [Gọi Stored Procedure do Dev SQL thiết kế trong 04_routines.sql]\n" +
             "CALL sp_report_price_rise();";
 
     public QueryResult priceRise() {
@@ -52,7 +52,7 @@ public class ReportDao {
     //  Kỹ thuật 2 tầng AVG(SUM) gom theo thu ngân: sp_report_best_cashier()
     // -----------------------------------------------------------------
     public static final String SQL_BEST_CASHIER =
-            "-- [Goi Stored Procedure do Dev SQL thiet ke trong 04_routines.sql]\n" +
+            "-- [Gọi Stored Procedure do Dev SQL thiết kế trong 04_routines.sql]\n" +
             "CALL sp_report_best_cashier();";
 
     public QueryResult bestCashier() {
@@ -66,7 +66,7 @@ public class ReportDao {
     //  Tính tỷ lệ hoàn tiền theo sản phẩm trả: sp_report_big_returns()
     // -----------------------------------------------------------------
     public static final String SQL_BIG_RETURNS =
-            "-- [Goi Stored Procedure do Dev SQL thiet ke trong 04_routines.sql]\n" +
+            "-- [Gọi Stored Procedure do Dev SQL thiết kế trong 04_routines.sql]\n" +
             "CALL sp_report_big_returns();";
 
     public QueryResult bigReturns() {
@@ -80,7 +80,7 @@ public class ReportDao {
     //  So sánh giá đóng băng trên hóa đơn và giá hôm nay: sp_report_old_price_proof()
     // -----------------------------------------------------------------
     public static final String SQL_OLD_PRICE_PROOF =
-            "-- [Goi Stored Procedure do Dev SQL thiet ke trong 04_routines.sql]\n" +
+            "-- [Gọi Stored Procedure do Dev SQL thiết kế trong 04_routines.sql]\n" +
             "CALL sp_report_old_price_proof();";
 
     public QueryResult oldPriceProof() {

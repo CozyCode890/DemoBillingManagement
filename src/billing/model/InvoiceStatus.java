@@ -13,9 +13,9 @@ package billing.model;
  *           VOIDED khong co duong ra (plan/13 muc 3.2).
  */
 public enum InvoiceStatus {
-    OPEN  ("Dang lap"),
-    PAID  ("Da thanh toan"),
-    VOIDED("Da huy");
+    OPEN  ("Đang lập"),
+    PAID  ("Đã thanh toán"),
+    VOIDED("Đã hủy");
 
     private final String label;
 
@@ -27,7 +27,7 @@ public enum InvoiceStatus {
     /** Nhan tieng Viet khong dau de hien tren giao dien. */
     public String label() { return label; }
 
-    /** Nhan kem ma, vi du "Da thanh toan (PAID)". */
+    /** Nhan kem ma, vi du "Đã thanh toán (PAID)". */
     public String display() { return label + " (" + name() + ")"; }
 
     /**

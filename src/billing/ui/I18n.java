@@ -24,104 +24,93 @@ public final class I18n {
     private static final Map<String, String> EN = new LinkedHashMap<>();
     private static final Map<String, String> VI = new HashMap<>();
     private static final Map<String, String> EN_SOURCE = new HashMap<>();
-
     static {
         add("Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8", "Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8");
-        add("Doi vai tro ▾", "Switch role ▾");
-        add("Dang xuat", "Log out");
-        add("Nguoi dung: ", "User: ");
-        add("Nguoi dung:", "User:");
-        add("[Vai tro: ", "[Role: ");
-        add("Vai tro:", "Role:");
+        add("Đổi vai trò ▾", "Switch role ▾");
+        add("Đăng xuất", "Log out");
+        add("Người dùng: ", "User: ");
+        add("Vai trò:", "Role:");
         add("]", "]");
-        add("(Chua dang nhap)", "(Not signed in)");
-        add("(DANG NHAP TU DONG)", "(AUTO LOGIN)");
-        add("App da dang nhap san, khong qua man hinh dang nhap. Dat quick.login.auto= (de trong) trong config.properties de tat.",
+        add("(Chưa đăng nhập)", "(Not signed in)");
+        add("(ĐĂNG NHẬP TỰ ĐỘNG)", "(AUTO LOGIN)");
+        add("App đã đăng nhập sẵn, không qua màn hình đăng nhập. Đặt quick.login.auto= (để trống) trong config.properties để tắt.",
                 "The app signed in automatically. Set quick.login.auto= (empty) in config.properties to disable this.");
-        add("Doi sang tai khoan khac ma KHONG mat du lieu dang nhap o tab 1", "Switch to another account without losing the invoice in tab 1");
-        add("1. Lap hoa don", "1. New invoice");
+        add("Đổi sang tài khoản khác mà KHÔNG mất dữ liệu đang nhập ở tab 1", "Switch to another account without losing the invoice in tab 1");
+        add("1. Lập hóa đơn", "1. New invoice");
         add("2. Tra cứu dữ liệu", "2. Browse data");
-        add("2. Tra cuu du lieu", "2. Browse data");
-        add("3. Xem hoa don (Database)", "3. View invoices (Database)");
-        add("4. Bao cao", "4. Reports");
-        add("Ngon ngu", "Language");
-        add("Chuyen ngon ngu giao dien", "Switch the interface language");
-        add("Xac nhan dang xuat", "Confirm log out");
-        add("Ban co chac chan muon dang xuat khoi he thong?", "Are you sure you want to log out?");
-        add("Tab \"Lap hoa don\" dang co ", "Tab \"New invoice\" has ");
-        add(" chua luu.\nDang xuat se mat toan bo. Van dang xuat?\n\nGoi y: muon xem giao dien cua vai tro khac ma khong mat gio hang\nthi dung nut \"Doi vai tro\" ben canh.",
+        add("3. Xem hóa đơn (Database)", "3. View invoices (Database)");
+        add("4. Báo cáo", "4. Reports");
+        add("Ngôn ngữ", "Language");
+        add("Chuyển ngôn ngữ giao diện", "Switch the interface language");
+        add("Xác nhận đăng xuất", "Confirm log out");
+        add("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?", "Are you sure you want to log out?");
+        add("Tab \"Lập hóa đơn\" đang có ", "Tab \"New invoice\" has ");
+        add(" chưa lưu.\nĐăng xuất sẽ mất toàn bộ. Vẫn đăng xuất?\n\nGợi ý: muốn xem giao diện của vai trò khác mà không mất giỏ hàng\nthì dùng nút \"Đổi vai trò\" bên cạnh.",
                 " unsaved. Logging out will discard it. Log out anyway?\n\nTo view another role without losing this invoice,\nuse the \"Switch role\" button beside this one.");
-        add("Tai khoan '", "Account '");
-        add("' trong config.properties khong dang nhap duoc.\nCo the mat khau trong bang Account da bi doi.\n\nPhien hien tai van duoc giu nguyen.",
+        add("Tài khoản '", "Account '");
+        add("' trong config.properties không đăng nhập được.\nCó thể mật khẩu trong bảng Account đã bị đổi.\n\nPhiên hiện tại vẫn được giữ nguyên.",
                 "' from config.properties could not sign in.\nThe password in the Account table may have changed.\n\nYour current session is unchanged.");
-        add("Doi vai tro that bai", "Could not switch role");
-        add(" dong hang", " invoice line(s)");
-        add(" lan thanh toan", " payment(s)");
+        add("Đổi vai trò thất bại", "Could not switch role");
+        add(" dòng hàng", " invoice line(s)");
+        add(" lần thanh toán", " payment(s)");
 
-        add("Dang nhap he thong -- Retail Invoicing", "Sign in -- Retail Invoicing");
-        add("Ten dang nhap:", "Username:");
-        add("Mat khau:", "Password:");
-        add("Dang nhap", "Sign in");
-        add("Thoat", "Exit");
-        add("Dang nhap nhanh (tai khoan mau cua ban demo)", "Quick sign in (demo accounts)");
-        add("Bam mot nut de dien san va dang nhap ngay.", "Select an account to fill in the credentials and sign in.");
-        add("Phim tat: Alt+1 ... Alt+", "Shortcuts: Alt+1 ... Alt+");
-        add(".  Enter = Dang nhap.", ".  Enter = Sign in.");
-        add("Dien san va dang nhap bang tai khoan '", "Fill in and sign in with account '");
-        add("Dien san va dang nhap bang tai khoan '", "Fill in and sign in with account '");
-        add("Vui long nhap day du Ten dang nhap va Mat khau.", "Enter both a username and password.");
-        add("Dang kiem tra tai khoan...", "Checking account...");
-        add("Sai ten dang nhap hoac mat khau.", "Incorrect username or password.");
+        add("Đăng nhập hệ thống -- Retail Invoicing", "Sign in -- Retail Invoicing");
+        add("Tên đăng nhập:", "Username:");
+        add("Mật khẩu:", "Password:");
+        add("Đăng nhập", "Sign in");
+        add("Thoát", "Exit");
+        add("Đăng nhập nhanh (tài khoản mẫu của bản demo)", "Quick sign in (demo accounts)");
+        add("Bấm một nút để điền sẵn và đăng nhập ngay.", "Select an account to fill in the credentials and sign in.");
+        add("Phím tắt: Alt+1 ... Alt+", "Shortcuts: Alt+1 ... Alt+");
+        add(".  Enter = Đăng nhập.", ".  Enter = Sign in.");
+        add("Điền sẵn và đăng nhập bằng tài khoản '", "Fill in and sign in with account '");
+        add("Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu.", "Enter both a username and password.");
+        add("Đang kiểm tra tài khoản...", "Checking account...");
+        add("Sai tên đăng nhập hoặc mật khẩu.", "Incorrect username or password.");
 
-        add("1. Thong tin hoa don", "1. Invoice details");
-        add("Quay:", "Counter:");
-        add("Thu ngan:", "Cashier:");
-        add("Ngay ban:", "Sale date:");
-        add("Khach (SDT):", "Customer (phone):");
-        add("Meo: doi 'Ngay ban' ve nam ngoai roi them san pham -> don gia se lay theo GIA CU trong Price_History.",
+        add("1. Thông tin hóa đơn", "1. Invoice details");
+        add("Quầy:", "Counter:");
+        add("Thu ngân:", "Cashier:");
+        add("Ngày bán:", "Sale date:");
+        add("Khách (SDT):", "Customer (phone):");
+        add("Mẹo: đổi 'Ngày bán' về năm ngoái rồi thêm sản phẩm -> đơn giá sẽ lấy theo GIÁ CŨ trong Price_History.",
                 "Tip: set the sale date to last year, then add a product to see its historical price from Price_History.");
-        add("2. Them san pham", "2. Add a product");
-        add("San pham:", "Product:");
-        add("So luong:", "Quantity:");
-        add("3. Cac dong hang (se thanh bang Invoice_Line)", "3. Invoice lines (stored in Invoice_Line)");
-        add("4. Thanh toan (mot hoa don co the co NHIEU dong thanh toan)", "4. Payments (an invoice can have multiple payments)");
-        add("Phuong thuc:", "Method:");
-        add("Tai lai", "Reload");
-        add("Them vao hoa don", "Add to invoice");
-        add("Sua so luong", "Edit quantity");
-        add("Xoa dong dang chon", "Remove selected row");
-        add("Them thanh toan", "Add payment");
-        add("Khach tra du bang tien mat", "Customer pays the balance in cash");
-        add("Tao ma QR", "Create QR code");
-        add("Xoa het", "Clear all");
-        add("XUAT HOA DON  (INSERT + COMMIT)", "SAVE INVOICE  (INSERT + COMMIT)");
-        add("Dang luu...", "Saving...");
-        add("Gia ngay ", "Price on ");
+        add("2. Thêm sản phẩm", "2. Add a product");
+        add("Sản phẩm:", "Product:");
+        add("Số lượng:", "Quantity:");
+        add("3. Các dòng hàng (sẽ thành bảng Invoice_Line)", "3. Invoice lines (stored in Invoice_Line)");
+        add("4. Thanh toán (một hóa đơn có thể có NHIỀU dòng thanh toán)", "4. Payments (an invoice can have multiple payments)");
+        add("Phương thức:", "Method:");
+        add("Tải lại", "Reload");
+        add("Thêm vào hóa đơn", "Add to invoice");
+        add("Sửa số lượng", "Edit quantity");
+        add("Xóa dòng đang chọn", "Remove selected row");
+        add("Thêm thanh toán", "Add payment");
+        add("Khách trả đủ bằng tiền mặt", "Customer pays the balance in cash");
+        add("Tạo mã QR", "Create QR code");
+        add("Xóa hết", "Clear all");
+        add("XUẤT HÓA ĐƠN  (INSERT + COMMIT)", "SAVE INVOICE  (INSERT + COMMIT)");
+        add("Đang lưu...", "Saving...");
         add(" = ", " = ");
-        add("Tong: ", "Total: ");
-        add("Da thu: ", "Paid: ");
-        add("Con thieu: ", "Balance due: ");
-        add("Tien thoi: ", "Change: ");
-        add("Gia ngay ", "Price on ");
-        add("  (khong co KM)", "  (no promotion)");
-        add("Cot VAT % la thue suat cua san pham; don gia trong Price_History DA GOM VAT.",
+        add("Tổng: ", "Total: ");
+        add("Đã thu: ", "Paid: ");
+        add("Còn thiếu: ", "Balance due: ");
+        add("Tiền thối: ", "Change: ");
+        add("Giá ngày ", "Price on ");
+        add("  (không có KM)", "  (no promotion)");
+        add("Cột VAT % là thuế suất của sản phẩm; đơn giá trong Price_History ĐÃ GỒM VAT.",
                 "VAT % is the product tax rate; prices in Price_History already include VAT.");
-        add("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN (toi da 3 chu so) -- KHONG phai dau tach nghin.<br>Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br><i>Khac hẳn o tien ben duoi, noi dau <b>.</b> la dau tach nghin.</i><br>Enter = Them vao hoa don.</html>",
+        add("<html>Dấu <b>,</b> hoặc <b>.</b> là dấu THẬP PHÂN (tối đa 3 chữ số) -- KHÔNG phải dấu tách nghìn.<br>Đúng: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br><i>Khác hẳn ở tiền bên dưới, nơi dấu <b>.</b> là dấu tách nghìn.</i><br>Enter = Thêm vào hóa đơn.</html>",
                 "<html>Use <b>,</b> or <b>.</b> as the decimal separator (up to 3 digits). Neither is a thousands separator.<br>Examples: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br><i>Money fields below use <b>.</b> as a thousands separator.</i><br>Enter = Add to invoice.</html>");
-        add("<html>Dau <b>.</b> la dau TACH NGHIN (phai du 3 chu so), dau <b>,</b> la dau thap phan.<br>Dung: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>Sai : <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br><i>Khac hẳn o so luong o tren, noi dau <b>.</b> la dau thap phan.</i><br>Enter = Them thanh toan.</html>",
+        add("<html>Dấu <b>.</b> là dấu TÁCH NGHÌN (phải đủ 3 chữ số), dấu <b>,</b> là dấu thập phân.<br>Đúng: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>Sai : <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br><i>Khác hẳn ở số lượng ở trên, nơi dấu <b>.</b> là dấu thập phân.</i><br>Enter = Thêm thanh toán.</html>",
                 "<html><b>.</b> is the thousands separator (groups of 3 digits); <b>,</b> is the decimal separator.<br>Examples: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>Invalid: <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br><i>Quantity above uses <b>.</b> as a decimal separator.</i><br>Enter = Add payment.</html>");
-        add("Khach dua", "Tendered");
-        add("So tien", "Amount");
-        add("Tien mat", "Cash");
-        add("The ngan hang", "Bank card");
-        add("Vi dien tu", "E-wallet");
-        add("Dang lap", "Open");
-        add("Da thanh toan", "Paid");
-        add("Da huy", "Voided");
-        add("Dang lap (OPEN)", "Open (OPEN)");
-        add("Da thanh toan (PAID)", "Paid (PAID)");
-        add("Da huy (VOIDED)", "Voided (VOIDED)");
-        add("Tất cả", "All");
+        add("Thẻ ngân hàng", "Bank card");
+        add("Đang lập", "Open");
+        add("Đã thanh toán", "Paid");
+        add("Đã hủy", "Voided");
+        add("Đang lập (OPEN)", "Open (OPEN)");
+        add("Đã thanh toán (PAID)", "Paid (PAID)");
+        add("Đã hủy (VOIDED)", "Voided (VOIDED)");
         add("Tiền mặt", "Cash");
         add("Thẻ", "Card");
         add("Ví điện tử", "E-wallet");
@@ -141,343 +130,304 @@ public final class I18n {
         add("Thời gian: ", "Date and time: ");
         add("Loại khách: ", "Customer type: ");
         add("Đơn vị tính: ", "Unit: ");
-        add("Khoáng giá sản phẩm: ", "Product price range: ");
+        add("Khoảng giá sản phẩm: ", "Product price range: ");
         add("Thuế suất: ", "Tax rate: ");
         add("Thời gian trả hàng: ", "Return date and time: ");
         add("Số lượng hoàn trả: ", "Return quantity: ");
-        add("Đang hiện ", "Showing ");
         add(" dòng", " rows");
         add("Tổng số hàng: ", "Total rows: ");
         add(" dòng đầu (bảng còn nhiều hơn — dùng bộ lọc để thu hẹp)", " rows (more are available; use a filter to narrow the results)");
 
-        add("Sua hoa don", "Edit invoice");
-        add("Huy hoa don", "Void invoice");
-        add("Xoa hoa don", "Delete invoice");
-        add("Sua dong hang", "Edit line");
-        add("Xoa dong hang", "Delete line");
-        add("Thu xoa gia tri (Set NULL)", "Try setting value to NULL");
-        add("Tra hang", "Return items");
-        add("Huy luot tra", "Delete return");
-        add("Tai lai danh sach", "Reload list");
-        add("Khoang ngay:", "Date range:");
-        add("Danh sach hoa don (bam de xem chi tiet)", "Invoices (select one to view details)");
-        add("Thong tin chung + tong tien", "Summary and total");
-        add("Cac dong hang (Invoice_Line)", "Invoice lines (Invoice_Line)");
-        add("Thanh toan (Payment + bang con)", "Payments (Payment and child tables)");
-        add("Tra hang (Return)", "Returns (Return)");
-        add("7 ngay gan nhat", "Last 7 days");
-        add("30 ngay gan nhat", "Last 30 days");
-        add("90 ngay gan nhat", "Last 90 days");
-        add("Tat ca", "All");
-        add("Thong tin chung", "Summary");
-        add("Cac dong cua hoa don", "Invoice lines");
-        add("Se tra lai", "To be returned");
-        add("Them >>", "Add >>");
-        add("<< Xoa", "<< Remove");
-        add("Xac nhan tra hang", "Confirm return");
-        add("Huy", "Cancel");
-        add("Tong tien phai tra lai: ", "Total refund: ");
-        add("Nguoi duyet: ", "Approved by: ");
-        add("Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don INV-OLD-* tu nam truoc.",
-                "Filter by sale date. 'All' loads every invoice, including both INV-OLD-* invoices from last year.");
-        add("Chinh sua thong tin hoa don truc tiep trong DB", "Edit invoice details directly in the DB");
-        add("Huy hoa don: du lieu van con, chi khong tinh vao bao cao", "Void an invoice: data remains but is excluded from reports");
-        add("Xoa hoa don va toan bo du lieu lien quan khoi DB", "Delete the invoice and all related data from the DB");
-        add("Chinh sua so luong, don gia dong hang trong DB", "Edit line quantity and unit price in the DB");
-        add("Xoa dong hang khoi DB", "Delete an invoice line from the DB");
-        add("Thu nghiem co che canh bao xoa gia tri NOT NULL", "Try the warning for clearing a NOT NULL value");
-        add("Ghi mot luot tra hang cho cac dong cua hoa don dang chon", "Record a return for lines in the selected invoice");
-        add("Huy mot luot tra hang da ghi (chon dong trong bang Tra hang)", "Delete a recorded return (select a row in the Returns table)");
-        add("Trang thai doi tu dong khi thu du tien, hoac qua nut \"Huy hoa don\" o tab Xem hoa don", "Status changes automatically when the invoice is fully paid or voided from the View invoices tab");
-        add("Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don INV-OLD-* tu nam truoc.", "Filter by sale date. 'All' loads every invoice, including both INV-OLD-* invoices from last year.");
-        add("Go SO DIEN THOAI cua khach (tu 3 chu so tro len) roi chon tu danh sach goi y.<br>Chi khach <b>duoc chon tu danh sach</b> moi duoc gan vao hoa don -- go du so ma khong chon van la khach vang lai.</html>",
+        add("Sửa hóa đơn", "Edit invoice");
+        add("Hủy hóa đơn", "Void invoice");
+        add("Xóa hóa đơn", "Delete invoice");
+        add("Sửa dòng hàng", "Edit line");
+        add("Xóa dòng hàng", "Delete line");
+        add("Thử xóa giá trị (Set NULL)", "Try setting value to NULL");
+        add("Trả hàng", "Return items");
+        add("Hủy lượt trả", "Delete return");
+        add("Tải lại danh sách", "Reload list");
+        add("Khoảng ngày:", "Date range:");
+        add("Danh sách hóa đơn (bấm để xem chi tiết)", "Invoices (select one to view details)");
+        add("Thông tin chung + tổng tiền", "Summary and total");
+        add("Các dòng hàng (Invoice_Line)", "Invoice lines (Invoice_Line)");
+        add("Thanh toán (Payment + bảng con)", "Payments (Payment and child tables)");
+        add("Trả hàng (Return)", "Returns (Return)");
+        add("7 ngày gần nhất", "Last 7 days");
+        add("30 ngày gần nhất", "Last 30 days");
+        add("90 ngày gần nhất", "Last 90 days");
+        add("Thông tin chung", "Summary");
+        add("Các dòng của hóa đơn", "Invoice lines");
+        add("Sẽ trả lại", "To be returned");
+        add("Thêm >>", "Add >>");
+        add("<< Xóa", "<< Remove");
+        add("Xác nhận trả hàng", "Confirm return");
+        add("Hủy", "Cancel");
+        add("Chỉnh sửa thông tin hóa đơn trực tiếp trong DB", "Edit invoice details directly in the DB");
+        add("Hủy hóa đơn: dữ liệu vẫn còn, chỉ không tính vào báo cáo", "Void an invoice: data remains but is excluded from reports");
+        add("Xóa hóa đơn và toàn bộ dữ liệu liên quan khỏi DB", "Delete the invoice and all related data from the DB");
+        add("Chỉnh sửa số lượng, đơn giá dòng hàng trong DB", "Edit line quantity and unit price in the DB");
+        add("Xóa dòng hàng khỏi DB", "Delete an invoice line from the DB");
+        add("Thử nghiệm cơ chế cảnh báo xóa giá trị NOT NULL", "Try the warning for clearing a NOT NULL value");
+        add("Ghi một lượt trả hàng cho các dòng của hóa đơn đang chọn", "Record a return for lines in the selected invoice");
+        add("Hủy một lượt trả hàng đã ghi (chọn dòng trong bảng Trả hàng)", "Delete a recorded return (select a row in the Returns table)");
+        add("Trạng thái đổi tự động khi thu đủ tiền, hoặc qua nút \"Hủy hóa đơn\" ở tab Xem hóa đơn", "Status changes automatically when the invoice is fully paid or voided from the View invoices tab");
+        add("Lọc theo ngày bán. 'Tất cả' nạp mọi hóa đơn, kể cả hai hóa đơn INV-OLD-* từ năm trước.", "Filter by sale date. 'All' loads every invoice, including both INV-OLD-* invoices from last year.");
+        add("Gõ SỐ ĐIỆN THOẠI của khách (từ 3 chữ số trở lên) rồi chọn từ danh sách gợi ý.<br>Chỉ khách <b>được chọn từ danh sách</b> mới được gắn vào hóa đơn -- gõ đủ số mà không chọn vẫn là khách vãng lai.</html>",
                 "Type at least 3 digits of the customer's phone number, then select a suggestion.<br>Only a customer <b>selected from the list</b> is added to the invoice; typing a full number without selecting keeps it as a walk-in customer.</html>");
-        add("San pham", "Product");
+        add("Sản phẩm", "Product");
         add("SL", "Qty");
         add("DVT", "Unit");
-        add("Don gia", "Unit price");
-        add("Thanh tien", "Line total");
-        add("Phuong thuc", "Method");
-        add("Chi tiet", "Details");
-        add("Khach dua", "Tendered");
-        add("Tien thoi", "Change");
+        add("Chi tiết", "Details");
+        add("Khách đưa", "Tendered");
 
-        add("Khach hang", "Customer");
-        add("(khach vang lai)", "(walk-in customer)");
-        add("Co loi xay ra", "An error occurred");
-        add("Loi ket noi", "Connection error");
-        add("Khong ket noi duoc MySQL.\n\n", "Could not connect to MySQL.\n\n");
-        add("Kiem tra lan luot:\n", "Check the following:\n");
-        add("  1. MySQL 8 da chay chua?  (Services -> MySQL80 -> Running)\n", "  1. Is MySQL 8 running? (Services -> MySQL80 -> Running)\n");
-        add("  2. Da tao database chua?  Chay file sql/01_schema.sql va sql/02_seed.sql\n", "  2. Has the database been created? Run sql/01_schema.sql and sql/02_seed.sql\n");
-        add("  3. Mat khau trong file config.properties da dung chua?\n", "  3. Is the password in config.properties correct?\n");
-        add("  4. Neu loi 'No suitable driver': thieu file mysql-connector-j.jar\n     trong thu muc lib/. Chay setup.ps1 de tai ve.\n", "  4. For 'No suitable driver': mysql-connector-j.jar is missing from lib/. Run setup.ps1 to download it.\n");
-        add("Chon bao cao", "Select a report");
-        add("Y nghia cau truy van", "About this query");
-        add("Cau SQL dang chay", "SQL query");
-        add("Ket qua", "Results");
-        add("2. Doanh thu 7 ngay / cua hang", "2. Revenue, last 7 days / store");
-        add("3. San pham tang gia > 10%", "3. Products with price increases > 10%");
-        add("4. Thu ngan gio hang TB cao nhat", "4. Highest average invoice total / thu ngan");
-        add("5. Hoa don tra hang > 50%", "5. Invoices with returns > 50%");
-        add("Bonus: hoa don cu giu gia cu", "Bonus: historical invoices keep their original prices");
-        add(" -- dang chay...", " -- running...");
-        add("Cau lenh chay xong nhung khong co dong nao thoa dieu kien.", "The query completed but returned no matching rows.");
-        add("Doanh thu tung NGAY cua tung CUA HANG trong 7 ngay gan nhat. Hoa don khong noi thang toi Shop nen phai di vong: Invoice -> Counter -> Shop. GROUP BY hai cot (shop, ngay) nen moi dong ket qua la mot o trong bang cheo.",
+        add("(khách vãng lai)", "(walk-in customer)");
+        add("Có lỗi xảy ra", "An error occurred");
+        add("Lỗi kết nối", "Connection error");
+        add("Không kết nối được MySQL.\n\n", "Could not connect to MySQL.\n\n");
+        add("Kiểm tra lần lượt:\n", "Check the following:\n");
+        add("  1. MySQL 8 đã chạy chưa?  (Services -> MySQL80 -> Running)\n", "  1. Is MySQL 8 running? (Services -> MySQL80 -> Running)\n");
+        add("  2. Đã tạo database chưa?  Chạy file sql/01_schema.sql và sql/02_seed.sql\n", "  2. Has the database been created? Run sql/01_schema.sql and sql/02_seed.sql\n");
+        add("  3. Mật khẩu trong file config.properties đã đúng chưa?\n", "  3. Is the password in config.properties correct?\n");
+        add("  4. Nếu lỗi 'No suitable driver': thiếu file mysql-connector-j.jar\n     trong thư mục lib/. Chạy setup.ps1 để tải về.\n", "  4. For 'No suitable driver': mysql-connector-j.jar is missing from lib/. Run setup.ps1 to download it.\n");
+        add("Chọn báo cáo", "Select a report");
+        add("Câu SQL đang chạy", "SQL query");
+        add("Kết quả", "Results");
+        add("2. Doanh thu 7 ngày / cửa hàng", "2. Revenue, last 7 days / store");
+        add("3. Sản phẩm tăng giá > 10%", "3. Products with price increases > 10%");
+        add("4. Thu ngân có giá trị hóa đơn trung bình cao nhất", "4. Highest average invoice total / thu ngan");
+        add("5. Hóa đơn trả hàng > 50%", "5. Invoices with returns > 50%");
+        add("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: historical invoices keep their original prices");
+        add(" -- đang chạy...", " -- running...");
+        add("Câu lệnh chạy xong nhưng không có dòng nào thỏa điều kiện.", "The query completed but returned no matching rows.");
+        add("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất. Hóa đơn không nối thẳng tới Shop nên phải đi vòng: Invoice -> Counter -> Shop. GROUP BY hai cột (shop, ngày) nên mỗi dòng kết quả là một ô trong bảng chéo.",
                 "Daily revenue for each store in the last 7 days. An invoice is linked to a Shop through Counter, so the query joins Invoice -> Counter -> Shop. GROUP BY the shop and date to get one row per cross-tab cell.");
-        add("SELF JOIN: noi bang Price_History voi CHINH NO de dat gia moi canh gia cu. Subquery MAX(...) tim moc gia LIEN TRUOC cua cung san pham. Dieu kien: gia moi > gia cu * 1.10 va nam trong nam nay.",
+        add("SELF JOIN: nối bảng Price_History với CHÍNH NÓ để đặt giá mới cạnh giá cũ. Subquery MAX(...) tìm mốc giá LIỀN TRƯỚC của cùng sản phẩm. Điều kiện: giá mới > giá cũ * 1.10 và nằm trong năm nay.",
                 "SELF JOIN: join Price_History to itself to compare a new price with the previous price. The MAX(...) subquery finds the immediately preceding price for the same product. The new price must be over 110% of the old price and dated this year.");
-        add("Bay pho bien: AVG thang tren Invoice_Line se ra trung binh moi DONG chu khong phai moi HOA DON. Phai tinh tong tien tung hoa don truoc (subquery), roi moi AVG theo thu ngan.",
+        add("Bẫy phổ biến: AVG thẳng trên Invoice_Line sẽ ra trung bình mỗi DÒNG chứ không phải mỗi HÓA ĐƠN. Phải tính tổng tiền từng hóa đơn trước (subquery), rồi mới AVG theo thu ngân.",
                 "Common mistake: AVG over Invoice_Line gives an average per LINE, not per INVOICE. First total each invoice in a subquery, then calculate AVG by cashier.");
-        add("Hai subquery: mot tinh tong hoa don, mot tinh tien tra lai. Tien tra lai tinh theo TY LE (SL tra / SL mua) nhan thanh tien, de phan giam gia cung duoc hoan dung ty le.",
+        add("Hai subquery: một tính tổng hóa đơn, một tính tiền trả lại. Tiền trả lại tính theo TỶ LỆ (SL trả / SL mua) nhân thành tiền, để phần giảm giá cũng được hoàn đúng tỷ lệ.",
                 "Two subqueries: one totals each invoice and the other totals refunds. A refund is calculated proportionally (returned quantity / purchased quantity) times the line total, so discounts are refunded proportionally too.");
-        add("Y nghia cau truy van", "About this query");
-        add("Cau 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: 'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai hoa don INV-OLD-* tu nam truoc.",
-                "'Gia_ghi_tren_HD' comes from Invoice_Line and is frozen at sale time. 'Gia_hom_nay' calls fn_get_product_price(barcode, CURDATE()). The report groups by product and frozen price. Each row shows how many lines used that price, the date range, and today's price. The oldest 'Ban_tu_ngay' rows are the two INV-OLD-* invoices from last year.");
+        add("Ý nghĩa câu truy vấn", "About this query");
 
-        add("Sua hoa don:", "Edit invoice:");
-        add("Chinh sua Hoa don: ", "Edit invoice: ");
-        add("Chinh sua Dong hang: ", "Edit invoice line: ");
-        add("Sua dong hang:", "Edit invoice line:");
-        add("Ma hoa don (PK):", "Invoice ID (PK):");
-        add("Ngay lap (YYYY-MM-DD) *:", "Invoice date (YYYY-MM-DD) *:");
-        add("Gio lap (HH:MM:SS) *:", "Invoice time (HH:MM:SS) *:");
-        add("Trang thai:", "Status:");
-        add("(chi doc)", "(read only)");
-        add("Ma quay (Counter_ID) *:", "Counter ID (Counter_ID) *:");
-        add("Ma thu ngan (Cashier_ID) *:", "Cashier ID (Cashier_ID) *:");
-        add("Ma khach hang:", "Customer ID:");
-        add("Xoa ma khach (Set NULL)", "Clear customer ID (set NULL)");
-        add("Luu vao Database", "Save to Database");
-        add("Huy bo", "Cancel");
-        add("Ma vach (Barcode) *:", "Barcode *:");
-        add("So luong (Quantity) *:", "Quantity *:");
-        add("Don gia (Unit_Price) *:", "Unit price (Unit_Price) *:");
-        add("Giam gia (Discount) *:", "Discount *:");
-        add("Thu xoa (Set NULL)", "Try setting NULL");
-        add("Ma hoa don", "Invoice ID");
-        add("Ngay lap", "Invoice date");
-        add("Gio lap", "Invoice time");
-        add("Thanh cong", "Success");
-        add("Thong bao", "Notice");
-        add("Loi", "Error");
-        add("Loi dinh dang", "Invalid format");
-        add("Canh bao rang buoc NOT NULL", "NOT NULL constraint warning");
-        add("CANH BAO DATABASE: Truong '", "DATABASE WARNING: Field '");
-        add("CANH BAO DATABASE: Cot '", "DATABASE WARNING: Column '");
-        add("' co rang buoc NOT NULL!\nBan khong duoc phep xoa gia tri nay ve NULL hoac de trong.",
+        add("Sửa hóa đơn:", "Edit invoice:");
+        add("Chỉnh sửa Hóa đơn: ", "Edit invoice: ");
+        add("Chỉnh sửa Dòng hàng: ", "Edit invoice line: ");
+        add("Sửa dòng hàng:", "Edit invoice line:");
+        add("Mã hóa đơn (PK):", "Invoice ID (PK):");
+        add("Ngày lập (YYYY-MM-DD) *:", "Invoice date (YYYY-MM-DD) *:");
+        add("Giờ lập (HH:MM:SS) *:", "Invoice time (HH:MM:SS) *:");
+        add("Trạng thái:", "Status:");
+        add("(chỉ đọc)", "(read only)");
+        add("Mã quầy (Counter_ID) *:", "Counter ID (Counter_ID) *:");
+        add("Mã thu ngân (Cashier_ID) *:", "Cashier ID (Cashier_ID) *:");
+        add("Mã khách hàng:", "Customer ID:");
+        add("Xóa mã khách (Set NULL)", "Clear customer ID (set NULL)");
+        add("Lưu vào Database", "Save to Database");
+        add("Hủy bỏ", "Cancel");
+        add("Mã vạch (Barcode) *:", "Barcode *:");
+        add("Số lượng (Quantity) *:", "Quantity *:");
+        add("Đơn giá (Unit_Price) *:", "Unit price (Unit_Price) *:");
+        add("Giảm giá (Discount) *:", "Discount *:");
+        add("Thử xóa (Set NULL)", "Try setting NULL");
+        add("Mã hóa đơn", "Invoice ID");
+        add("Ngày lập", "Invoice date");
+        add("Giờ lập", "Invoice time");
+        add("Thành công", "Success");
+        add("Thông báo", "Notice");
+        add("Lỗi", "Error");
+        add("Lỗi định dạng", "Invalid format");
+        add("Cảnh báo ràng buộc NOT NULL", "NOT NULL constraint warning");
+        add("CẢNH BÁO DATABASE: Trường '", "DATABASE WARNING: Field '");
+        add("CẢNH BÁO DATABASE: Cột '", "DATABASE WARNING: Column '");
+        add("' có ràng buộc NOT NULL!\nBạn không được phép xóa giá trị này về NULL hoặc để trống.",
                 "' has a NOT NULL constraint.\nThis value cannot be cleared or left empty.");
-        add("' co rang buoc NOT NULL trong Database!\nBan khong duoc phep xoa gia tri nay ve NULL hoac de trong.",
+        add("' có ràng buộc NOT NULL trong Database!\nBạn không được phép xóa giá trị này về NULL hoặc để trống.",
                 "' has a NOT NULL constraint in the Database.\nThis value cannot be cleared or left empty.");
-        add("Customer_ID la truong cho phep NULL (khach vang lai).\nGia tri nay se duoc cap nhat thanh NULL trong database.",
+        add("Customer_ID là trường cho phép NULL (khách vãng lai).\nGiá trị này sẽ được cập nhật thành NULL trong database.",
                 "Customer_ID allows NULL for walk-in customers.\nThis value will be updated to NULL in the database.");
-        add(" thanh cong trong Database!", " saved to the Database.");
-        add("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN, toi da 3 chu so (cot DECIMAL(10,3)).<br>Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>",
+        add(" thành công trong Database!", " saved to the Database.");
+        add("<html>Dấu <b>,</b> hoặc <b>.</b> là dấu THẬP PHÂN, tối đa 3 chữ số (cột DECIMAL(10,3)).<br>Đúng: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>",
                 "<html>Use <b>,</b> or <b>.</b> as the decimal separator, with up to 3 digits (DECIMAL(10,3)).<br>Examples: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>");
-        add("<html>Dau <b>.</b> la dau TACH NGHIN: <code>158.000</code> = 158 nghin.<br>Dau <b>,</b> la dau thap phan (toi da 2 chu so).</html>",
+        add("<html>Dấu <b>.</b> là dấu TÁCH NGHÌN: <code>158.000</code> = 158 nghìn.<br>Dấu <b>,</b> là dấu thập phân (tối đa 2 chữ số).</html>",
                 "<html><b>.</b> is the thousands separator: <code>158.000</code> = 158 thousand.<br><b>,</b> is the decimal separator (up to 2 digits).</html>");
-        add("<html><i style='color:#c0392b;'>* Toan bo cac cot trong Invoice_Line deu co rang buoc NOT NULL.<br>Nut 'Thu xoa (Set NULL)' se minh hoa co che canh bao cua Database.</i></html>",
+        add("<html><i style='color:#c0392b;'>* Toàn bộ các cột trong Invoice_Line đều có ràng buộc NOT NULL.<br>Nút 'Thử xóa (Set NULL)' sẽ minh họa cơ chế cảnh báo của Database.</i></html>",
                 "<html><i style='color:#c0392b;'>* All Invoice_Line columns have a NOT NULL constraint.<br>'Try setting NULL' demonstrates the Database warning.</i></html>");
-        add("<html><i style='color:#c0392b;'>* Cac truong danh dau (*) co rang buoc NOT NULL. Neu xoa trang se bi he thong canh bao!</i></html>",
+        add("<html><i style='color:#c0392b;'>* Các trường đánh dấu (*) có ràng buộc NOT NULL. Nếu xóa trắng sẽ bị hệ thống cảnh báo!</i></html>",
                 "<html><i style='color:#c0392b;'>* Fields marked with (*) have a NOT NULL constraint. Clearing one will show a warning.</i></html>");
-        add("Chua co dong hang", "No invoice lines");
-        add("Hoa don chua co dong hang nao.", "The invoice has no lines yet.");
-        add("Hoa don chua co dong hang nao, chua biet phai thu bao nhieu.", "The invoice has no lines, so there is nothing to collect.");
-        add("Hoa don nay da thu du tien.", "The invoice is fully paid.");
-        add("Hoa don nay da thu du tien (", "The invoice is fully paid (");
-        add(").\nKhong can them dong thanh toan nao nua.", ").\nNo additional payment is needed.");
-        add("Da thu du tien", "Fully paid");
-        add("Chua co dong thanh toan nao.", "No payments have been added.");
-        add("Chua co thanh toan", "No payments");
-        add("Chua nap duoc danh sach quay / thu ngan.\nKiem tra ket noi MySQL roi bam \"Tai lai\" o khung 1.",
+        add("Chưa có dòng hàng", "No invoice lines");
+        add("Hóa đơn chưa có dòng hàng nào.", "The invoice has no lines yet.");
+        add("Hóa đơn này đã thu đủ tiền.", "The invoice is fully paid.");
+        add("Hóa đơn này đã thu đủ tiền (", "The invoice is fully paid (");
+        add(").\nKhông cần thêm dòng thanh toán nào nữa.", ").\nNo additional payment is needed.");
+        add("Đã thu đủ tiền", "Fully paid");
+        add("Chưa có dòng thanh toán nào.", "No payments have been added.");
+        add("Chưa có thanh toán", "No payments");
+        add("Chưa nạp được danh sách quầy / thu ngân.\nKiểm tra kết nối MySQL rồi bấm \"Tải lại\" ở khung 1.",
                 "Could not load the counter / cashier list.\nCheck the MySQL connection, then click \"Reload\" in section 1.");
-        add("Thieu du lieu danh muc", "Missing lookup data");
-        add("So tien ", "Amount ");
-        add(" nhieu hon so con thieu ", " exceeds the balance due of ");
-        add("Khong co duong tra lai cho ", "There is no way to return excess funds for ");
-        add(": bang Payment khong co cot tien thoi cho phuong thuc nay,\nva phieu hoan tien nam ngoai pham vi ban demo.\n\nHay go dung ",
+        add("Thiếu dữ liệu danh mục", "Missing lookup data");
+        add("Số tiền ", "Amount ");
+        add(" nhiều hơn số còn thiếu ", " exceeds the balance due of ");
+        add("Không có đường trả lại cho ", "There is no way to return excess funds for ");
+        add(": bảng Payment không có cột tiền thối cho phương thức này,\nvà phiếu hoàn tiền nằm ngoài phạm vi bản demo.\n\nHãy gõ đúng ",
                 ": the Payment table has no change column for this method,\nand refunds are outside this demo.\n\nEnter exactly ");
-        add(", hoac chon \"Tien mat\" neu khach dua thua.", ", or choose \"Cash\" if the customer pays extra.");
-        add("So tien vuot qua so con thieu", "Amount exceeds balance due");
-        add("Vi dien tu khong co tien thoi, hay go dung ", "E-wallet payments cannot give change; enter exactly ");
-        add("Hoa don chua co dong hang nao, chua biet phai thu bao nhieu.", "The invoice has no lines, so there is nothing to collect.");
-        add("Chua nhap ", "Please enter ");
-        add("Chua nhap so tien", "Amount is required");
-        add("Chua nhap so luong.", "Quantity is required.");
-        add("So luong khong hop le", "Invalid quantity");
-        add("So tien khong hop le", "Invalid amount");
-        add(" khong doc duoc: \"", " could not be read: \"");
-        add("Dau . la dau tach nghin (phai du 3 chu so),\n", "Use . as the thousands separator (groups of 3 digits),\n");
-        add("dau , la dau thap phan (toi da 2 chu so).\n\n", "and , as the decimal separator (up to 2 digits).\n\n");
-        add("Dung:  500.000   |   1.234,50   |   500000\n", "Valid: 500.000 | 1.234,50 | 500000\n");
+        add(", hoặc chọn \"Tiền mặt\" nếu khách đưa thừa.", ", or choose \"Cash\" if the customer pays extra.");
+        add("Số tiền vượt quá số còn thiếu", "Amount exceeds balance due");
+        add("Ví điện tử không có tiền thối, hãy gõ đúng ", "E-wallet payments cannot give change; enter exactly ");
+        add("Hóa đơn chưa có dòng hàng nào, chưa biết phải thu bao nhiêu.", "The invoice has no lines, so there is nothing to collect.");
+        add("Chưa nhập ", "Please enter ");
+        add("Chưa nhập số tiền", "Amount is required");
+        add("Chưa nhập số lượng.", "Quantity is required.");
+        add("Số lượng không hợp lệ", "Invalid quantity");
+        add("Số tiền không hợp lệ", "Invalid amount");
+        add(" không đọc được: \"", " could not be read: \"");
+        add("Dấu . là dấu tách nghìn (phải đủ 3 chữ số),\n", "Use . as the thousands separator (groups of 3 digits),\n");
+        add("dấu , là dấu thập phân (tối đa 2 chữ số).\n\n", "and , as the decimal separator (up to 2 digits).\n\n");
+        add("Đúng:  500.000   |   1.234,50   |   500000\n", "Valid: 500.000 | 1.234,50 | 500000\n");
         add("Sai :  500.00    |   1.2.3      |   1,234", "Invalid: 500.00 | 1.2.3 | 1,234");
-        add(" khong duoc am.", " cannot be negative.");
-        add(" phai lon hon 0.", " must be greater than 0.");
-        add("Chi duoc mot dau thap phan trong so luong: ", "Use only one decimal separator in the quantity: ");
-        add("So luong khong hop le: ", "Invalid quantity: ");
-        add("Dau , hoac . la dau thap phan, KHONG phai dau tach nghin.\n", "Use , or . as the decimal separator, not a thousands separator.\n");
-        add("Dung:  2   |   1,5   |   1.5   |   0,25", "Valid: 2 | 1,5 | 1.5 | 0,25");
-        add("Toi da 3 chu so thap phan (cot DECIMAL(10,3)).\n", "Use at most 3 decimal places (DECIMAL(10,3)).\n");
-        add("Ban go: ", "You entered: ");
-        add("So luong phai lon hon 0.", "Quantity must be greater than 0.");
-        add("Chi con ", "Only ");
-        add(" co the tra.", " can be returned.");
-        add("Da luu hoa don ", "Saved invoice ");
-        add(" nhung khong doc lai duoc de in.", " but could not reload it for printing.");
-        add("Da luu hoa don", "Saved invoice");
-        add("Khong cap nhat duoc hoa don", "Could not update invoice");
-        add("Khong tim thay hoa don", "Invoice not found");
-        add("Khong tim thay dong hang", "Invoice line not found");
-        add("Khong co dong hang", "No invoice lines");
-        add("Chua co dong hang nao", "No invoice lines");
-        add("Khong doc duoc hoa don", "Could not load invoice");
-        add("In hoa don", "Print receipt");
-        add("Dong", "Close");
-        add("Xac nhan da nhan tien", "Confirm payment received");
-        add("Nguoi duyet", "Approver");
-        add("Gia", "Price");
-        add("Don gia", "Unit price");
-        add("So luong", "Quantity");
-        add("Giam gia", "Discount");
-        add("Ngay lap phai dung dinh dang YYYY-MM-DD!", "Invoice date must use YYYY-MM-DD format.");
-        add("Gio lap phai dung dinh dang HH:MM:SS!", "Invoice time must use HH:MM:SS format.");
-        add("Vui long chon mot hoa don de chinh sua!", "Select an invoice to edit.");
-        add("Chua chon hoa don", "No invoice selected");
-        add("Vui long chon mot hoa don de huy!", "Select an invoice to void.");
-        add("Vui long chon mot hoa don de xoa!", "Select an invoice to delete.");
-        add("Vui long chon mot dong hang trong bang 'Cac dong hang' de chinh sua!", "Select an invoice line in the 'Invoice lines' table to edit it.");
-        add("Vui long chon mot dong hang de xoa!", "Select an invoice line to delete.");
-        add("Vui long chon mot hoa don de tra hang!", "Select an invoice to return items.");
-        add("Hoa don khong co dong hang nao de tra!", "This invoice has no lines to return.");
-        add("Vui long chon mot dong hang de tra!", "Select a line to return.");
-        add("Vui long chon mot luot tra!", "Select a return.");
-        add("Chua chon luot tra", "No return selected");
-        add("Khong tim thay hoa don ", "Invoice not found: ");
-        add("Khong tim thay dong hang so ", "Invoice line not found: ");
-        add("Da xoa thanh cong hoa don ", "Deleted invoice ");
-        add(" khoi Database!", " from the Database.");
-        add("Da xoa thanh cong dong hang ", "Deleted invoice line ");
-        add("Da huy hoa don", "Invoice voided");
-        add("Xac nhan xoa dong hang", "Confirm line deletion");
-        add("Xac nhan", "Confirm");
-        add("Xoa thanh cong", "Deleted successfully");
-        add("Dang hien ", "Showing ");
-        add(" hoa don (", " invoices (");
-        add("Khong co gi bi huy", "Nothing was voided");
-        add("Canh bao", "Warning");
-        add("Loi co so du lieu", "Database error");
+        add(" không được âm.", " cannot be negative.");
+        add(" phải lớn hơn 0.", " must be greater than 0.");
+        add("Chỉ được một dấu thập phân trong số lượng: ", "Use only one decimal separator in the quantity: ");
+        add("Số lượng không hợp lệ: ", "Invalid quantity: ");
+        add("Dấu , hoặc . là dấu thập phân, KHÔNG phải dấu tách nghìn.\n", "Use , or . as the decimal separator, not a thousands separator.\n");
+        add("Đúng:  2   |   1,5   |   1.5   |   0,25", "Valid: 2 | 1,5 | 1.5 | 0,25");
+        add("Tối đa 3 chữ số thập phân (cột DECIMAL(10,3)).\n", "Use at most 3 decimal places (DECIMAL(10,3)).\n");
+        add("Bạn gõ: ", "You entered: ");
+        add("Số lượng phải lớn hơn 0.", "Quantity must be greater than 0.");
+        add("Chỉ còn ", "Only ");
+        add(" có thể trả.", " can be returned.");
+        add("Đã lưu hóa đơn ", "Saved invoice ");
+        add(" nhưng không đọc lại được để in.", " but could not reload it for printing.");
+        add("Đã lưu hóa đơn", "Saved invoice");
+        add("Không cập nhật được hóa đơn", "Could not update invoice");
+        add("Không tìm thấy hóa đơn", "Invoice not found");
+        add("Không tìm thấy dòng hàng", "Invoice line not found");
+        add("Không có dòng hàng", "No invoice lines");
+        add("Chưa có dòng hàng nào", "No invoice lines");
+        add("Không đọc được hóa đơn", "Could not load invoice");
+        add("In hóa đơn", "Print receipt");
+        add("Đóng", "Close");
+        add("Xác nhận đã nhận tiền", "Confirm payment received");
+        add("Người duyệt", "Approver");
+        add("Giá", "Price");
+        add("Số lượng", "Quantity");
+        add("Ngày lập phải dùng định dạng YYYY-MM-DD!", "Invoice date must use YYYY-MM-DD format.");
+        add("Giờ lập phải dùng định dạng HH:MM:SS!", "Invoice time must use HH:MM:SS format.");
+        add("Vui lòng chọn một hóa đơn để chỉnh sửa!", "Select an invoice to edit.");
+        add("Chưa chọn hóa đơn", "No invoice selected");
+        add("Vui lòng chọn một hóa đơn để hủy!", "Select an invoice to void.");
+        add("Vui lòng chọn một hóa đơn để xóa!", "Select an invoice to delete.");
+        add("Vui lòng chọn một dòng hàng trong bảng 'Các dòng hàng' để chỉnh sửa!", "Select an invoice line in the 'Invoice lines' table to edit it.");
+        add("Vui lòng chọn một dòng hàng để xóa!", "Select an invoice line to delete.");
+        add("Vui lòng chọn một hóa đơn để trả hàng!", "Select an invoice to return items.");
+        add("Hóa đơn không có dòng hàng nào để trả!", "This invoice has no lines to return.");
+        add("Chưa chọn lượt trả", "No return selected");
+        add("Không tìm thấy hóa đơn ", "Invoice not found: ");
+        add("Không tìm thấy dòng hàng số ", "Invoice line not found: ");
+        add("Đã xóa thành công hóa đơn ", "Deleted invoice ");
+        add(" khỏi Database!", " from the Database.");
+        add("Đã xóa thành công dòng hàng ", "Deleted invoice line ");
+        add("Đã hủy hóa đơn", "Invoice voided");
+        add("Xác nhận xóa dòng hàng", "Confirm line deletion");
+        add("Xác nhận", "Confirm");
+        add("Xóa thành công", "Deleted successfully");
+        add(" hóa đơn (", " invoices (");
+        add("Không có gì bị hủy", "Nothing was voided");
+        add("Cảnh báo", "Warning");
         add("Lỗi cơ sở dữ liệu", "Database error");
         add("Lỗi khi tải dữ liệu từ bảng '", "Could not load data from table '");
         add("Lỗi khi xác định cột tìm kiếm:\n", "Could not determine the search column:\n");
         add("Lỗi khi thực hiện tìm kiếm:\n", "Search failed:\n");
-        add("Tìm kiếm không hỗ trợ bảng ", "Search is not supported for table ");
-        add("So luong moi cho \"", "New quantity for \"");
-        add("Dau , hoac . la dau thap phan, toi da 3 chu so.", "Use comma or period as the decimal separator, up to 3 decimal places.");
-        add("Tong hoa don ", "Invoice total ");
-        add(" nhung chi thanh toan ", " but only ");
-        add(" (thieu ", " paid (balance due: ");
-        add(").\n\nVan luu, nhung hoa don se o trang thai DANG LAP (OPEN):\n  - Khong duoc tinh vao bao cao doanh thu\n  - Khong tra hang duoc\n  - Nhan vien can thu tiep o tab 3", ").\n\nSave it anyway? The invoice will remain OPEN:\n  - It will not count toward revenue reports\n  - Items cannot be returned\n  - Collect the remaining balance from tab 3");
-        add("Huy hoa don ", "Void invoice ");
-        add("Huy hoa don ", "Void invoice ");
-        add("Huy KHAC Xoa:\n  - Du lieu van con nguyen: dong hang, thanh toan, tra hang\n  - Hoa don khong con duoc tinh vao bao cao doanh thu\n  - Khong tra hang duoc nua\n\nBan co chac chan?", "Voiding is different from deleting:\n  - Invoice lines, payments, and returns remain\n  - The invoice is excluded from revenue reports\n  - No more items can be returned\n\nContinue?");
-        add("Da huy hoa don ", "Voided invoice ");
-        add(".\nDu lieu van con trong database, chi khong tinh vao bao cao nua.", ".\nThe data remains in the database but is excluded from reports.");
-        add("Ban co chac chan muon XOA VINH VIEN hoa don ", "Permanently delete invoice ");
-        add(" khoi Database?\n\nThao tac nay se xoa sach:\n  1. Cac luot tra hang lien quan (Return)\n  2. Cac chi tiet thanh toan (Cash/Card/EWallet_Payment)\n  3. Cac luot thanh toan (Payment)\n  4. Cac dong hang (Invoice_Line)\n  5. Chinh hoa don (Invoice)\n\nThao tac nay KHONG THE HOAN TAC. Ban co chac chan?", " from the Database?\n\nThis will permanently delete:\n  1. Related returns\n  2. Payment details (Cash/Card/EWallet_Payment)\n  3. Payments\n  4. Invoice lines (Invoice_Line)\n  5. The invoice itself\n\nThis action cannot be undone. Continue?");
-        add("Ban co chac chan muon xoa dong hang so ", "Delete invoice line ");
-        add(" khoi hoa don ", " from invoice ");
-        add("Vui long chon mot dong hang o bang ben trai de them!", "Select an invoice line from the left table to add it.");
-        add("Dong ", "Line ");
-        add(" da co trong danh sach se tra.\n\nMuon doi so luong: chon muc do o bang ben phai, bam '<< Xoa',\nroi 'Them >>' lai voi so luong khac.", " is already in the return list.\n\nTo change the quantity, select the line on the right, click '<< Remove',\nthen add it again with the new quantity.");
-        add(" da tra het ", " has already been returned in full (");
-        add(" da mua,\nkhong con gi de tra.", " purchased);\nthere is nothing left to return.");
-        add("San pham: ", "Product: ");
-        add("Da mua: ", "Purchased: ");
-        add("   |   Da tra: ", "   |   Returned: ");
-        add("   |   Con lai: ", "   |   Remaining: ");
-        add("Vui long chon mot muc o bang ben phai de xoa!", "Select a line from the right table to remove it.");
-        add("Khong co san pham nao de tra!", "There are no items available to return.");
+        add("Số lượng mới cho \"", "New quantity for \"");
+        add("Dấu , hoặc . là dấu thập phân, tối đa 3 chữ số.", "Use comma or period as the decimal separator, up to 3 decimal places.");
+        add("Hủy hóa đơn ", "Void invoice ");
+        add("Đã hủy hóa đơn ", "Voided invoice ");
+        add(".\nDữ liệu vẫn còn trong database, chỉ không tính vào báo cáo nữa.", ".\nThe data remains in the database but is excluded from reports.");
+        add("Bạn có chắc chắn muốn XÓA VĨNH VIỄN hóa đơn ", "Permanently delete invoice ");
+        add("Bạn có chắc chắn muốn xóa dòng hàng số ", "Delete invoice line ");
+        add(" khỏi hóa đơn ", " from invoice ");
+        add("Vui lòng chọn một dòng hàng ở bảng bên trái để thêm!", "Select an invoice line from the left table to add it.");
+        add("Dòng ", "Line ");
+        add(" đã có trong danh sách sẽ trả.\n\nMuốn đổi số lượng: chọn mục đó ở bảng bên phải, bấm '<< Xóa',\nrồi 'Thêm >>' lại với số lượng khác.", " is already in the return list.\n\nTo change the quantity, select the line on the right, click '<< Remove',\nthen add it again with the new quantity.");
+        add(" đã trả hết ", " has already been returned in full (");
+        add(" đã mua,\nkhông còn gì để trả.", " purchased);\nthere is nothing left to return.");
+        add("Sản phẩm: ", "Product: ");
+        add("Đã mua: ", "Purchased: ");
+        add("   |   Đã trả: ", "   |   Returned: ");
+        add("   |   Còn lại: ", "   |   Remaining: ");
+        add("Vui lòng chọn một mục ở bảng bên phải để xóa!", "Select a line from the right table to remove it.");
+        add("Không có sản phẩm nào để trả!", "There are no items available to return.");
         add("Ghi ", "Record ");
-        add(" luot tra hang cho hoa don ", " return(s) for invoice ");
-        add("Tong tien phai tra lai: ", "Total refund: ");
-        add("Nguoi duyet: ", "Approved by: ");
-        add("Xac nhan xu ly tra hang", "Confirm returns");
-        add("Da ghi ", "Recorded ");
-        add(" luot tra hang cho hoa don ", " return(s) for invoice ");
-        add("Tong tien tra lai: ", "Total refund: ");
-        add("Vui long chon mot luot tra trong bang 'Tra hang (Return)' de huy!", "Select a return in the 'Returns (Return)' table to delete it.");
-        add("Khong doc duoc so dong / lan tra cua hang dang chon.", "Could not read the selected invoice line / return number.");
-        add("Huy luot tra nay khoi Database?\n\n  Hoa don : ", "Delete this return from the Database?\n\n  Invoice: ");
-        add("  Dong    : ", "  Line: ");
-        add("  Lan tra : ", "  Return: ");
-        add("  SL tra  : ", "  Qty returned: ");
-        add("Khong tim thay luot tra lan ", "Return ");
-        add(" cua dong ", " for line ");
-        add(" (co the ai khac da huy truoc).", " was not found (someone else may have deleted it).");
-        add("Da huy luot tra lan ", "Deleted return ");
-        add(" cua dong ", " for line ");
-        add("Huy luot tra nay khoi Database?", "Delete this return from the Database?");
-        add("Chuc nang nay bi khoa voi Thu ngan (Cashier). Chi Quan ly (Manager) moi co quyen.",
+        add("Tổng tiền phải trả lại: ", "Total refund: ");
+        add("Người duyệt: ", "Approved by: ");
+        add("Đã ghi ", "Recorded ");
+        add(" lượt trả hàng cho hóa đơn ", " return(s) for invoice ");
+        add("Tổng tiền trả lại: ", "Total refund: ");
+        add("Vui lòng chọn một lượt trả trong bảng 'Trả hàng (Return)' để hủy!", "Select a return in the 'Returns (Return)' table to delete it.");
+        add("Không đọc được số dòng hàng / lần trả của mục đang chọn.", "Could not read the selected invoice line / return number.");
+        add("Hủy lượt trả này khỏi Database?\n\n  Hóa đơn : ", "Delete this return from the Database?\n\n  Invoice: ");
+        add("  Dòng    : ", "  Line: ");
+        add("  Lần trả : ", "  Return: ");
+        add("  SL trả  : ", "  Qty returned: ");
+        add("Không tìm thấy lượt trả lần ", "Return ");
+        add(" (có thể ai khác đã hủy trước).", " was not found (someone else may have deleted it).");
+        add("Đã hủy lượt trả lần ", "Deleted return ");
+        add(" của dòng ", " for line ");
+        add("Hủy lượt trả này khỏi Database?", "Delete this return from the Database?");
+        add("Chức năng này bị khóa với Thu ngân (Cashier). Chỉ Quản lý (Manager) mới có quyền.",
                 "This action is disabled for Thu ngan (Cashier). Only Quan ly (Manager) can use it.");
-        add("Khong tra hang duoc", "Cannot return items");
-        add("Dong nay da duoc chon", "Line already selected");
-        add("Da tra het", "Fully returned");
-        add("Chua chon dong hang", "No invoice line selected");
-        add("Chua chon muc nao", "No line selected");
-        add("Danh sach trong", "Empty list");
-        add("Xac nhan xu ly tra hang", "Confirm returns");
+        add("Không trả hàng được", "Cannot return items");
+        add("Dòng này đã được chọn", "Line already selected");
+        add("Đã trả hết", "Fully returned");
+        add("Chưa chọn dòng hàng", "No invoice line selected");
+        add("Chưa chọn mục nào", "No line selected");
+        add("Danh sách trống", "Empty list");
+        add("Xác nhận xử lý trả hàng", "Confirm returns");
         add("Tất cả", "All");
-        add("Tất cả", "All");
-        add("Tong tien ", "Invoice total ");
-        add(" nhung chi thanh toan ", " but only ");
-        add(" (thieu ", " paid (balance due: ");
-        add("Van luu, nhung hoa don se o trang thai DANG LAP (OPEN):\n", "Save it anyway? The invoice will remain OPEN:\n");
-        add("  - Khong duoc tinh vao bao cao doanh thu\n", "  - It will not count toward revenue reports\n");
-        add("  - Khong tra hang duoc\n", "  - Items cannot be returned\n");
-        add("  - Nhan vien can thu tiep o tab 3", "  - Collect the remaining balance from tab 3");
-        add("Tong hoa don ", "Invoice total ");
-        add("Giam gia", "Discount");
-        add("Tang gia", "Price increase");
-        add("Khong co", "None");
-        add("Dang hien ", "Showing ");
-        add("hoa don", "invoice");
-        add("hoa don", "invoice");
+        add("Tổng tiền ", "Invoice total ");
+        add(" nhưng chỉ thanh toán ", " but only ");
+        add(" (thiếu ", " paid (balance due: ");
+        add("Vẫn lưu, nhưng hóa đơn sẽ ở trạng thái ĐANG LẬP (OPEN):\n", "Save it anyway? The invoice will remain OPEN:\n");
+        add("  - Không được tính vào báo cáo doanh thu\n", "  - It will not count toward revenue reports\n");
+        add("  - Không trả hàng được\n", "  - Items cannot be returned\n");
+        add("Tổng hóa đơn ", "Invoice total ");
+        add("Giảm giá", "Discount");
+        add("Tăng giá", "Price increase");
+        add("Đang hiện ", "Showing ");
+        add("hóa đơn", "invoice");
 
-        add("Ma khach", "Customer ID");
-        add("Khong co", "None");
-        add("Xoa ma khach", "Clear customer ID");
-        add("Xac nhan xoa", "Confirm deletion");
-        add("Ten hang", "Item");
-        add("Thoi gian", "Date and time");
-        add("Quay", "Counter");
-        add("Khach hang", "Customer");
-        add("Ma HD", "Invoice ID");
-        add("HOA DON BAN LE", "RETAIL RECEIPT");
-        add("Thanh toan bang ma QR (VietQR)", "QR payment (VietQR)");
-        add("So tien trong ma QR: ", "Amount in QR code: ");
-        add("Chuyen toi: ", "Transfer to: ");
-        add("Tai khoan: ", "Account: ");
-        add("Noi dung CK (Transaction_Ref): ", "Transfer reference (Transaction_Ref): ");
-        add("Ban demo: viec doi soat la THU CONG -- bam \"Xac nhan\" khi da thay tien vao.",
+        add("Mã khách", "Customer ID");
+        add("Không có", "None");
+        add("Xóa mã khách", "Clear customer ID");
+        add("Xác nhận xóa", "Confirm deletion");
+        add("Quầy", "Counter");
+        add("Khách hàng", "Customer");
+        add("HÓA ĐƠN BÁN LẺ", "RETAIL RECEIPT");
+        add("Thanh toán bằng mã QR (VietQR)", "QR payment (VietQR)");
+        add("Số tiền trong mã QR: ", "Amount in QR code: ");
+        add("Chuyển tới: ", "Transfer to: ");
+        add("Tài khoản: ", "Account: ");
+        add("Nội dung CK (Transaction_Ref): ", "Transfer reference (Transaction_Ref): ");
+        add("Bản demo: việc đối soát là THU CÔNG -- bấm \"Xác nhận\" khi đã thấy tiền vào.",
                 "Demo only: verify payments manually. Click \"Confirm\" after the money arrives.");
-        add("Tra hang -- hoa don ", "Return items -- invoice ");
-        add("Hoa don: ", "Invoice: ");
-        add("  |  Ngay: ", "  |  Date: ");
-        add("  |  Trang thai: ", "  |  Status: ");
-        add("Thoi gian", "Date and time");
-        add("Ma HD", "Invoice ID");
-        add("Ten hang", "Item");
-        add("Tong cong", "Grand total");
-        add("Tong tien", "Total");
-        add("Da thu", "Paid");
-        add("Con thieu", "Balance due");
-        add("Tien thoi", "Change");
-        add("Cac dong", "Lines");
-        add("Don gia", "Unit price");
-        add("Thanh tien", "Line total");
-        add("Phuong thuc", "Method");
-        add("So tien", "Amount");
-        add("Da gui lenh in hoa don.", "The print command was sent.");
+        add("Trả hàng -- hóa đơn ", "Return items -- invoice ");
+        add("Hóa đơn: ", "Invoice: ");
+        add("  |  Ngày: ", "  |  Date: ");
+        add("  |  Trạng thái: ", "  |  Status: ");
+        add("Thời gian", "Date and time");
+        add("Mã HD", "Invoice ID");
+        add("Tên hàng", "Item");
+        add("Tổng cộng", "Grand total");
+        add("Tổng tiền", "Total");
+        add("Đã thu", "Paid");
+        add("Còn thiếu", "Balance due");
+        add("Tiền thối", "Change");
+        add("Các dòng", "Lines");
+        add("Đơn giá", "Unit price");
+        add("Thành tiền", "Line total");
+        add("Phương thức", "Method");
+        add("Số tiền", "Amount");
+        add("Đã gửi lệnh in hóa đơn.", "The print command was sent.");
         updateSwingLanguageDefaults();
     }
 
@@ -504,7 +454,13 @@ public final class I18n {
         if (source == null) return null;
         // "Đồng" is also the Vietnamese currency name; keep currency values intact.
         if (normalize(source).equals("dong") && source.toLowerCase(Locale.ROOT).contains("đồng")) return source;
-        String mapped = language == Language.ENGLISH ? EN.get(normalize(source)) : VI.get(normalize(source));
+        String mapped;
+        if (language == Language.ENGLISH) {
+            mapped = EN.get(normalize(source));
+        } else {
+            mapped = EN_SOURCE.get(normalize(source));
+            if (mapped == null) mapped = VI.get(normalize(source));
+        }
         return mapped == null ? source : mapped;
     }
 
@@ -521,7 +477,7 @@ public final class I18n {
         if (source != null && normalize(source).equals("dong")
                 && source.toLowerCase(Locale.ROOT).contains("đồng")) return source;
         if (source != null && normalize(source).equals("dong")) {
-            return language == Language.ENGLISH ? "Line" : "Dong";
+            return language == Language.ENGLISH ? "Line" : "Dòng";
         }
         return text(source);
     }
@@ -531,15 +487,15 @@ public final class I18n {
         if (source == null) return null;
         String exact = text(source);
         if (!Objects.equals(exact, source)) return exact;
-        Map<String, String> replacements = language == Language.ENGLISH ? EN : VI;
-        if (language == Language.VIETNAMESE) {
-            Map<String, String> englishToSource = new HashMap<>();
-            for (Map.Entry<String, String> entry : VI.entrySet()) {
-                englishToSource.put(entry.getKey(), entry.getValue());
-            }
-            replacements = englishToSource;
+        if (language == Language.ENGLISH) {
+            return translatePhrases(source, EN, true);
         }
-        return translatePhrases(source, replacements, language == Language.ENGLISH);
+        Map<String, String> englishToSource = new HashMap<>();
+        for (Map.Entry<String, String> entry : VI.entrySet()) {
+            englishToSource.put(entry.getKey(), entry.getValue());
+        }
+        String translated = translatePhrases(source, englishToSource, false);
+        return translatePhrases(translated, EN_SOURCE, true);
     }
 
     public static void showMessageDialog(Component parent, Object message) {

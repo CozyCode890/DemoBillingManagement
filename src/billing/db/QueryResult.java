@@ -78,7 +78,7 @@ public class QueryResult {
         } catch (SQLException e) {
             // Trong app demo ta biến lỗi SQL thành RuntimeException để
             // tầng giao diện bắt và hiện hộp thoại báo lỗi.
-            throw new RuntimeException("Loi SQL: " + e.getMessage()
+            throw new RuntimeException("Lỗi SQL: " + e.getMessage()
                                      + "\n\nCau lenh:\n" + sql, e);
         }
 
@@ -128,7 +128,7 @@ public class QueryResult {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi goi thu tuc SQL: " + e.getMessage()
+            throw new RuntimeException("Lỗi gọi thủ tục SQL: " + e.getMessage()
                                      + "\n\nCau lenh:\n" + callSql, e);
         }
 
