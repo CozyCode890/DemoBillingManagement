@@ -50,38 +50,14 @@ USE retail_billing;
 -- ---------------------------------------------------------------------
 -- 0. DON SACH -- de file nay chay lai duoc bao nhieu lan cung xong,
 --    dung nhu khoi DROP o dau 04_routines.sql.
---    Thu tu la NGUOC CHIEU KHOA NGOAI: bang con truoc, bang cha sau.
---    Doc tu duoi len la doc dung thu tu CREATE TABLE cua 01_schema.sql.
---
---    KHONG dung SET FOREIGN_KEY_CHECKS = 0: ngan hon 14 dong, nhung no
---    day nguoi hoc tat toan ven du lieu de do phai nghi ve thu tu -- nguoc
---    han muc dich cua repo nay. Va no IM LANG khi thu tu sai, trong khi
---    cach duoi day BAO LOI (plan/15 muc 4.2).
---    TRUNCATE cung khong dung duoc: MySQL tu choi TRUNCATE tren bang dang
---    duoc mot khoa ngoai tham chieu.
+--    Thu tu xoa (nguoc chieu khoa ngoai) nam o MOT cho duy nhat:
+--    sp_wipe_all_data, 04_routines.sql phan 6 -- doc o do de biet vi sao
+--    khong dung FOREIGN_KEY_CHECKS = 0 hay TRUNCATE. Day cung la mot ly do
+--    nua khien file nay phai nap SAU 04_routines.sql (xem dau file).
+--    Seed tu viet cua ban cung goi duoc: CALL sp_wipe_transactions();
+--    (plan/16 muc 3.2)
 -- ---------------------------------------------------------------------
-DELETE FROM `Return`;             -- con cua Invoice_Line
-DELETE FROM Cash_Payment;         -- 3 bang con cua Payment
-DELETE FROM Card_Payment;
-DELETE FROM EWallet_Payment;
-DELETE FROM Payment;              -- con cua Invoice
-DELETE FROM Invoice_Line;         -- con cua Invoice (va cua Product)
-DELETE FROM Invoice;
-DELETE FROM Account;              -- con cua Cashier
-DELETE FROM Applies_To;           -- con cua Product va Promotion
-DELETE FROM Promotion;
-DELETE FROM Price_History;        -- con cua Product
-DELETE FROM Product;
-DELETE FROM Customer;
-DELETE FROM Counter;              -- con cua Shop
-DELETE FROM Shop;
-
--- Cashier TU THAM CHIEU chinh no (Supervisor_ID -> Cashier_ID), nen mot
--- cau DELETE duy nhat se that bai: InnoDB kiem khoa ngoai TUNG DONG, va
--- xoa E01 trong khi E02..E05 con tro vao no la vi pham.
--- Thao lien ket truoc, roi moi xoa.
-UPDATE Cashier SET Supervisor_ID = NULL;
-DELETE FROM Cashier;
+CALL sp_wipe_all_data();
 
 
 -- ---------------------------------------------------------------------

@@ -61,6 +61,9 @@ DROP PROCEDURE IF EXISTS sp_update_invoice_header;
 DROP PROCEDURE IF EXISTS sp_update_invoice_line;
 DROP PROCEDURE IF EXISTS sp_delete_invoice_line;
 
+DROP PROCEDURE IF EXISTS sp_wipe_transactions;
+DROP PROCEDURE IF EXISTS sp_wipe_all_data;
+
 DELIMITER $$
 
 -- =====================================================================
@@ -1263,6 +1266,82 @@ BEGIN
     DELETE FROM Invoice_Line
     WHERE Invoice_ID = p_invoice_id
       AND Line_Number = p_line_number;
+END$$
+
+
+-- =====================================================================
+-- PHAN 6: DUNG CU XOA DU LIEU -- app billing KHONG goi (plan/16)
+--
+--   Nguoi goi: 02_seed.sql (khoi 0), nut "Xoa du lieu" cua Setup App
+--   (scripts/*/sql-wipe-data.*), va seed tu viet cua nguoi hoc:
+--       CALL sp_wipe_transactions();   -- dau file seed => chay lai duoc
+--
+--   Xoa DONG, giu BANG: 16 bang, moi ham / thu tuc va moi thu khac trong
+--   database deu con nguyen. Goi hai lan cung nhu goi mot lan.
+--
+--   Thu tu la NGUOC CHIEU KHOA NGOAI: bang con truoc, bang cha sau.
+--   Doc tu duoi len la doc dung thu tu CREATE TABLE cua 01_schema.sql.
+--
+--   KHONG dung SET FOREIGN_KEY_CHECKS = 0: ngan hon 14 dong, nhung no
+--   day nguoi hoc tat toan ven du lieu de do phai nghi ve thu tu -- nguoc
+--   han muc dich cua repo nay. Va no IM LANG khi thu tu sai, trong khi
+--   cach duoi day BAO LOI (plan/15 muc 4.2).
+--   TRUNCATE cung khong dung duoc: MySQL tu choi TRUNCATE tren bang dang
+--   duoc mot khoa ngoai tham chieu.
+--
+--   KHONG boc transaction: thu tuc chet giua duong thi lan goi sau lam
+--   not. Va START TRANSACTION ben trong thu tuc se TU COMMIT transaction
+--   dang mo cua nguoi goi -- ai boc seed cua minh trong transaction roi
+--   goi thu tuc nay o dau se bi commit ngam ma khong biet.
+--
+--   THEM BANG MOI vao 01_schema.sql thi them no vao DAY, va vao danh sach
+--   dem cua sql-wipe-data.ps1 / .sh. Quen buoc nay: bang con co khoa ngoai
+--   se lam DELETE bang cha BAO LOI (on, dung cho); bang khong co khoa
+--   ngoai thi sot du lieu IM LANG -- plan/16 muc 9.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 6.1 sp_wipe_transactions: xoa 7 bang GIAO DICH, giu 9 bang danh muc
+--     (ranh gioi cua docs/05 muc 8.1). Khong the vi pham khoa ngoai:
+--     khoa ngoai chi tro tu giao dich sang danh muc, khong co chieu nguoc.
+--     Xoa xong, fn_next_invoice_id / fn_next_payment_id tu quay ve
+--     INV-0001 / PAY-0001 vi chung lay MAX(...) + 1.
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_wipe_transactions()
+BEGIN
+    DELETE FROM `Return`;             -- con cua Invoice_Line
+    DELETE FROM Cash_Payment;         -- 3 bang con cua Payment
+    DELETE FROM Card_Payment;
+    DELETE FROM EWallet_Payment;
+    DELETE FROM Payment;              -- con cua Invoice
+    DELETE FROM Invoice_Line;         -- con cua Invoice (va cua Product)
+    DELETE FROM Invoice;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 6.2 sp_wipe_all_data: xoa ca 16 bang. Account cung mat, nen app billing
+--     KHONG dang nhap duoc cho toi khi seed them lai tai khoan.
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_wipe_all_data()
+BEGIN
+    CALL sp_wipe_transactions();      -- 7 bang con phai di truoc
+
+    DELETE FROM Account;              -- con cua Cashier
+    DELETE FROM Applies_To;           -- con cua Product va Promotion
+    DELETE FROM Promotion;
+    DELETE FROM Price_History;        -- con cua Product
+    DELETE FROM Product;
+    DELETE FROM Customer;
+    DELETE FROM Counter;              -- con cua Shop
+    DELETE FROM Shop;
+
+    -- Cashier TU THAM CHIEU chinh no (Supervisor_ID -> Cashier_ID), nen mot
+    -- cau DELETE duy nhat se that bai: InnoDB kiem khoa ngoai TUNG DONG, va
+    -- xoa E01 trong khi E02..E05 con tro vao no la vi pham.
+    -- Thao lien ket truoc, roi moi xoa.
+    UPDATE Cashier SET Supervisor_ID = NULL;
+    DELETE FROM Cashier;
 END$$
 
 

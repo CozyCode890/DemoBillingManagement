@@ -44,6 +44,7 @@ Khi bạn `git clone` thì không gặp chuyện này. Chỉ khi tải file ZIP 
   - Cài đặt driver: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\setup.ps1`
   - Bật MySQL: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\mysql-start.ps1`
   - Nạp DB: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\sql-create-db.ps1`
+  - Xoá dữ liệu (giữ bảng và thủ tục): `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\sql-wipe-data.ps1 -Scope transactions` (hoặc `-Scope all`)
   - Chạy app: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\run.ps1`
   - Tắt MySQL: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\mysql-stop.ps1`
 
@@ -51,6 +52,7 @@ Khi bạn `git clone` thì không gặp chuyện này. Chỉ khi tải file ZIP 
   - Cài đặt môi trường (hỗ trợ Homebrew): `./scripts/bash/setup.sh`
   - Bật MySQL: `./scripts/bash/mysql-start.sh`
   - Nạp DB: `./scripts/bash/sql-create-db.sh`
+  - Xoá dữ liệu (giữ bảng và thủ tục): `./scripts/bash/sql-wipe-data.sh transactions` (hoặc `all`)
   - Chạy app: `./scripts/bash/run.sh`
   - Tắt MySQL: `./scripts/bash/mysql-stop.sh`
 
@@ -73,10 +75,21 @@ Khi bạn `git clone` thì không gặp chuyện này. Chỉ khi tải file ZIP 
 Nếu bạn nghịch lung tung và muốn về trạng thái ban đầu:
 
 ```bash
-powershell -ExecutionPolicy Bypass -File .\db-setup.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\ps1\db-setup.ps1
 ```
 
 > ⚠️ Script này chạy `DROP DATABASE IF EXISTS retail_billing` trước khi tạo mới. Database khác trên máy không bị ảnh hưởng.
+
+### Chỉ muốn xoá dữ liệu (giữ bảng và thủ tục)
+
+Dành cho người tập viết seed: bấm **Xoá dữ liệu** ở tab SQL của GUI rồi chọn một trong hai mức:
+
+| Mức | Xoá | Giữ |
+|---|---|---|
+| Chỉ dữ liệu giao dịch | Hoá đơn, dòng hàng, thanh toán, trả hàng (7 bảng) | Cửa hàng, sản phẩm, giá, khuyến mãi, tài khoản — app vẫn đăng nhập được |
+| Toàn bộ dữ liệu | Cả 16 bảng, kể cả tài khoản | Cấu trúc bảng và mọi hàm/thủ tục |
+
+Muốn seed của bạn chạy lại được, đặt `CALL sp_wipe_transactions();` ở đầu file. Chi tiết và hai lưu ý (R12 của `check-seed`, *Safe Updates* của Workbench) ở [docs/05 mục 8.5](docs/05-SQL-JAVA-CONVENTION.md).
 
 ---
 

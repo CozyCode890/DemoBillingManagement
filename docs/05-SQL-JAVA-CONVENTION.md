@@ -210,6 +210,8 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
 | `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |
 | `sp_check_seed` | PROCEDURE | `OUT p_violations` | 14 bất biến dữ liệu, mỗi quy tắc một dòng kèm số vi phạm; `OUT` là tổng. Nằm ở `sql/05_invariants.sql`, **không** ở `04_routines.sql`: nó là dụng cụ kiểm, app không gọi nó | `ContractCheck`, `check-seed.ps1` / `.sh` |
+| `sp_wipe_transactions` | PROCEDURE | *(không)* | Xoá **dòng** của 7 bảng giao dịch, giữ 9 bảng danh mục, mọi bảng và routine. Gọi hai lần như gọi một lần. **Chỗ duy nhất** giữ thứ tự xoá ngược khoá ngoại (`plan/16` mục 3.2) | *(app không gọi — nút *Xoá dữ liệu* của Setup App qua `sql-wipe-data.*`, seed tự viết)* |
+| `sp_wipe_all_data` | PROCEDURE | *(không)* | Gọi `sp_wipe_transactions` rồi xoá nốt 9 bảng danh mục, kể cả `Account` → app không đăng nhập được cho tới khi seed thêm tài khoản | *(app không gọi — `02_seed.sql` khối 0, `sql-wipe-data.*`)* |
 
 ---
 
@@ -377,3 +379,30 @@ trả) và **#77** (`fn_line_discount` khớp `NewInvoicePanel.lineDiscount` t�
 như một bản chép thứ hai: `fn_line_discount` được dùng bởi *cả* seed *và* quy
 tắc R2, nên nếu hàm sai thì R2 vẫn trả `0` -- hai bên sai khớp nhau. **Đừng
 sửa một bên.**
+
+### 8.5. Seed của bạn chạy lại được bằng một dòng
+
+Muốn tập viết seed riêng, đừng chép khối `DELETE` vào file của mình — gọi lại
+chỗ duy nhất giữ thứ tự xoá (`plan/16`):
+
+```sql
+USE retail_billing;
+CALL sp_wipe_transactions();   -- xoá 7 bảng giao dịch, giữ danh mục + tài khoản
+-- hoặc CALL sp_wipe_all_data();  -- xoá cả 16 bảng, seed phải tự INSERT lại danh mục
+```
+
+Trong Setup App, nút **Xoá dữ liệu** (tab SQL) làm đúng việc đó và in bảng
+số dòng Trước/Sau. Dòng lệnh: `.\scripts\ps1\sql-wipe-data.ps1 -Scope
+transactions|all` (macOS/Linux: `./scripts/bash/sql-wipe-data.sh
+transactions|all`). Cả hai **giữ nguyên** 16 bảng, mọi hàm/thủ tục, và mọi
+thứ bạn tự tạo thêm trong database.
+
+Hai điều cần biết trước:
+
+- **R12 khác 0 trên seed tự viết là bình thường.** R12 (*"91 ngày gần nhất
+  đều có hóa đơn"*) là cam kết phủ ngày của **seed chính thức**, không phải
+  quy tắc nghiệp vụ. 13 quy tắc còn lại thì seed nào cũng phải đạt `0`.
+- **MySQL Workbench mặc định bật *Safe Updates***, nên `CALL sp_wipe_*()` ở đó
+  báo `Error 1175` và **không xoá dòng nào**. Chạy `SET SQL_SAFE_UPDATES = 0;`
+  trong phiên đó trước (hoặc tắt trong *Preferences → SQL Editor*). Script và
+  Setup App không bị ảnh hưởng.
