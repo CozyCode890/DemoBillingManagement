@@ -39,7 +39,7 @@ public class Main {
               + "  2. Da tao database chua?  Chay file sql/01_schema.sql va sql/02_seed.sql\n"
               + "  3. Mat khau trong file config.properties da dung chua?\n"
               + "  4. Neu loi 'No suitable driver': thieu file mysql-connector-j.jar\n"
-              + "     trong thu muc lib/. Chay setup.ps1 de tai ve.\n";
+              + "     trong thu muc lib/. Mo Setup.exe / Setup.app bam CHAY de tu tai.\n";
             JOptionPane.showMessageDialog(null, help, "Loi ket noi", JOptionPane.ERROR_MESSAGE);
             return;
         }

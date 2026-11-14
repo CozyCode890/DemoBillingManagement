@@ -3,18 +3,25 @@
 // ---------------------------------------------------------------------
 //  Biên dịch:  powershell -ExecutionPolicy Bypass -File scripts\ps1\build-launcher.ps1
 //
-//  Vì sao cần file .exe riêng mà không dùng Setup.bat?
-//    1. Bấm đúp .bat luôn nháy một cửa sổ cmd đen -- trông như lỗi.
-//    2. .bat chỉ tìm javaw trong PATH và JAVA_HOME. Vừa cài JDK bằng winget
-//       mà chưa mở lại cửa sổ thì PATH chưa có -> báo "không tìm thấy Java"
-//       dù máy đã có.
-//    3. .bat không làm được hộp thoại đồ hoạ để mời người dùng cài Java.
+//  Setup.exe chỉ lo đúng một việc: có JDK 21 để chạy SetupApp.jar. Mọi việc
+//  còn lại (thư viện, MySQL, database, biên dịch, mở app) do SetupApp.jar làm.
 //
-//  File .exe này xử lý cả ba: không cửa sổ đen, dò Java ở 4 nguồn (biến môi
-//  trường, PATH, registry, thư mục cài của từng hãng), và nếu thiếu thì hiện
-//  hộp thoại cài tự động bằng winget. Sau khi cài, nó nhồi đường dẫn JDK vào
-//  PATH của tiến trình con nên script PowerShell trong GUI gọi được javac/java
-//  ngay, KHÔNG cần đăng xuất hay mở lại cửa sổ.
+//    1. Tìm JDK >= 21 (phải có javac.exe -- SetupApp biên dịch app billing):
+//       JDK portable của chính công cụ, JAVA_HOME, PATH, registry, thư mục
+//       cài của các hãng.
+//    2. Không có thì TỰ TẢI Temurin 21 bản ZIP (~190 MB) về
+//       <home>\jdk, có cửa sổ tiến độ và nút Huỷ. Không cần winget (Windows
+//       LTSC không có), không cần quyền Administrator, không đụng PATH hệ thống.
+//    3. Chép SetupApp.jar sang <home>\app rồi chạy bản chép đó. Lý do: Java
+//       khoá file jar đang chạy trên Windows, nên nếu chạy thẳng file trong repo
+//       thì "git switch" sang nhánh có SetupApp.jar khác sẽ báo
+//       "unable to unlink 'SetupApp.jar'". Thư mục repo truyền qua
+//       -Drb.project.root.
+//
+//  <home> = %RETAIL_BILLING_HOME% nếu có, không thì %USERPROFILE%\.retail-billing;
+//  nếu đường dẫn đó có ký tự ngoài ASCII (tên tài khoản có dấu) thì dùng
+//  %ProgramData%\RetailBilling. Quy tắc này PHẢI giống hệt
+//  envsetup.core.DevHome trong SetupApp.
 //
 //  Lưu ý khi sửa file: csc.exe của .NET Framework chỉ hiểu C# 5.0 --
 //  không dùng string interpolation ($"..."), toán tử ?. hay nameof.
@@ -23,10 +30,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
+using System.Drawing;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using System.Windows.Forms;
 using Microsoft.Win32;
 
 internal static class SetupLauncher
@@ -35,9 +47,9 @@ internal static class SetupLauncher
     private const int MinJavaMajor = 21;
 
     private const string Title = "Retail Billing Setup";
-    private const string WingetPackage = "EclipseAdoptium.Temurin.21.JDK";
     private const string DownloadPage = "https://adoptium.net/temurin/releases/?version=21&os=windows";
 
+    [STAThread]
     private static int Main(string[] args)
     {
         try
@@ -56,35 +68,37 @@ internal static class SetupLauncher
         string exeDir = GetExeDir();
         string root = ResolveProjectRoot(exeDir);
 
-        string jar = FindJar(root, exeDir);
-        if (jar == null)
+        string jar = Path.Combine(root, "SetupApp.jar");
+        if (!File.Exists(jar))
+        {
+            jar = Path.Combine(exeDir, "SetupApp.jar");
+        }
+        if (!File.Exists(jar))
         {
             Alert("Không tìm thấy SetupApp.jar.",
-                "Setup.exe phải nằm cùng thư mục với SetupApp.jar (thư mục gốc dự án, "
-                    + "cạnh config.properties).\n\nĐã tìm trong:\n  " + root
-                    + "\n  " + exeDir
-                    + "\n\nNếu bạn vừa xoá file jar, đóng gói lại bằng:\n"
-                    + "  powershell -ExecutionPolicy Bypass -File scripts\\ps1\\build-setup.ps1",
+                "Setup.exe phải nằm trong thư mục gốc của repo, cạnh SetupApp.jar và config.properties.\n\n"
+                    + "Đã tìm trong:\n  " + root + "\n  " + exeDir,
                 IconError);
             return 1;
         }
 
-        JavaRuntime java = FindBestJava();
-        if (java == null || (java.Major > 0 && java.Major < MinJavaMajor))
+        string home = ResolveHome();
+        JavaRuntime java = FindBestJdk(home);
+        if (java == null)
         {
-            java = AskToInstallJava(java);
+            java = DownloadJdk(home);
             if (java == null)
             {
                 return 1;
             }
         }
 
-        Launch(java, jar, root, args);
+        Launch(java, ShadowCopy(jar, home), root, args);
         return 0;
     }
 
     // ------------------------------------------------------------------
-    //  Tìm thư mục gốc dự án và file jar
+    //  Thư mục
     // ------------------------------------------------------------------
 
     private static string GetExeDir()
@@ -96,15 +110,16 @@ internal static class SetupLauncher
     }
 
     /// <summary>
-    /// Đi ngược lên tối đa 5 cấp để tìm thư mục có scripts/ hoặc config.properties --
-    /// giống envsetup.runner.PlatformUtil.climbToRoot() để hai bên luôn ra cùng kết quả.
+    /// Đi ngược lên tối đa 5 cấp tìm thư mục có config.properties hoặc SetupApp.jar --
+    /// giống envsetup.core.Project để hai bên luôn ra cùng kết quả.
     /// </summary>
     private static string ResolveProjectRoot(string exeDir)
     {
         DirectoryInfo dir = new DirectoryInfo(exeDir);
         for (int i = 0; dir != null && i < 5; i++)
         {
-            if (LooksLikeProjectRoot(dir.FullName))
+            if (File.Exists(Path.Combine(dir.FullName, "config.properties"))
+                || File.Exists(Path.Combine(dir.FullName, "SetupApp.jar")))
             {
                 return dir.FullName;
             }
@@ -113,45 +128,106 @@ internal static class SetupLauncher
         return exeDir;
     }
 
-    private static bool LooksLikeProjectRoot(string dir)
+    private static string ResolveHome()
     {
-        return Directory.Exists(Path.Combine(dir, "scripts\\ps1"))
-            || Directory.Exists(Path.Combine(dir, "scripts\\bash"))
-            || File.Exists(Path.Combine(dir, "config.properties"));
-    }
-
-    private static string FindJar(string root, string exeDir)
-    {
-        string[] candidates = { Path.Combine(root, "SetupApp.jar"), Path.Combine(exeDir, "SetupApp.jar") };
-        foreach (string c in candidates)
+        string over = Environment.GetEnvironmentVariable("RETAIL_BILLING_HOME");
+        if (!string.IsNullOrEmpty(over) && over.Trim().Length > 0)
         {
-            if (File.Exists(c))
+            return Path.GetFullPath(over.Trim());
+        }
+        string home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".retail-billing");
+        if (!IsAscii(home))
+        {
+            string programData = Environment.GetEnvironmentVariable("ProgramData");
+            if (!string.IsNullOrEmpty(programData))
             {
-                return c;
+                home = Path.Combine(programData, "RetailBilling");
             }
         }
-        return null;
+        return home;
+    }
+
+    private static bool IsAscii(string s)
+    {
+        foreach (char c in s)
+        {
+            if (c > 0x7E)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Chép jar sang home\app (tên theo SHA-1 nội dung) để file trong repo không bị khoá.</summary>
+    private static string ShadowCopy(string jar, string home)
+    {
+        try
+        {
+            string dir = Path.Combine(home, "app");
+            Directory.CreateDirectory(dir);
+            string target = Path.Combine(dir, "SetupApp-" + Sha1Hex(jar).Substring(0, 12) + ".jar");
+            if (!File.Exists(target))
+            {
+                string tmp = target + "." + Process.GetCurrentProcess().Id + ".tmp";
+                File.Copy(jar, tmp, true);
+                if (!File.Exists(target))
+                {
+                    File.Move(tmp, target);
+                }
+                else
+                {
+                    File.Delete(tmp);
+                }
+            }
+            // Dọn các bản cũ; bản nào đang chạy thì Windows không cho xoá -- bỏ qua.
+            foreach (string old in Directory.GetFiles(dir, "SetupApp-*.jar"))
+            {
+                if (!string.Equals(old, target, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(old); } catch (Exception) { }
+                }
+            }
+            return target;
+        }
+        catch (Exception)
+        {
+            return jar;     // không chép được thì chạy thẳng bản trong repo
+        }
+    }
+
+    private static string Sha1Hex(string file)
+    {
+        using (SHA1 sha = SHA1.Create())
+        using (FileStream fs = File.OpenRead(file))
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (byte b in sha.ComputeHash(fs))
+            {
+                sb.Append(b.ToString("x2"));
+            }
+            return sb.ToString();
+        }
     }
 
     // ------------------------------------------------------------------
-    //  Dò Java trên máy
+    //  Dò JDK trên máy
     // ------------------------------------------------------------------
 
     /// <summary>Một bản Java tìm thấy trên máy.</summary>
     private sealed class JavaRuntime
     {
         public string JavawPath;
-        /// <summary>Thư mục JAVA_HOME, null nếu javaw.exe không nằm trong .../bin.</summary>
         public string Home;
-        /// <summary>Phiên bản chính (21, 17, 8...); 0 nếu không đọc được.</summary>
         public int Major;
-        public string Version;
+        public bool IsJdk;
     }
 
-    /// <summary>Trả về bản Java mới nhất tìm được, hoặc null nếu máy chưa có Java.</summary>
-    private static JavaRuntime FindBestJava()
+    /// <summary>JDK >= 21 mới nhất trên máy (bản portable của công cụ được ưu tiên khi bằng nhau).</summary>
+    private static JavaRuntime FindBestJdk(string home)
     {
         List<string> candidates = new List<string>();
+        candidates.Add(Path.Combine(home, "jdk\\bin\\javaw.exe"));
         AddFromEnvironment(candidates);
         AddFromPath(candidates);
         AddFromRegistry(candidates);
@@ -159,7 +235,6 @@ internal static class SetupLauncher
 
         HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         JavaRuntime best = null;
-
         foreach (string javaw in candidates)
         {
             if (string.IsNullOrEmpty(javaw) || !seen.Add(javaw))
@@ -167,11 +242,10 @@ internal static class SetupLauncher
                 continue;
             }
             JavaRuntime found = Inspect(javaw);
-            if (found == null)
+            if (found == null || !found.IsJdk || found.Major < MinJavaMajor)
             {
                 continue;
             }
-            // Bản đọc được phiên bản luôn thắng bản không đọc được, sau đó mới so số.
             if (best == null || found.Major > best.Major)
             {
                 best = found;
@@ -182,13 +256,12 @@ internal static class SetupLauncher
 
     private static void AddFromEnvironment(List<string> list)
     {
-        string[] vars = { "JAVA_HOME", "JDK_HOME", "JRE_HOME" };
-        foreach (string v in vars)
+        foreach (string v in new[] { "JAVA_HOME", "JDK_HOME" })
         {
             string home = Environment.GetEnvironmentVariable(v);
             if (!string.IsNullOrEmpty(home))
             {
-                list.Add(Path.Combine(home.Trim('"'), "bin\\javaw.exe"));
+                AddHome(list, home.Trim('"'));
             }
         }
     }
@@ -213,7 +286,7 @@ internal static class SetupLauncher
             }
             catch (ArgumentException)
             {
-                // Bỏ qua phần tử PATH có ký tự không hợp lệ.
+                // Phần tử PATH có ký tự không hợp lệ.
             }
         }
     }
@@ -222,7 +295,6 @@ internal static class SetupLauncher
     {
         RegistryView[] views = { RegistryView.Registry64, RegistryView.Registry32 };
         RegistryHive[] hives = { RegistryHive.LocalMachine, RegistryHive.CurrentUser };
-
         foreach (RegistryView view in views)
         {
             foreach (RegistryHive hive in hives)
@@ -231,29 +303,11 @@ internal static class SetupLauncher
                 {
                     using (RegistryKey baseKey = RegistryKey.OpenBaseKey(hive, view))
                     {
-                        // Chuẩn cũ của Sun/Oracle, Temurin cũng ghi vào đây.
-                        string[] javaSoft =
-                        {
-                            "SOFTWARE\\JavaSoft\\JDK",
-                            "SOFTWARE\\JavaSoft\\Java Development Kit",
-                            "SOFTWARE\\JavaSoft\\JRE",
-                            "SOFTWARE\\JavaSoft\\Java Runtime Environment"
-                        };
-                        foreach (string key in javaSoft)
+                        foreach (string key in new[] { "SOFTWARE\\JavaSoft\\JDK", "SOFTWARE\\JavaSoft\\Java Development Kit" })
                         {
                             ReadJavaSoftKey(baseKey, key, list);
                         }
-
-                        // Temurin / Semeru ghi đường dẫn vào ...\<version>\<vm>\MSI\Path
-                        string[] msiRoots =
-                        {
-                            "SOFTWARE\\Eclipse Adoptium\\JDK",
-                            "SOFTWARE\\Eclipse Adoptium\\JRE",
-                            "SOFTWARE\\Eclipse Foundation\\JDK",
-                            "SOFTWARE\\Semeru\\JDK",
-                            "SOFTWARE\\IBM\\Semeru Runtime Open Edition"
-                        };
-                        foreach (string key in msiRoots)
+                        foreach (string key in new[] { "SOFTWARE\\Eclipse Adoptium\\JDK", "SOFTWARE\\Eclipse Foundation\\JDK", "SOFTWARE\\Semeru\\JDK" })
                         {
                             ReadMsiKey(baseKey, key, list);
                         }
@@ -261,7 +315,7 @@ internal static class SetupLauncher
                 }
                 catch (Exception)
                 {
-                    // Registry bị chặn quyền -- bỏ qua, còn 3 nguồn khác.
+                    // Registry bị chặn quyền -- còn các nguồn khác.
                 }
             }
         }
@@ -279,11 +333,10 @@ internal static class SetupLauncher
             {
                 using (RegistryKey sub = key.OpenSubKey(version))
                 {
-                    if (sub == null)
+                    if (sub != null)
                     {
-                        continue;
+                        AddHome(list, sub.GetValue("JavaHome") as string);
                     }
-                    AddHome(list, sub.GetValue("JavaHome") as string);
                 }
             }
         }
@@ -322,41 +375,42 @@ internal static class SetupLauncher
 
     private static void AddHome(List<string> list, string home)
     {
-        if (!string.IsNullOrEmpty(home))
+        if (string.IsNullOrEmpty(home))
         {
-            try
-            {
-                list.Add(Path.Combine(home, "bin\\javaw.exe"));
-            }
-            catch (ArgumentException)
-            {
-                // Giá trị registry hỏng -- bỏ qua.
-            }
+            return;
+        }
+        try
+        {
+            list.Add(Path.Combine(home, "bin\\javaw.exe"));
+        }
+        catch (ArgumentException)
+        {
+            // Giá trị hỏng.
         }
     }
 
-    /// <summary>
-    /// Quét thư mục cài mặc định của các hãng. Đây là lưới an toàn cuối cùng:
-    /// bắt được cả bản JDK giải nén tay hoặc vừa cài xong chưa kịp vào PATH.
-    /// </summary>
+    /// <summary>Quét thư mục cài mặc định của các hãng -- bắt cả JDK vừa cài chưa kịp vào PATH.</summary>
     private static void AddFromVendorDirs(List<string> list)
     {
         List<string> bases = new List<string>();
-        AddIfSet(bases, Environment.GetEnvironmentVariable("ProgramW6432"));
-        AddIfSet(bases, Environment.GetEnvironmentVariable("ProgramFiles"));
-        AddIfSet(bases, Environment.GetEnvironmentVariable("ProgramFiles(x86)"));
+        foreach (string v in new[] { "ProgramW6432", "ProgramFiles", "ProgramFiles(x86)" })
+        {
+            string value = Environment.GetEnvironmentVariable(v);
+            if (!string.IsNullOrEmpty(value))
+            {
+                bases.Add(value);
+            }
+        }
         string localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA");
         if (!string.IsNullOrEmpty(localAppData))
         {
             bases.Add(Path.Combine(localAppData, "Programs"));
         }
-
         string[] vendors =
         {
             "Eclipse Adoptium", "Eclipse Foundation", "Java", "Microsoft", "Zulu",
             "Amazon Corretto", "BellSoft", "RedHat", "IBM", "Semeru", "JetBrains", "Android\\Android Studio"
         };
-
         foreach (string baseDir in bases)
         {
             foreach (string vendor in vendors)
@@ -366,7 +420,6 @@ internal static class SetupLauncher
                 {
                     continue;
                 }
-                // Bản thân thư mục hãng có thể đã là một JDK (ví dụ ...\Android Studio\jbr).
                 AddIfJavaDir(list, vendorDir);
                 try
                 {
@@ -377,25 +430,15 @@ internal static class SetupLauncher
                 }
                 catch (Exception)
                 {
-                    // Không đọc được thư mục -- bỏ qua.
+                    // Không đọc được thư mục.
                 }
             }
         }
     }
 
-    private static void AddIfSet(List<string> list, string value)
-    {
-        if (!string.IsNullOrEmpty(value))
-        {
-            list.Add(value);
-        }
-    }
-
-    /// <summary>Thêm dir, dir\jre và dir\jbr nếu có javaw.exe (IDE nhúng JDK vào jbr).</summary>
     private static void AddIfJavaDir(List<string> list, string dir)
     {
-        string[] layouts = { "bin\\javaw.exe", "jre\\bin\\javaw.exe", "jbr\\bin\\javaw.exe" };
-        foreach (string layout in layouts)
+        foreach (string layout in new[] { "bin\\javaw.exe", "jbr\\bin\\javaw.exe" })
         {
             string javaw = Path.Combine(dir, layout);
             if (File.Exists(javaw))
@@ -405,46 +448,24 @@ internal static class SetupLauncher
         }
     }
 
-    /// <summary>Kiểm tra javaw.exe có thật và đọc phiên bản của nó.</summary>
+    /// <summary>Kiểm tra javaw.exe, đọc phiên bản từ file "release" và xem có javac.exe không.</summary>
     private static JavaRuntime Inspect(string javawPath)
     {
         if (!File.Exists(javawPath))
         {
             return null;
         }
-
+        string binDir = Path.GetDirectoryName(javawPath);
         JavaRuntime java = new JavaRuntime();
         java.JavawPath = javawPath;
-
-        string binDir = Path.GetDirectoryName(javawPath);
-        if (string.Equals(Path.GetFileName(binDir), "bin", StringComparison.OrdinalIgnoreCase))
-        {
-            java.Home = Path.GetDirectoryName(binDir);
-        }
-
-        java.Version = ReadVersionFromReleaseFile(java.Home);
-        if (java.Version == null)
-        {
-            java.Version = ReadVersionByRunningJava(binDir);
-        }
-        java.Major = ParseMajor(java.Version);
-        if (java.Version == null)
-        {
-            java.Version = "không rõ phiên bản";
-        }
+        java.Home = Path.GetDirectoryName(binDir);
+        java.IsJdk = File.Exists(Path.Combine(binDir, "javac.exe"));
+        java.Major = ParseMajor(ReadReleaseVersion(java.Home));
         return java;
     }
 
-    /// <summary>
-    /// Mọi bản JDK/JRE từ Java 9 trở lên đều có file "release" ở gốc chứa
-    /// JAVA_VERSION="21.0.12". Đọc file nhanh hơn và chắc hơn gọi java -version.
-    /// </summary>
-    private static string ReadVersionFromReleaseFile(string home)
+    private static string ReadReleaseVersion(string home)
     {
-        if (string.IsNullOrEmpty(home))
-        {
-            return null;
-        }
         try
         {
             string releaseFile = Path.Combine(home, "release");
@@ -462,45 +483,7 @@ internal static class SetupLauncher
         }
         catch (Exception)
         {
-            // File release hỏng -- để hàm gọi thử cách khác.
-        }
-        return null;
-    }
-
-    /// <summary>Dự phòng cho Java 8 (không có file release): gọi java.exe -version.</summary>
-    private static string ReadVersionByRunningJava(string binDir)
-    {
-        string javaExe = Path.Combine(binDir, "java.exe");
-        if (!File.Exists(javaExe))
-        {
-            return null;
-        }
-        try
-        {
-            ProcessStartInfo psi = new ProcessStartInfo(javaExe, "-version");
-            psi.UseShellExecute = false;
-            psi.CreateNoWindow = true;
-            psi.RedirectStandardError = true;
-            psi.RedirectStandardOutput = true;
-
-            using (Process p = Process.Start(psi))
-            {
-                string output = p.StandardError.ReadToEnd() + p.StandardOutput.ReadToEnd();
-                if (!p.WaitForExit(5000))
-                {
-                    return null;
-                }
-                int open = output.IndexOf('"');
-                int close = open < 0 ? -1 : output.IndexOf('"', open + 1);
-                if (open >= 0 && close > open)
-                {
-                    return output.Substring(open + 1, close - open - 1);
-                }
-            }
-        }
-        catch (Exception)
-        {
-            // java.exe hỏng hoặc bị chặn -- coi như không đọc được phiên bản.
+            // File release hỏng.
         }
         return null;
     }
@@ -514,19 +497,299 @@ internal static class SetupLauncher
         }
         string[] parts = version.Split('.', '_', '-', '+');
         int first;
-        if (parts.Length == 0 || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out first))
+        if (!int.TryParse(parts[0], out first))
         {
             return 0;
         }
-        if (first == 1 && parts.Length > 1)
+        int second;
+        if (first == 1 && parts.Length > 1 && int.TryParse(parts[1], out second))
         {
-            int second;
-            if (int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out second))
-            {
-                return second;
-            }
+            return second;
         }
         return first;
+    }
+
+    // ------------------------------------------------------------------
+    //  Tải JDK portable
+    // ------------------------------------------------------------------
+
+    private static JavaRuntime DownloadJdk(string home)
+    {
+        string arch = IsArm64() ? "aarch64" : "x64";
+        string url = "https://api.adoptium.net/v3/binary/latest/21/ga/windows/" + arch
+            + "/jdk/hotspot/normal/eclipse?project=jdk";
+        string downloads = Path.Combine(home, "downloads");
+        string zip = Path.Combine(downloads, "temurin-21-jdk-windows-" + arch + ".zip");
+
+        ProgressForm form = new ProgressForm();
+        Exception error = null;
+        form.Shown += delegate
+        {
+            Thread worker = new Thread(delegate()
+            {
+                try
+                {
+                    Directory.CreateDirectory(downloads);
+                    if (!File.Exists(zip))
+                    {
+                        Fetch(url, zip, form);
+                    }
+                    form.Report("Đang giải nén Java...", "Khoảng nửa phút", -1);
+                    InstallJdk(zip, home);
+                }
+                catch (Exception ex)
+                {
+                    error = ex;
+                }
+                finally
+                {
+                    form.Finish();
+                }
+            });
+            worker.IsBackground = true;
+            worker.Start();
+        };
+        Application.EnableVisualStyles();
+        Application.Run(form);
+
+        if (form.Cancelled)
+        {
+            return null;
+        }
+        if (error != null)
+        {
+            Alert("Không tải được Java 21.",
+                error.Message + "\n\nKiểm tra kết nối mạng rồi bấm đúp Setup.exe lần nữa -- phần đã tải được giữ lại.\n\n"
+                    + "Hoặc tự cài Temurin 21 (bản JDK) tại:\n" + DownloadPage,
+                IconError);
+            return null;
+        }
+        JavaRuntime java = Inspect(Path.Combine(home, "jdk\\bin\\javaw.exe"));
+        if (java == null || !java.IsJdk)
+        {
+            Alert("Đã tải Java nhưng không dùng được.", "Thiếu " + Path.Combine(home, "jdk\\bin\\javac.exe"), IconError);
+            return null;
+        }
+        return java;
+    }
+
+    private static bool IsArm64()
+    {
+        string a = Environment.GetEnvironmentVariable("PROCESSOR_ARCHITEW6432");
+        if (string.IsNullOrEmpty(a))
+        {
+            a = Environment.GetEnvironmentVariable("PROCESSOR_ARCHITECTURE");
+        }
+        return string.Equals(a, "ARM64", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Tải về file .part (tải tiếp được nếu lần trước bị ngắt) rồi đổi tên.</summary>
+    private static void Fetch(string url, string dest, ProgressForm form)
+    {
+        ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;   // TLS 1.2
+        string part = dest + ".part";
+        long have = File.Exists(part) ? new FileInfo(part).Length : 0;
+
+        HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+        req.UserAgent = "RetailBillingSetup/2";
+        req.AllowAutoRedirect = true;
+        req.Timeout = 30000;
+        req.ReadWriteTimeout = 60000;
+        if (have > 0)
+        {
+            req.AddRange(have);
+        }
+        form.OnCancel = delegate { try { req.Abort(); } catch (Exception) { } };
+
+        using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+        using (Stream input = resp.GetResponseStream())
+        {
+            bool append = resp.StatusCode == HttpStatusCode.PartialContent;
+            if (!append)
+            {
+                have = 0;
+            }
+            long total = resp.ContentLength < 0 ? -1 : resp.ContentLength + have;
+            using (FileStream output = new FileStream(part, append ? FileMode.Append : FileMode.Create, FileAccess.Write))
+            {
+                byte[] buf = new byte[128 * 1024];
+                long done = have;
+                int n;
+                DateTime last = DateTime.MinValue;
+                while ((n = input.Read(buf, 0, buf.Length)) > 0)
+                {
+                    if (form.Cancelled)
+                    {
+                        throw new OperationCanceledException();
+                    }
+                    output.Write(buf, 0, n);
+                    done += n;
+                    if ((DateTime.Now - last).TotalMilliseconds > 200)
+                    {
+                        last = DateTime.Now;
+                        form.Report("Đang tải Java 21 (Eclipse Temurin)...",
+                            Mb(done) + (total > 0 ? " / " + Mb(total) : "") + "  --  chỉ tải một lần",
+                            total > 0 ? (int)(done * 1000 / total) : -1);
+                    }
+                }
+                if (total > 0 && done < total)
+                {
+                    throw new IOException("Mất kết nối giữa chừng (" + Mb(done) + " / " + Mb(total) + ").");
+                }
+            }
+        }
+        form.OnCancel = null;
+        if (File.Exists(dest))
+        {
+            File.Delete(dest);
+        }
+        File.Move(part, dest);
+    }
+
+    private static void InstallJdk(string zip, string home)
+    {
+        string tmp = Path.Combine(home, "jdk.tmp");
+        string target = Path.Combine(home, "jdk");
+        if (Directory.Exists(tmp))
+        {
+            Directory.Delete(tmp, true);
+        }
+        try
+        {
+            ZipFile.ExtractToDirectory(zip, tmp);
+        }
+        catch (InvalidDataException)
+        {
+            File.Delete(zip);   // file hỏng -- lần sau tải lại từ đầu
+            throw new IOException("File Java tải về bị hỏng, đã xoá. Bấm đúp Setup.exe để tải lại.");
+        }
+        string inner = null;
+        foreach (string d in Directory.GetDirectories(tmp))
+        {
+            if (File.Exists(Path.Combine(d, "bin\\javac.exe")))
+            {
+                inner = d;
+            }
+        }
+        if (inner == null)
+        {
+            throw new IOException("File ZIP không chứa JDK như mong đợi.");
+        }
+        if (Directory.Exists(target))
+        {
+            Directory.Delete(target, true);
+        }
+        Directory.Move(inner, target);
+        Directory.Delete(tmp, true);
+        File.Delete(zip);
+    }
+
+    private static string Mb(long bytes)
+    {
+        return (bytes / (1024.0 * 1024.0)).ToString("0.0") + " MB";
+    }
+
+    /// <summary>Cửa sổ nhỏ hiện tiến độ tải, có nút Huỷ.</summary>
+    private sealed class ProgressForm : Form
+    {
+        private readonly Label head = new Label();
+        private readonly Label detail = new Label();
+        private readonly ProgressBar bar = new ProgressBar();
+        private readonly Button cancel = new Button();
+        private volatile bool finished;
+
+        public volatile bool Cancelled;
+        public volatile MethodInvoker OnCancel;
+
+        public ProgressForm()
+        {
+            Text = Title;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            StartPosition = FormStartPosition.CenterScreen;
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Font = new Font("Segoe UI", 9F);
+            ClientSize = new Size(480, 150);
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
+
+            head.Text = "Đang chuẩn bị Java 21...";
+            head.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            head.SetBounds(20, 16, 440, 26);
+            detail.Text = "Setup App cần Java. Máy chưa có nên đang tự tải bản portable, không cần cài đặt.";
+            detail.SetBounds(20, 44, 440, 20);
+            bar.SetBounds(20, 72, 440, 20);
+            bar.Maximum = 1000;
+            bar.Style = ProgressBarStyle.Marquee;
+            cancel.Text = "Huỷ";
+            cancel.SetBounds(380, 108, 80, 28);
+            cancel.Click += delegate { RequestCancel(); };
+
+            Controls.Add(head);
+            Controls.Add(detail);
+            Controls.Add(bar);
+            Controls.Add(cancel);
+            CancelButton = cancel;
+        }
+
+        /// <param name="permille">0..1000, hoặc âm để chạy vô định</param>
+        public void Report(string title, string text, int permille)
+        {
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+            BeginInvoke((MethodInvoker)delegate
+            {
+                head.Text = title;
+                detail.Text = text;
+                if (permille < 0)
+                {
+                    bar.Style = ProgressBarStyle.Marquee;
+                }
+                else
+                {
+                    bar.Style = ProgressBarStyle.Continuous;
+                    bar.Value = Math.Max(0, Math.Min(1000, permille));
+                }
+            });
+        }
+
+        public void Finish()
+        {
+            finished = true;
+            if (IsHandleCreated)
+            {
+                BeginInvoke((MethodInvoker)Close);
+            }
+        }
+
+        private void RequestCancel()
+        {
+            Cancelled = true;
+            cancel.Enabled = false;
+            head.Text = "Đang huỷ...";
+            MethodInvoker hook = OnCancel;
+            if (hook != null)
+            {
+                hook();
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (!finished)
+            {
+                // Bấm X khi đang tải = Huỷ; cửa sổ tự đóng khi luồng tải dừng hẳn.
+                e.Cancel = true;
+                if (!Cancelled)
+                {
+                    RequestCancel();
+                }
+                return;
+            }
+            base.OnFormClosing(e);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -535,171 +798,72 @@ internal static class SetupLauncher
 
     private static void Launch(JavaRuntime java, string jar, string root, string[] args)
     {
-        ProcessStartInfo psi = new ProcessStartInfo(java.JavawPath);
-
         StringBuilder cmd = new StringBuilder();
-        cmd.Append("-Dfile.encoding=UTF-8 -jar \"").Append(jar).Append('"');
+        cmd.Append("-Dfile.encoding=UTF-8 ");
+        cmd.Append(Quote("-Drb.project.root=" + root)).Append(' ');
+        cmd.Append("-jar ").Append(Quote(jar));
         foreach (string a in args)
         {
-            cmd.Append(" \"").Append(a).Append('"');
+            cmd.Append(' ').Append(Quote(a));
         }
-        psi.Arguments = cmd.ToString();
+
+        ProcessStartInfo psi = new ProcessStartInfo(java.JavawPath, cmd.ToString());
         psi.WorkingDirectory = root;
         psi.UseShellExecute = false;
         psi.CreateNoWindow = true;
-
-        // Nhồi JDK vào môi trường của tiến trình con: GUI gọi script PowerShell,
-        // script đó gọi javac/java. Nếu người dùng vừa cài JDK mà chưa mở lại
-        // cửa sổ thì PATH của Explorer vẫn cũ -- không làm bước này sẽ gặp
-        // "javac không phải là lệnh" dù Java đã nằm ngay trên máy.
-        string binDir = Path.GetDirectoryName(java.JavawPath);
-        if (!string.IsNullOrEmpty(java.Home))
-        {
-            psi.EnvironmentVariables["JAVA_HOME"] = java.Home;
-        }
+        // Nhồi JDK vào PATH của tiến trình con cho ai cần gọi java/javac từ đó.
+        psi.EnvironmentVariables["JAVA_HOME"] = java.Home;
         string path = Environment.GetEnvironmentVariable("PATH");
-        psi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(path) ? binDir : binDir + ";" + path;
-
+        string bin = Path.GetDirectoryName(java.JavawPath);
+        psi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(path) ? bin : bin + ";" + path;
         Process.Start(psi);
     }
 
-    // ------------------------------------------------------------------
-    //  Thiếu Java -- mời cài
-    // ------------------------------------------------------------------
-
-    /// <summary>Hỏi người dùng rồi cài Java. Trả về bản Java dùng được, null nếu bỏ qua.</summary>
-    private static JavaRuntime AskToInstallJava(JavaRuntime current)
+    /// <summary>Đặt một tham số trong dấu nháy theo luật CommandLineToArgvW (nhân đôi \ trước ").</summary>
+    private static string Quote(string arg)
     {
-        string content = current == null
-            ? "Setup App chạy bằng Java nhưng máy này chưa có bản nào.\n\n"
-                + "Bản khuyên dùng là Eclipse Temurin " + MinJavaMajor + " (JDK mã nguồn mở, miễn phí)."
-            : "Máy này đang có Java " + current.Version + " nhưng Setup App cần Java "
-                + MinJavaMajor + " trở lên.\n\n" + current.JavawPath;
-
-        int choice = AskThreeWay(
-            current == null ? "Chưa có Java trên máy" : "Java trên máy quá cũ",
-            content,
-            "Cài tự động bằng winget\nTải và cài Temurin " + MinJavaMajor + " (~190 MB, cần mạng, khoảng 2-3 phút)",
-            "Mở trang tải về\nTự tải bộ cài Temurin " + MinJavaMajor + " từ adoptium.net rồi chạy lại Setup");
-
-        if (choice == ButtonInstall)
+        StringBuilder sb = new StringBuilder("\"");
+        int backslashes = 0;
+        foreach (char c in arg)
         {
-            RunWinget();
-            JavaRuntime retry = FindBestJava();
-            if (retry != null && (retry.Major == 0 || retry.Major >= MinJavaMajor))
+            if (c == '\\')
             {
-                return retry;
-            }
-            Alert("Cài xong nhưng vẫn chưa thấy Java " + MinJavaMajor + " trở lên.",
-                "Nếu winget báo thành công, hãy bấm đúp Setup.exe lần nữa.\n\n"
-                    + "Nếu không, tải tay tại:\n" + DownloadPage,
-                IconWarning);
-            return null;
-        }
-
-        if (choice == ButtonDownload)
-        {
-            OpenUrl(DownloadPage);
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Chạy winget trong cửa sổ riêng để người dùng thấy tiến độ tải.
-    /// Không xét mã thoát vì winget trả mã khác 0 cho cả trường hợp vô hại
-    /// (ví dụ "đã cài sẵn") -- cứ dò lại Java sau khi nó kết thúc là chắc nhất.
-    /// </summary>
-    private static void RunWinget()
-    {
-        string winget = FindOnPath("winget.exe");
-        if (winget == null)
-        {
-            Alert("Máy này không có winget.",
-                "winget đi kèm App Installer của Microsoft Store. Bạn hãy tải bộ cài Temurin "
-                    + MinJavaMajor + " trực tiếp tại:\n" + DownloadPage,
-                IconWarning);
-            OpenUrl(DownloadPage);
-            return;
-        }
-
-        try
-        {
-            ProcessStartInfo psi = new ProcessStartInfo(winget,
-                "install --id " + WingetPackage + " --exact --source winget"
-                    + " --accept-source-agreements --accept-package-agreements");
-            psi.UseShellExecute = true; // mở cửa sổ console để thấy tiến độ winget
-            using (Process p = Process.Start(psi))
-            {
-                p.WaitForExit();
-            }
-        }
-        catch (Exception ex)
-        {
-            Alert("Không chạy được winget.", ex.Message, IconError);
-        }
-    }
-
-    private static string FindOnPath(string exeName)
-    {
-        string path = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrEmpty(path))
-        {
-            return null;
-        }
-        foreach (string dir in path.Split(';'))
-        {
-            string trimmed = dir.Trim().Trim('"');
-            if (trimmed.Length == 0)
-            {
+                backslashes++;
                 continue;
             }
-            try
+            if (c == '"')
             {
-                string full = Path.Combine(trimmed, exeName);
-                if (File.Exists(full))
-                {
-                    return full;
-                }
+                sb.Append('\\', backslashes * 2 + 1);
             }
-            catch (ArgumentException)
+            else
             {
-                // Phần tử PATH không hợp lệ -- bỏ qua.
+                sb.Append('\\', backslashes);
             }
+            backslashes = 0;
+            sb.Append(c);
         }
-        return null;
-    }
-
-    private static void OpenUrl(string url)
-    {
-        try
-        {
-            ProcessStartInfo psi = new ProcessStartInfo(url);
-            psi.UseShellExecute = true;
-            Process.Start(psi);
-        }
-        catch (Exception)
-        {
-            // Không mở được trình duyệt -- người dùng vẫn đọc được URL trong hộp thoại.
-        }
+        sb.Append('\\', backslashes * 2);
+        return sb.Append('"').ToString();
     }
 
     // ------------------------------------------------------------------
-    //  Hộp thoại (TaskDialog của Windows, tự lùi về MessageBox nếu lỗi)
+    //  Hộp thoại báo lỗi (TaskDialog của Windows, tự lùi về MessageBox)
     // ------------------------------------------------------------------
 
-    private const int ButtonInstall = 1001;
-    private const int ButtonDownload = 1002;
-    private const int ButtonCancel = 2; // IDCANCEL
-
-    private const uint IconWarning = 0xFFFF; // TD_WARNING_ICON
     private const uint IconError = 0xFFFE;   // TD_ERROR_ICON
 
     private static void Alert(string heading, string content, uint icon)
     {
         try
         {
-            TaskDialogConfig config = NewConfig(heading, content, icon);
-            config.dwCommonButtons = 1; // TDCBF_OK_BUTTON
+            TaskDialogConfig config = new TaskDialogConfig();
+            config.cbSize = (uint)Marshal.SizeOf(typeof(TaskDialogConfig));
+            config.dwFlags = 0x0008 | 0x1000000;   // ALLOW_DIALOG_CANCELLATION | SIZE_TO_CONTENT
+            config.dwCommonButtons = 1;             // OK
+            config.pszWindowTitle = Title;
+            config.hMainIcon = new IntPtr(unchecked((int)icon));
+            config.pszMainInstruction = heading;
+            config.pszContent = content;
             int button;
             if (TaskDialogIndirect(ref config, out button, IntPtr.Zero, IntPtr.Zero) == 0)
             {
@@ -708,120 +872,14 @@ internal static class SetupLauncher
         }
         catch (Exception)
         {
-            // Windows quá cũ hoặc comctl32 v6 không nạp được -- dùng MessageBox.
+            // comctl32 v6 không nạp được -- dùng MessageBox.
         }
-        uint style = icon == IconError ? MbIconError : MbIconWarning;
-        MessageBoxW(IntPtr.Zero, heading + "\n\n" + content, Title, MbOk | style | MbSetForeground | MbTopMost);
+        MessageBoxW(IntPtr.Zero, heading + "\n\n" + content, Title, 0x10 | 0x10000 | 0x40000);
     }
 
-    /// <summary>
-    /// Hộp thoại hai lựa chọn + Thoát. Trả về ButtonInstall / ButtonDownload / ButtonCancel.
-    /// </summary>
-    private static int AskThreeWay(string heading, string content, string installText, string downloadText)
-    {
-        IntPtr buttonArray = IntPtr.Zero;
-        TaskDialogButton[] buttons =
-        {
-            NewButton(ButtonInstall, installText),
-            NewButton(ButtonDownload, downloadText)
-        };
-        try
-        {
-            int stride = Marshal.SizeOf(typeof(TaskDialogButton));
-            buttonArray = Marshal.AllocHGlobal(stride * buttons.Length);
-            for (int i = 0; i < buttons.Length; i++)
-            {
-                Marshal.StructureToPtr(buttons[i], (IntPtr)(buttonArray.ToInt64() + i * stride), false);
-            }
-
-            TaskDialogConfig config = NewConfig(heading, content, IconWarning);
-            config.dwFlags |= TdfUseCommandLinks;
-            config.dwCommonButtons = 8; // TDCBF_CANCEL_BUTTON
-            config.cButtons = (uint)buttons.Length;
-            config.pButtons = buttonArray;
-            config.nDefaultButton = ButtonInstall;
-
-            int pressed;
-            if (TaskDialogIndirect(ref config, out pressed, IntPtr.Zero, IntPtr.Zero) == 0)
-            {
-                return pressed;
-            }
-        }
-        catch (Exception)
-        {
-            // Lùi về MessageBox ở dưới.
-        }
-        finally
-        {
-            if (buttonArray != IntPtr.Zero)
-            {
-                int stride = Marshal.SizeOf(typeof(TaskDialogButton));
-                for (int i = 0; i < buttons.Length; i++)
-                {
-                    Marshal.DestroyStructure((IntPtr)(buttonArray.ToInt64() + i * stride), typeof(TaskDialogButton));
-                }
-                Marshal.FreeHGlobal(buttonArray);
-            }
-        }
-
-        // Dự phòng: MessageBox không cho đặt tên nút nên phải chú thích trong nội dung.
-        int rc = MessageBoxW(IntPtr.Zero,
-            heading + "\n\n" + content
-                + "\n\n[Yes / Có]\tCài tự động bằng winget"
-                + "\n[No / Không]\tMở trang tải về"
-                + "\n[Cancel / Huỷ]\tThoát",
-            Title, MbYesNoCancel | MbIconWarning | MbSetForeground | MbTopMost);
-        if (rc == 6)
-        {
-            return ButtonInstall;
-        }
-        if (rc == 7)
-        {
-            return ButtonDownload;
-        }
-        return ButtonCancel;
-    }
-
-    private static TaskDialogConfig NewConfig(string heading, string content, uint icon)
-    {
-        TaskDialogConfig config = new TaskDialogConfig();
-        config.cbSize = (uint)Marshal.SizeOf(typeof(TaskDialogConfig));
-        config.hwndParent = IntPtr.Zero;
-        config.hInstance = IntPtr.Zero;
-        config.dwFlags = TdfAllowDialogCancellation | TdfSizeToContent;
-        config.pszWindowTitle = Title;
-        config.hMainIcon = new IntPtr(unchecked((int)icon));
-        config.pszMainInstruction = heading;
-        config.pszContent = content;
-        config.nDefaultButton = 0;
-        config.nDefaultRadioButton = 0;
-        return config;
-    }
-
-    private static TaskDialogButton NewButton(int id, string text)
-    {
-        TaskDialogButton button = new TaskDialogButton();
-        button.nButtonID = id;
-        button.pszButtonText = text;
-        return button;
-    }
-
-    private const uint TdfAllowDialogCancellation = 0x0008;
-    private const uint TdfUseCommandLinks = 0x0010;
-    private const uint TdfSizeToContent = 0x1000000;
-
-    private const uint MbOk = 0x0;
-    private const uint MbYesNoCancel = 0x3;
-    private const uint MbIconError = 0x10;
-    private const uint MbIconWarning = 0x30;
-    private const uint MbSetForeground = 0x10000;
-    private const uint MbTopMost = 0x40000;
-
-    // Pack = 1 là BẮT BUỘC, không phải tuỳ chọn: commctrl.h khai báo hai struct
-    // này nằm giữa #include <pshpack1.h> và <poppack.h> nên bản gốc bị nén sát,
-    // không có byte đệm. Bỏ Pack thì CLR canh lề tự nhiên -> struct phình từ
-    // 160 lên 176 byte trên x64, cbSize sai và TaskDialogIndirect trả về
-    // E_INVALIDARG (0x80070057) trong im lặng, rơi xuống MessageBox dự phòng.
+    // Pack = 1 là BẮT BUỘC: commctrl.h khai báo struct này trong pshpack1.h. Bỏ
+    // Pack thì struct phình từ 160 lên 176 byte trên x64, cbSize sai và
+    // TaskDialogIndirect trả về E_INVALIDARG trong im lặng.
     [StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)]
     private struct TaskDialogConfig
     {
@@ -849,13 +907,6 @@ internal static class SetupLauncher
         public IntPtr pfCallback;
         public IntPtr lpCallbackData;
         public uint cxWidth;
-    }
-
-    [StructLayout(LayoutKind.Sequential, Pack = 1, CharSet = CharSet.Unicode)]
-    private struct TaskDialogButton
-    {
-        public int nButtonID;
-        [MarshalAs(UnmanagedType.LPWStr)] public string pszButtonText;
     }
 
     [DllImport("comctl32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

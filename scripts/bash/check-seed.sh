@@ -25,6 +25,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# Cong cu ma Setup App tu tai ve (MySQL rieng, JDK portable) nam ngoai repo, trong
+# ~/.retail-billing. Them vao CUOI PATH: may co san MySQL / JDK thi van dung ban do.
+RB_HOME="${RETAIL_BILLING_HOME:-$HOME/.retail-billing}"
+for d in "$RB_HOME"/mysql-*/bin "$RB_HOME/jdk/Contents/Home/bin" "$RB_HOME/jdk/bin"; do
+    if [ -d "$d" ]; then PATH="$PATH:$d"; fi
+done
+export PATH
+
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
@@ -45,11 +53,11 @@ if ! command -v mysql >/dev/null 2>&1; then
 fi
 if ! pgrep -x mysqld >/dev/null 2>&1 && ! (command -v mysqladmin >/dev/null 2>&1 && mysqladmin ping --silent 2>/dev/null); then
     echo -e "${RED}[LOI] MySQL Server chua chay.${NC}"
-    echo -e "${YELLOW}Vui long khoi dong MySQL bang: ./scripts/bash/mysql-start.sh${NC}"
+    echo -e "${YELLOW}Mo Setup.app va bam CHAY UNG DUNG (tu bat MySQL)${NC}"
     exit 1
 fi
 
-# --- Thong tin dang nhap: lay tu config.properties nhu sql-seed-data.sh ---
+# --- Thong tin dang nhap: lay tu config.properties giong app billing ---
 DB_USER='root'
 DB_PW='root'
 if [ -f config.properties ]; then
@@ -64,8 +72,8 @@ echo -e "${CYAN}--- Kiem 14 bat bien cua du lieu (sp_check_seed) ---${NC}"
 
 # --- Buoc 1: tu nap 05_invariants.sql --------------------------------
 # Vi sao nap moi lan chay thay vi doi nguoi dung nap tay:
-#   01_schema.sql mo dau bang DROP DATABASE, nen MOI lan chay db-setup
-#   hoac bam "Tao database" trong Setup App la sp_check_seed bien mat.
+#   01_schema.sql mo dau bang DROP DATABASE, nen MOI lan Setup App nap lai database
+#   (lan dau, hoac moi khi SQL doi) la sp_check_seed bien mat roi tao lai.
 #   De script tu nap thi no chay duoc sau BAT KY duong dung database nao --
 #   va khong phai them mot buoc vao hai duong nap do (duong cua Setup App
 #   thi khoi 6 cam khong duoc sua -- plan/15 muc 4.1 diem 2).
@@ -79,7 +87,7 @@ set -e
 if [ "$LOAD" -ne 0 ]; then
     unset MYSQL_PWD
     echo -e "${RED}[LOI] Khong nap duoc sql/05_invariants.sql.${NC}"
-    echo -e "${YELLOW}      Database retail_billing da duoc tao chua? Chay ./scripts/bash/db-setup.sh${NC}"
+    echo -e "${YELLOW}      Database retail_billing da duoc tao chua? Mo Setup.app va bam CHAY UNG DUNG${NC}"
     exit 1
 fi
 
