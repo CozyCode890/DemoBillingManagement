@@ -936,7 +936,7 @@ public class InvoiceViewPanel extends JPanel {
             JOptionPane.showMessageDialog(this,
                 "Tai khoan '" + (user == null ? "?" : user.getUsername()) + "' chua duoc gan voi nhan vien\n"
               + "nao trong bang Cashier, nen khong the dung lam nguoi duyet tra hang.\n\n"
-              + "Cach sua: chay lai .\\scripts\\ps1\\db-setup.ps1 (xoa sach du lieu),\n"
+              + "Cach sua: bam \"Nap lai database\" trong Setup App (xoa sach du lieu),\n"
               + "hoac chay doan ALTER/UPDATE o plan/12 muc 4.1 de giu du lieu dang co.",
                 "Chua xac dinh duoc nguoi duyet", JOptionPane.WARNING_MESSAGE);
             return;

@@ -20,9 +20,19 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $projectRoot
-$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# --- Thong tin dang nhap: lay tu config.properties nhu sql-seed-data.ps1 ---
+# Cong cu ma Setup App tu tai ve (MySQL rieng, JDK portable) nam ngoai repo, trong
+# ~\.retail-billing. Them vao CUOI PATH: may co san MySQL / JDK thi van dung ban do.
+$rbHome = if ($env:RETAIL_BILLING_HOME) { $env:RETAIL_BILLING_HOME } else { Join-Path $env:USERPROFILE '.retail-billing' }
+@("$rbHome\mysql-*\bin", "$rbHome\jdk\bin", "$env:ProgramData\RetailBilling\mysql-*\bin", "$env:ProgramData\RetailBilling\jdk\bin") |
+    ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } |
+    ForEach-Object { $env:PATH = "$env:PATH;$($_.Path)" }
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# Ong pipe sang mysql phai la UTF-8 KHONG BOM: powershell.exe 5.1 chen BOM vao dau
+# chuoi pipe va mysql bao ERROR 1064 ngay dong 1 (cung loi da gap o plan/16 muc 10.2).
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
+
+# --- Thong tin dang nhap: lay tu config.properties giong app billing ---
 $user = 'root'
 $pw = 'root'
 $configPath = Join-Path $projectRoot 'config.properties'
@@ -47,8 +57,8 @@ if (-not $mysql) {
 }
 
 if (-not (Get-Process mysqld -ErrorAction SilentlyContinue)) {
-    Write-Host "MySQL chua chay. Mo mot cua so PowerShell khac va chay:" -ForegroundColor Red
-    Write-Host "    .\scripts\ps1\mysql-start.ps1" -ForegroundColor Yellow
+    Write-Host "MySQL chua chay." -ForegroundColor Red
+    Write-Host "    Mo Setup.exe va bam CHAY UNG DUNG (tu bat MySQL)." -ForegroundColor Yellow
     exit 1
 }
 
@@ -58,8 +68,8 @@ $env:MYSQL_PWD = $pw
 try {
     # --- Buoc 1: tu nap 05_invariants.sql --------------------------------
     # Vi sao nap moi lan chay thay vi doi nguoi dung nap tay:
-    #   01_schema.sql mo dau bang DROP DATABASE, nen MOI lan chay db-setup
-    #   hoac bam "Tao database" trong Setup App la sp_check_seed bien mat.
+    #   01_schema.sql mo dau bang DROP DATABASE, nen MOI lan Setup App nap lai database
+    #   (lan dau, hoac moi khi SQL doi) la sp_check_seed bien mat roi tao lai.
     #   De script tu nap thi no chay duoc sau BAT KY duong dung database
     #   nao -- va khong phai them mot buoc vao hai duong nap do (duong cua
     #   Setup App thi khoi 6 cam khong duoc sua -- plan/15 muc 4.1 diem 2).
@@ -70,7 +80,7 @@ try {
                  --default-character-set=utf8mb4 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[LOI] Khong nap duoc sql\05_invariants.sql." -ForegroundColor Red
-        Write-Host "      Database retail_billing da duoc tao chua? Chay .\scripts\ps1\db-setup.ps1" -ForegroundColor Yellow
+        Write-Host "      Database retail_billing da duoc tao chua? Mo Setup.exe va bam CHAY UNG DUNG." -ForegroundColor Yellow
         exit 1
     }
 

@@ -184,8 +184,8 @@ Hãy đi theo lộ trình chuẩn 6 bước từ ngoài vào trong:
 
 - **Mục đích:** Khi bạn thấy tận mắt màn hình hoạt động như thế nào, não bộ sẽ tự động hiểu *"À, code này viết ra để vẽ cái nút này, bấm nút này thì chạy cái bảng kia"*.
 - **Cách làm:**
-  1. Chạy file khởi động database: chuột phải chạy `mysql-start.ps1`.
-  2. Chạy ứng dụng: chuột phải chạy `run.ps1`.
+  1. Bấm đúp `Setup.exe` (macOS: `Setup.app`) -- Setup App tự bật MySQL, nạp database và mở app.
+  2. Mở tab **Nhật ký SQL** của Setup App để xem câu SQL app gửi xuống.
   3. Mở tab **4. Nhat ky SQL** -> bấm nút *Xóa nhật ký*.
   4. Quay lại tab **1. Lap hoa don** -> chọn một món hàng -> bấm *Thêm vào hóa đơn*.
   5. Quay lại tab **4. Nhat ky SQL** -> bạn sẽ thấy ngay câu lệnh SQL vừa chạy hiện ra trên màn hình. Rất trực quan!

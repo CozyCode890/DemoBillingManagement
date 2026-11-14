@@ -1,6 +1,6 @@
 // Package billing.ui, nhung file nay nam o tools/check/ chu khong o src/:
 // no CAN package nay de goi duoc NewInvoicePanel.splitPayment va lop Split
-// (package-private), nhung KHONG duoc nam trong src/ vi run.ps1 / run.sh
+// (package-private), nhung KHONG duoc nam trong src/ vi Setup App
 // bien dich toan bo src/**/*.java vao app -- mot lop kiem thu khong nen di
 // theo ban giao hang.
 //
@@ -53,7 +53,7 @@ import java.util.List;
  *
  *  CO GHI VAO DATABASE: phan e2e() lap 3 hoa don that roi XOA chung o khoi
  *  finally. No khong cham du lieu seed. Neu chuong trinh bi kill giua duong
- *  thi 3 hoa don do con lai -- xoa bang tab 3, hoac chay lai db-setup.
+ *  thi 3 hoa don do con lai -- xoa bang tab 3, hoac bam "Nap lai database".
  *
  *  ---------------------------------------------------------------------
  *  MEO KY THUAT -- doc truoc khi sua file nay:

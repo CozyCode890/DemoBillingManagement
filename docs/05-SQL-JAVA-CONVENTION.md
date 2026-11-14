@@ -210,8 +210,8 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
 | `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |
 | `sp_check_seed` | PROCEDURE | `OUT p_violations` | 14 bất biến dữ liệu, mỗi quy tắc một dòng kèm số vi phạm; `OUT` là tổng. Nằm ở `sql/05_invariants.sql`, **không** ở `04_routines.sql`: nó là dụng cụ kiểm, app không gọi nó | `ContractCheck`, `check-seed.ps1` / `.sh` |
-| `sp_wipe_transactions` | PROCEDURE | *(không)* | Xoá **dòng** của 7 bảng giao dịch, giữ 9 bảng danh mục, mọi bảng và routine. Gọi hai lần như gọi một lần. **Chỗ duy nhất** giữ thứ tự xoá ngược khoá ngoại (`plan/16` mục 3.2) | *(app không gọi — nút *Xoá dữ liệu* của Setup App qua `sql-wipe-data.*`, seed tự viết)* |
-| `sp_wipe_all_data` | PROCEDURE | *(không)* | Gọi `sp_wipe_transactions` rồi xoá nốt 9 bảng danh mục, kể cả `Account` → app không đăng nhập được cho tới khi seed thêm tài khoản | *(app không gọi — `02_seed.sql` khối 0, `sql-wipe-data.*`)* |
+| `sp_wipe_transactions` | PROCEDURE | *(không)* | Xoá **dòng** của 7 bảng giao dịch, giữ 9 bảng danh mục, mọi bảng và routine. Gọi hai lần như gọi một lần. **Chỗ duy nhất** giữ thứ tự xoá ngược khoá ngoại (`plan/16` mục 3.2) | *(app không gọi — nút *Xoá dữ liệu* của Setup App, seed tự viết)* |
+| `sp_wipe_all_data` | PROCEDURE | *(không)* | Gọi `sp_wipe_transactions` rồi xoá nốt 9 bảng danh mục, kể cả `Account` → app không đăng nhập được cho tới khi seed thêm tài khoản | *(app không gọi — `02_seed.sql` khối 0, nút *Xoá dữ liệu* của Setup App)* |
 
 ---
 
@@ -328,9 +328,9 @@ vụ mà năm khối trước đã dựng: nó `INSERT` thẳng vào bảng giao
 `INSERT ... VALUES` trực tiếp: không có thủ tục nào ghi chúng, nên không có
 hợp đồng nào để đi qua. Đó cũng là phần người học **đọc**.
 
-Hệ quả: `02_seed.sql` phải nạp **sau** `04_routines.sql`. Hai đường nạp của dự
-án (`db-setup.*` và `sql-create-db.* + sql-seed-data.*`) đều theo thứ tự
-**01 → 04 → 02**.
+Hệ quả: `02_seed.sql` phải nạp **sau** `04_routines.sql`. Setup App nạp theo
+thứ tự **01 → 04 → 02 → 05** (đổi được bằng khoá `db.build.files` trong
+config.properties).
 
 ### 8.2. Bốn con số không ai được gõ tay
 
@@ -391,11 +391,9 @@ CALL sp_wipe_transactions();   -- xoá 7 bảng giao dịch, giữ danh mục + 
 -- hoặc CALL sp_wipe_all_data();  -- xoá cả 16 bảng, seed phải tự INSERT lại danh mục
 ```
 
-Trong Setup App, nút **Xoá dữ liệu** (tab SQL) làm đúng việc đó và in bảng
-số dòng Trước/Sau. Dòng lệnh: `.\scripts\ps1\sql-wipe-data.ps1 -Scope
-transactions|all` (macOS/Linux: `./scripts/bash/sql-wipe-data.sh
-transactions|all`). Cả hai **giữ nguyên** 16 bảng, mọi hàm/thủ tục, và mọi
-thứ bạn tự tạo thêm trong database.
+Trong Setup App, nút **Xoá dữ liệu...** (hàng *Công cụ database*) làm đúng
+việc đó và in bảng số dòng Trước/Sau. Nó **giữ nguyên** 16 bảng, mọi hàm/thủ
+tục, và mọi thứ bạn tự tạo thêm trong database.
 
 Hai điều cần biết trước:
 

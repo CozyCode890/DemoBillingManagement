@@ -75,7 +75,7 @@ public class SqlLog {
             + " | " + rows + " dong"
             + " | " + oneLine(sql, MAX_SQL_LEN)
             + " | " + formatParams(params);
-        System.out.println(line);   // console vẫn thấy, tab Java của Setup App cũng thấy
+        System.out.println(line);   // console vẫn thấy, log của Setup App cũng thấy
         write(line);
     }
 

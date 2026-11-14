@@ -60,7 +60,7 @@ $needIcons = $Force -or -not (Test-Path $iconFile) -or -not (Test-Path $icnsFile
 if ($needIcons) {
     if (-not (Get-Command javac -ErrorAction SilentlyContinue)) {
         Write-Host "[LOI] Can JDK de sinh icon (tools\launcher\IconGen.java)." -ForegroundColor Red
-        Write-Host "      Cai bang: winget install EclipseAdoptium.Temurin.21.JDK" -ForegroundColor Yellow
+        Write-Host "      Bam dup Setup.exe mot lan (no tu tai JDK portable) roi them ~\.retail-billing\jdk\bin vao PATH." -ForegroundColor Yellow
         exit 1
     }
 
@@ -117,6 +117,8 @@ if ($needCompile) {
     # /target:winexe  -> khong bao gio hien cua so console den
     # /codepage:65001 -> doc duoc tieng Viet co dau trong ma nguon .cs
     # /win32manifest  -> bat comctl32 v6 (TaskDialog) + DPI aware
+    # /r:...          -> WinForms (cua so tien do tai JDK) va ZipFile (giai nen JDK);
+    #                    ca bon dll nam san trong .NET Framework 4.5+ cua Windows
     & $csc `
         /nologo `
         /target:winexe `
@@ -124,6 +126,10 @@ if ($needCompile) {
         /optimize+ `
         /warnaserror- `
         /codepage:65001 `
+        /r:System.Windows.Forms.dll `
+        /r:System.Drawing.dll `
+        /r:System.IO.Compression.dll `
+        /r:System.IO.Compression.FileSystem.dll `
         /win32icon:"$iconFile" `
         /win32manifest:"$manifest" `
         /out:"$exeFile" `

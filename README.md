@@ -8,143 +8,90 @@ Không Maven, không Spring, không Hibernate — chỉ `javac`, `java` và JDBC
 
 ---
 
-## Chạy app
+## Chạy app — một nút
 
-### Cách 1: Dùng GUI Quản Lý Môi Trường (Khuyên dùng - 1 Click)
+| Hệ điều hành | Bấm đúp vào |
+|---|---|
+| Windows | **`Setup.exe`** |
+| macOS | **`Setup.app`** |
 
-| Hệ điều hành | Bấm đúp vào | Dự phòng |
+Cửa sổ Setup App mở ra và tự bấm **CHẠY ỨNG DỤNG**. Không cần cài Java, MySQL hay gõ lệnh nào — chờ tới khi màn hình đăng nhập hiện ra là xong.
+
+| Bước | Lần đầu tiên trên máy | Các lần sau |
 |---|---|---|
-| Windows | **`Setup.exe`** | `Setup.bat` |
-| macOS | **`Setup.app`** | `Setup.command` |
+| Java | Launcher tự tải JDK 21 bản portable (~190 MB) nếu máy chưa có | dùng lại |
+| 1. Thư viện | Tải các jar khai báo trong `pom.xml` vào `lib/` (kiểm SHA-1) | bỏ qua |
+| 2. MySQL | Có MySQL đang chạy ở cổng 3306 và vào được bằng tài khoản trong `config.properties` → dùng luôn. Không có → tự tải MySQL 8.0 portable (~235 MB), khởi tạo và bật | bật lại trong ~2 giây |
+| 3. Database | Nạp `sql/` theo thứ tự 01 → 04 → 02 → 05 | **bỏ qua nếu SQL không đổi** |
+| 4. Biên dịch | `src/` → `out/` | bỏ qua nếu mã không đổi |
+| 5. Mở app | Màn hình đăng nhập (hoặc vào thẳng nếu chọn *Đăng nhập sẵn*) | |
 
-> Giao diện Swing sẽ mở lên ngay lập tức với 4 tab trực quan giúp bạn: Cài đặt môi trường, bật/tắt MySQL Server, biên dịch mã nguồn và quản trị Database chỉ bằng 1 cú click chuột.
+Mọi thứ tải về nằm trong `~/.retail-billing` (Windows: `C:\Users\<tên>\.retail-billing`) — **ngoài repo**, dùng chung cho mọi nhánh và mọi bản clone. Xoá thư mục đó là về như máy mới.
 
-Hai file launcher này là chương trình gốc của từng hệ điều hành, không phải script, nên:
+### Đổi nhánh git: chỉ cần bấm CHẠY
 
-- **Không nháy cửa sổ đen.** Bấm đúp là GUI hiện thẳng ra, có icon riêng.
-- **Tự dò Java ở mọi chỗ** chứ không chỉ trong `PATH`: biến `JAVA_HOME`, registry (Windows) / `java_home` (macOS), và thư mục cài của Temurin, Oracle, Microsoft, Zulu, Corretto, Homebrew...
-- **Thiếu Java thì mời cài** bằng một hộp thoại có nút `Cài tự động` (dùng `winget` trên Windows, `brew` trên macOS) thay vì bắt bạn tự gõ lệnh.
-- **Không cần mở lại cửa sổ sau khi cài JDK.** Launcher nhồi thẳng đường dẫn JDK vào `JAVA_HOME` và `PATH` của tiến trình con, nên các script `javac` / `mysql` mà GUI gọi chạy được ngay.
+Setup App băm nội dung các file SQL dựng database ("vân tay") và ghi vân tay đó vào MySQL mỗi lần nạp xong. Bấm CHẠY:
+
+- SQL giống lần nạp trước → giữ nguyên database và dữ liệu, mở app ngay;
+- SQL khác (đổi nhánh, pull seed mới, tự sửa routine...) → tự xoá và nạp lại (2–15 giây).
+
+Dòng *Nhánh · SQL · Database* ngay dưới năm bước luôn cho biết database đang khớp nhánh nào, và tự cập nhật khi bạn đổi nhánh trong lúc Setup App đang mở.
+
+> Dữ liệu bạn tự nhập trong app billing sẽ mất khi database được nạp lại — mỗi nhánh có schema và seed riêng nên không giữ chung được.
+
+Nhánh nào thêm file SQL mới thì khai báo thứ tự nạp trong `config.properties` của nhánh đó (không khai báo thì dùng thứ tự mặc định dưới đây):
+
+```properties
+db.build.files=01_schema.sql, 04_routines.sql, 02_seed.sql, 05_invariants.sql
+```
+
+`03_queries.sql` không nằm trong danh sách này: sửa bài tập truy vấn không làm nạp lại database.
+
+### Công cụ database
+
+Hàng nút phụ dưới năm bước:
+
+| Nút | Làm gì |
+|---|---|
+| **Nạp lại database** | Xoá và nạp lại từ `sql/` dù SQL không đổi — về đúng dữ liệu mẫu |
+| **Xoá dữ liệu...** | Xoá các dòng, giữ mọi bảng và hàm/thủ tục. Hai mức: chỉ giao dịch (vẫn đăng nhập được) hoặc toàn bộ (kể cả tài khoản) — dành cho người tập viết seed |
+| **Chạy 03_queries.sql** | Chạy bài tập truy vấn, in kết quả dạng bảng vào log |
+| **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (plan/15) |
+| **Tắt MySQL** | Tắt MySQL riêng của Setup App. MySQL có sẵn trên máy (service MySQL80, Homebrew...) thì không đụng tới |
+
+Tab **Nhật ký SQL** hiện mọi câu SQL mà app billing gửi xuống MySQL.
+
+Muốn seed tự viết chạy lại được nhiều lần, đặt `CALL sp_wipe_transactions();` ở đầu file. Chi tiết ở [docs/05 mục 8.5](docs/05-SQL-JAVA-CONVENTION.md).
 
 <details>
 <summary>Nếu launcher bị hệ điều hành chặn (chỉ xảy ra khi tải repo dạng ZIP)</summary>
 
-Khi bạn `git clone` thì không gặp chuyện này. Chỉ khi tải file ZIP từ GitHub, hệ điều hành mới đánh dấu "tải từ Internet" lên các file trong đó:
+`git clone` thì không gặp. Chỉ khi tải ZIP từ GitHub, hệ điều hành mới đánh dấu "tải từ Internet":
 
-- **Windows** hiện bảng xanh *"Windows protected your PC"* → bấm `More info` → `Run anyway`. Lý do là `Setup.exe` chưa mua chữ ký số (khoảng vài trăm USD/năm, không đáng cho dự án học tập).
-- **macOS** báo *"không mở được vì không rõ nhà phát triển"* → bấm đúp `Setup.command` một lần, nó sẽ gỡ cờ cách ly rồi mở `Setup.app` hộ bạn. Hoặc tự chạy:
+- **Windows** hiện *"Windows protected your PC"* → bấm `More info` → `Run anyway` (`Setup.exe` chưa mua chữ ký số).
+- **macOS** báo *"không mở được vì không rõ nhà phát triển"* → mở Terminal chạy một lần:
 
   ```bash
-  xattr -dr com.apple.quarantine Setup.app
+  xattr -dr com.apple.quarantine /đường/dẫn/tới/DemoBillingManagement
   ```
+
+- **macOS** báo không đọc được thư mục dự án: repo đang nằm trong Desktop / Documents / Downloads (vùng bảo vệ quyền riêng tư). Chuyển nó vào thư mục cá nhân rồi bấm đúp lại.
 </details>
-
-### Cách 2: Dùng dòng lệnh (Terminal)
-- **Trên Windows (PowerShell):**
-  - Cài đặt driver: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\setup.ps1`
-  - Bật MySQL: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\mysql-start.ps1`
-  - Nạp DB: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\sql-create-db.ps1`
-  - Xoá dữ liệu (giữ bảng và thủ tục): `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\sql-wipe-data.ps1 -Scope transactions` (hoặc `-Scope all`)
-  - Chạy app: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\run.ps1`
-  - Tắt MySQL: `powershell -ExecutionPolicy Bypass -File .\scripts\ps1\mysql-stop.ps1`
-
-- **Trên macOS / Linux (Bash):**
-  - Cài đặt môi trường (hỗ trợ Homebrew): `./scripts/bash/setup.sh`
-  - Bật MySQL: `./scripts/bash/mysql-start.sh`
-  - Nạp DB: `./scripts/bash/sql-create-db.sh`
-  - Xoá dữ liệu (giữ bảng và thủ tục): `./scripts/bash/sql-wipe-data.sh transactions` (hoặc `all`)
-  - Chạy app: `./scripts/bash/run.sh`
-  - Tắt MySQL: `./scripts/bash/mysql-stop.sh`
-
-### Môi trường đã cài sẵn
-
-| Thành phần | Phiên bản | Vị trí |
-|---|---|---|
-| JDK | Temurin 21.0.12 | `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot` |
-| MySQL Server | 8.0.45 (bản ZIP portable) | `%USERPROFILE%\mysql8\mysql-8.0.45-winx64` |
-| Driver JDBC | mysql-connector-j 8.4.0 | `lib\` |
-| Database | `retail_billing`, đã nạp dữ liệu mẫu | cổng 3306 |
-| Tài khoản | `root` / mật khẩu `root` | đã điền sẵn trong `config.properties` |
-
-> **Vì sao MySQL phải bật thủ công?** Bản ZIP không đăng ký Windows Service nên không tự chạy khi bật máy. Đăng ký service cần quyền Administrator — xem mục cuối README nếu bạn muốn làm.
->
-> **Mật khẩu `root`/`root`** chỉ hợp lý vì đây là database học tập chạy trên localhost. Đừng dùng mật khẩu này cho bất cứ thứ gì thật.
-
-### Nạp lại dữ liệu mẫu
-
-Nếu bạn nghịch lung tung và muốn về trạng thái ban đầu:
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\scripts\ps1\db-setup.ps1
-```
-
-> ⚠️ Script này chạy `DROP DATABASE IF EXISTS retail_billing` trước khi tạo mới. Database khác trên máy không bị ảnh hưởng.
-
-### Chỉ muốn xoá dữ liệu (giữ bảng và thủ tục)
-
-Dành cho người tập viết seed: bấm **Xoá dữ liệu** ở tab SQL của GUI rồi chọn một trong hai mức:
-
-| Mức | Xoá | Giữ |
-|---|---|---|
-| Chỉ dữ liệu giao dịch | Hoá đơn, dòng hàng, thanh toán, trả hàng (7 bảng) | Cửa hàng, sản phẩm, giá, khuyến mãi, tài khoản — app vẫn đăng nhập được |
-| Toàn bộ dữ liệu | Cả 16 bảng, kể cả tài khoản | Cấu trúc bảng và mọi hàm/thủ tục |
-
-Muốn seed của bạn chạy lại được, đặt `CALL sp_wipe_transactions();` ở đầu file. Chi tiết và hai lưu ý (R12 của `check-seed`, *Safe Updates* của Workbench) ở [docs/05 mục 8.5](docs/05-SQL-JAVA-CONVENTION.md).
-
----
-
-## Cài lại từ đầu (trên máy khác)
 
 <details>
-<summary>Bấm để xem 6 bước</summary>
+<summary>Máy đã có MySQL riêng với mật khẩu khác 'root'</summary>
 
-**1. Cài JDK**
+Setup App không bao giờ sửa MySQL không phải của nó. Nếu cổng 3306 đang có một MySQL mà tài khoản trong `config.properties` không vào được, nó dừng lại và hướng dẫn chọn một trong hai:
 
-```bash
-winget install EclipseAdoptium.Temurin.21.JDK
-```
+1. Tắt MySQL đó (Windows: `services.msc` → MySQL80 → Stop, Startup type = Manual; macOS: `brew services stop mysql`) rồi bấm CHẠY — Setup App tự bật MySQL riêng.
+2. Hoặc đổi mật khẩu `root` của MySQL đó thành `root`.
 
-Cài xong **đóng terminal và mở lại**, kiểm tra bằng `java -version`.
-
-**2. Cài MySQL 8.0**
-
-Lưu ý: `winget install Oracle.MySQL` chỉ cài *MySQL Installer* (công cụ GUI) chứ chưa có server, và nó cần quyền Administrator để cài tiếp. Cách nhanh hơn là dùng bản ZIP:
-
-Tải `mysql-8.0.45-winx64.zip` (~233 MB) từ <https://dev.mysql.com/downloads/mysql/>, giải nén vào `%USERPROFILE%\mysql8`, rồi khởi tạo:
-
-```bash
-.\mysql8\mysql-8.0.45-winx64\bin\mysqld.exe --initialize-insecure --console
-```
-
-**3. Bật MySQL**
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\mysql-start.ps1
-```
-
-**4. Đặt mật khẩu root**
-
-```bash
-.\mysql8\mysql-8.0.45-winx64\bin\mysql.exe -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'root';"
-```
-
-**5. Tải driver JDBC và tạo database**
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\setup.ps1
-```
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\db-setup.ps1
-```
-
-**6. Chạy app**
-
-```bash
-powershell -ExecutionPolicy Bypass -File .\run.ps1
-```
-
+**Đừng sửa `db.password` trong `config.properties` rồi commit** — mật khẩu riêng của máy bạn sẽ đi theo sang máy cả nhóm.
 </details>
+
+### Chạy bằng IDE (IntelliJ / Eclipse)
+
+Mở thư mục repo, IDE nhận `pom.xml`. Bấm CHẠY trong Setup App **một lần** để có MySQL và database, sau đó chạy `billing.Main` từ IDE như bình thường (thư mục làm việc = gốc repo, để app đọc được `config.properties`).
 
 ---
 
@@ -199,26 +146,15 @@ Nếu bạn muốn hiểu cơ chế, đọc đúng thứ tự dưới đây, m�
 ```
 DemoBillingManagement/
 ├── README.md               <- bạn đang đọc file này
-├── config.properties       <- sửa mật khẩu MySQL ở đây
-├── SetupApp.jar            <- File chạy portable GUI đa nền tảng
-├── Setup.exe               <- BẤM ĐÚP trên Windows (launcher gốc, 36 KB)
-├── Setup.app/              <- BẤM ĐÚP trên macOS (bundle gốc, 35 KB)
-├── Setup.bat               <- dự phòng cho Windows nếu .exe bị chặn
-├── Setup.command           <- dự phòng cho macOS, gỡ cờ cách ly Gatekeeper
-├── pom.xml                 <- chỉ cần nếu bạn mở bằng IntelliJ/Eclipse
+├── config.properties       <- kết nối DB, đăng nhập nhanh, QR, thứ tự nạp SQL (db.build.files)
+├── SetupApp.jar            <- Setup App (Swing): làm mọi việc sau khi có Java
+├── Setup.exe               <- BẤM ĐÚP trên Windows (launcher: tìm / tự tải JDK 21)
+├── Setup.app/              <- BẤM ĐÚP trên macOS (launcher: tìm / tự tải JDK 21)
+├── pom.xml                 <- danh sách thư viện: Setup App tải theo file này; IDE cũng đọc
 │
-├── scripts/                <- Thư mục chứa toàn bộ script vận hành
-│   ├── ps1/                <- Script PowerShell cho Windows
-│   │   ├── setup.ps1, mysql-start.ps1, mysql-stop.ps1
-│   │   ├── run.ps1, billing-stop.ps1, db-setup.ps1
-│   │   ├── check-contracts.ps1  <- kiểm 4 hợp đồng số/tiền bằng code
-│   │   ├── check-seed.ps1       <- kiểm 14 bất biến của dữ liệu bằng SQL
-│   │   └── sql-*.ps1, build-setup.ps1, build-launcher.ps1
-│   └── bash/               <- Script Bash cho macOS (Homebrew) & Linux
-│       ├── setup.sh, mysql-start.sh, mysql-stop.sh
-│       ├── run.sh, billing-stop.sh, db-setup.sh
-│       ├── check-contracts.sh, check-seed.sh
-│       └── sql-*.sh, build-setup.sh, build-launcher.sh
+├── scripts/                <- chỉ còn công cụ kiểm tra và đóng gói (chạy tay, không bắt buộc)
+│   ├── ps1/  check-seed, check-contracts, build-setup, build-launcher   (Windows)
+│   └── bash/ check-seed, check-contracts, build-setup, build-launcher   (macOS / Linux)
 │
 ├── tools/launcher/         <- Mã nguồn của hai launcher (chỉ người bảo trì cần)
 │   ├── WindowsLauncher.cs  <- nguồn của Setup.exe, biên dịch bằng csc.exe
@@ -264,7 +200,7 @@ Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`,
 
 Điểm đáng xem nhất: **ngày đổi giá nằm giữa cửa sổ 90 ngày**, nên cùng một sản phẩm xuất hiện ở **hai đơn giá khác nhau** trên hai hóa đơn mà bạn thấy cạnh nhau trong tab *Xem hóa đơn* — "hóa đơn cũ giữ giá cũ" không còn phải lùi 400 ngày mới thấy.
 
-Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những thủ tục mà tab *Lập hóa đơn* đi qua**, nên mọi con số trong database là con số mà app *có thể* đã tự tạo ra. Không `Status`, `Unit_Price`, `Discount` hay `Return_ID` nào được gõ tay. Kiểm bằng:
+Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những thủ tục mà tab *Lập hóa đơn* đi qua**, nên mọi con số trong database là con số mà app *có thể* đã tự tạo ra. Không `Status`, `Unit_Price`, `Discount` hay `Return_ID` nào được gõ tay. Kiểm bằng nút **Kiểm tra seed** trong Setup App, hoặc từ terminal:
 
 ```powershell
 .\scripts\ps1\check-seed.ps1
@@ -282,25 +218,41 @@ Chi tiết quy ước: [docs/05-SQL-JAVA-CONVENTION.md](docs/05-SQL-JAVA-CONVENT
 
 | Thông báo | Cách xử lý |
 |---|---|
-| `Communications link failure` | **Lỗi hay gặp nhất.** MySQL chưa bật — mở GUI bấm "Chạy SQL Server" hoặc chạy script `mysql-start` |
-| `javac` / `java` không phải lệnh nhận dạng được | Chưa mở lại terminal sau khi cài JDK. Mở GUI bằng `Setup.exe` / `Setup.app` thì không dính lỗi này — launcher tự nhồi đường dẫn JDK vào tiến trình con |
+Gần như mọi lỗi môi trường đều sửa được bằng cách **bấm CHẠY lần nữa** — Setup App kiểm tra lại từng bước và in lý do cụ thể vào log. Còn lại:
+
+| Thông báo | Cách xử lý |
+|---|---|
+| *"Cổng 3306 đang có một MySQL khác chạy sẵn..."* | Máy có MySQL riêng với mật khẩu khác `root`. Xem mục *Máy đã có MySQL riêng* ở phần [Chạy app](#chạy-app--một-nút) |
+| *"Không tải được ..."* | Mất mạng giữa chừng. Bấm CHẠY lại — phần đã tải được giữ lại và tải tiếp |
+| Database báo lỗi ở `sql/xx.sql dòng N` | Lỗi nằm trong chính file SQL của nhánh đó (log in câu lệnh và mã lỗi MySQL). Sửa file rồi bấm CHẠY — database tự nạp lại |
+| *"Biên dịch thất bại"* | Lỗi Java trong `src/`, log in `file:dòng: lỗi`. Sửa rồi bấm CHẠY |
+| `Communications link failure` khi chạy `billing.Main` từ IDE | MySQL chưa bật — mở Setup App bấm CHẠY một lần |
 | `UnsupportedClassVersionError ... class file version 69` | `SetupApp.jar` bị đóng gói bằng JDK mới hơn JDK đang chạy. Đóng gói lại bằng script `build-setup` (script đã khoá `--release 21`) |
 | Bấm đúp `Setup.exe` báo `side-by-side configuration is incorrect` | `tools/launcher/app.manifest` hỏng cú pháp XML — chạy `scripts\ps1\build-launcher.ps1`, nó kiểm tra và chỉ ra lỗi |
-| `No suitable driver found` | Thiếu jar trong `lib\` — chạy script `setup` (hoặc bấm "Cài đặt môi trường" trong GUI) |
-| `Access denied for user 'root'@'localhost'` | Sai mật khẩu trong `config.properties` (mặc định là `root`) |
-| `Unknown database 'retail_billing'` | Chưa chạy script `sql-create-db` / `db-setup` |
-| App mở ra nhưng bảng trống | Chưa nạp `02_seed.sql` (bấm "Tạo dữ liệu mẫu" trong GUI) |
-| Nạp `02_seed.sql` báo `FUNCTION ... does not exist` | Nạp seed **trước** `04_routines.sql`. Từ khối 6 seed gọi các hàm/thủ tục trong đó, nên thứ tự bắt buộc là **01 → 04 → 02** (script `db-setup` đã đúng thứ tự này) |
-| `check-seed` báo `PROCEDURE sp_check_seed does not exist` | Chưa nạp `sql/05_invariants.sql` — nạp một lần là đủ, nó chỉ tạo một thủ tục |
-| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `plan/15` đang bị vi phạm. Nạp lại `02_seed.sql` là về 0 |
+| *"MySQL riêng không cho root đăng nhập"* | Tắt Setup App, xoá thư mục `~/.retail-billing/mysql-data` rồi bấm CHẠY — MySQL riêng được khởi tạo lại |
+| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `plan/15` đang bị vi phạm. Bấm **Nạp lại database** là về 0. R12 (91 ngày liên tục) sai riêng một mình thường chỉ vì database được nạp từ nhiều ngày trước |
 
 Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
 
 ---
 
-## Dựng lại launcher (chỉ người bảo trì)
+## Dựng lại Setup App và launcher (chỉ người bảo trì)
 
-`Setup.exe` và `Setup.app` đã được commit sẵn nên người dùng không cần dựng lại. Chỉ khi sửa `tools/launcher/WindowsLauncher.cs`, `app.manifest`, `IconGen.java` hoặc `Setup.app/Contents/MacOS/Setup` mới cần:
+`SetupApp.jar`, `Setup.exe` và `Setup.app` đã được commit sẵn nên người dùng không cần dựng lại.
+
+**`SetupApp.jar`** đóng gói từ `src/envsetup/` — thư mục này bị `.gitignore` bỏ qua (không đẩy mã nguồn công cụ lên repo), nên chỉ máy có mã nguồn mới đóng gói lại được:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\ps1\build-setup.ps1
+```
+
+```bash
+bash scripts/bash/build-setup.sh
+```
+
+Bên trong: `envsetup.core` chứa toàn bộ logic (tải thư viện theo `pom.xml`, quản lý MySQL, vân tay SQL, tách câu lệnh theo `DELIMITER`, biên dịch bằng `javax.tools`), `envsetup.ui` chỉ là giao diện. SQL được chạy qua JDBC chứ không qua client `mysql`, nên máy chỉ có server (hoặc chưa có gì) vẫn chạy được.
+
+**Launcher** chỉ cần dựng lại khi sửa `tools/launcher/WindowsLauncher.cs`, `app.manifest`, `IconGen.java` hoặc `Setup.app/Contents/MacOS/Setup`:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File scripts\ps1\build-launcher.ps1
@@ -316,26 +268,3 @@ Vài điều đáng biết:
 - **`Setup.exe` phải dựng trên Windows**, `Setup.app` thì dựng ở đâu cũng được vì nó chỉ là thư mục chứa `Info.plist` + script bash.
 - **Bit thực thi của `Setup.app/Contents/MacOS/Setup` phải nằm trong git.** Thiếu nó, máy Mac clone về sẽ báo "ứng dụng bị hỏng". Hai script build tự kiểm tra và sửa bằng `git update-index --chmod=+x`.
 - **XML trong `app.manifest` cấm hai dấu gạch ngang liền nhau trong comment.** `csc.exe` nhúng manifest mà không kiểm tra nên lỗi chỉ lộ ra lúc bấm đúp; script build kiểm tra hộ trước khi biên dịch.
-
----
-
-## Muốn MySQL tự chạy khi bật máy?
-
-Hiện tại MySQL phải bật thủ công. Muốn nó thành dịch vụ chạy nền tự động, mở PowerShell **với quyền Administrator** (chuột phải → *Run as administrator*) rồi chạy:
-
-```bash
-& "$env:USERPROFILE\mysql8\mysql-8.0.45-winx64\bin\mysqld.exe" --install MySQL80 --defaults-file="$env:USERPROFILE\mysql8\my.ini"
-```
-
-File `my.ini` cần có tối thiểu:
-
-```ini
-[mysqld]
-basedir=C:/Users/<ten-cua-ban>/mysql8/mysql-8.0.45-winx64
-datadir=C:/Users/<ten-cua-ban>/mysql8/mysql-8.0.45-winx64/data
-port=3306
-```
-
-Sau đó `Start-Service MySQL80`. Từ đó không cần `mysql-start.ps1` nữa.
-
-Gỡ dịch vụ: `mysqld.exe --remove MySQL80` (cũng cần quyền Administrator).
