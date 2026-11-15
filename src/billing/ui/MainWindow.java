@@ -39,9 +39,11 @@ public class MainWindow extends JFrame {
     /** Giữ làm field để {@link #refreshUserInfo()} vẽ lại được khi đổi vai trò. */
     private final JLabel lbInfo = new JLabel();
 
-    private final JButton btSwitchRole = new JButton("Doi vai tro ▾");
+    private final JButton btSwitchRole = new JButton("Doi vai tro");
+    private final JButton btLanguage = new JButton();
     private final JButton btLogout     = new JButton("Dang xuat");
     private final JPopupMenu switchRoleMenu = new JPopupMenu();
+    private final JMenuItem miLanguage = new JMenuItem();
 
     /** Hàm dựng cũ -- giữ lại để không phá chỗ gọi nào khác. */
     public MainWindow() {
@@ -81,8 +83,20 @@ public class MainWindow extends JFrame {
         add(tabs, BorderLayout.CENTER);
         add(statusBar(), BorderLayout.SOUTH);
 
+        JMenu languageMenu = new JMenu("Ngôn ngữ");
+        miLanguage.addActionListener(e -> toggleLanguage());
+        I18n.markDynamicText(miLanguage);
+        languageMenu.add(miLanguage);
+        JMenuBar menuBar = new JMenuBar();
+        menuBar.add(languageMenu);
+        setJMenuBar(menuBar);
+        btLanguage.addActionListener(e -> toggleLanguage());
+        I18n.markDynamicText(btLanguage);
+        refreshLanguageControls();
+
         // Áp dụng quyền người dùng cho tab xem hóa đơn
         viewPanel.applyRolePermissions();
+        I18n.install(this);
     }
 
     // ------------------------------------------------------------------
@@ -124,6 +138,9 @@ public class MainWindow extends JFrame {
 
         btSwitchRole.setFont(new Font("Segoe UI", Font.BOLD, 11));
         btSwitchRole.setForeground(new Color(40, 90, 160));
+        btSwitchRole.setIcon(DROPDOWN_CARET);
+        btSwitchRole.setHorizontalTextPosition(SwingConstants.LEFT);
+        btSwitchRole.setIconTextGap(6);
         btSwitchRole.setFocusPainted(false);
         btSwitchRole.setToolTipText("Doi sang tai khoan khac ma KHONG mat du lieu dang nhap o tab 1");
         btSwitchRole.addActionListener(e -> {
@@ -140,6 +157,7 @@ public class MainWindow extends JFrame {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         right.setOpaque(false);
         right.add(btSwitchRole);
+        right.add(btLanguage);
         right.add(btLogout);
 
         // Nhan nguoi dung o CENTER chu khong phai WEST: BorderLayout cap cho WEST
@@ -151,6 +169,23 @@ public class MainWindow extends JFrame {
 
         rebuildSwitchRoleMenu();
         return bar;
+    }
+
+    private void toggleLanguage() {
+        I18n.toggle();
+        refreshLanguageControls();
+    }
+
+    private void refreshLanguageControls() {
+        btLanguage.setText(I18n.languageSwitchLabel());
+        miLanguage.setText(I18n.languageSwitchLabel());
+        String nextLanguage = I18n.isEnglish() ? "Tiếng Việt" : "English";
+        String tip = I18n.isEnglish()
+                ? "Switch the interface to " + nextLanguage
+                : "Chuyen giao dien sang " + nextLanguage;
+        btLanguage.setToolTipText(tip);
+        miLanguage.setToolTipText(tip);
+        rebuildSwitchRoleMenu();
     }
 
     /** Vẽ lại nhãn người dùng ở thanh trạng thái theo {@link UserSession} hiện tại. */
@@ -186,7 +221,9 @@ public class MainWindow extends JFrame {
             if (acc.getUsername().equalsIgnoreCase(currentUsername)) {
                 continue;
             }
-            JMenuItem item = new JMenuItem(acc.getButtonLabel());
+            JMenuItem item = new JMenuItem(I18n.quickAccountLabel(acc.getLabel())
+                    + " (" + acc.getUsername() + ")");
+            I18n.markDynamicText(item);
             item.addActionListener(e -> switchRole(acc));
             switchRoleMenu.add(item);
         }
@@ -298,4 +335,25 @@ public class MainWindow extends JFrame {
             AppFlow.showLogin(null);
         }
     }
+
+    /** Draw the dropdown caret so it does not depend on font glyph coverage. */
+    private static final Icon DROPDOWN_CARET = new Icon() {
+        @Override public int getIconWidth() { return 8; }
+
+        @Override public int getIconHeight() { return 6; }
+
+        @Override
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            Color color = component.isEnabled()
+                    ? component.getForeground()
+                    : UIManager.getColor("Button.disabledText");
+            g2.setColor(color == null ? Color.GRAY : color);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.fillPolygon(new int[] {x, x + 7, x + 3},
+                    new int[] {y, y, y + 5}, 3);
+            g2.dispose();
+        }
+    };
 }
