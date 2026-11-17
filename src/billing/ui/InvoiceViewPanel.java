@@ -61,13 +61,16 @@ public class InvoiceViewPanel extends JPanel {
     private final JButton btDeleteInvoice = new JButton("Xoa hoa don");
 
     // Các button thao tác dòng hàng trong hóa đơn (bên phải)
-    private final JButton btEditLine       = new JButton("Sua dong hang");
-    private final JButton btDeleteLine     = new JButton("Xoa dong hang");
-    private final JButton btClearLineValue = new JButton("Thu xoa gia tri (Set NULL)");
-    private final JButton btReturnLine     = new JButton("Tra hang");
+    private final JButton btEditLine   = new JButton("Sua dong hang");
+    private final JButton btDeleteLine = new JButton("Xoa dong hang");
+    private final JButton btReturnLine = new JButton("Tra hang");
 
     // Button thao tác trên bảng "Tra hang (Return)"
     private final JButton btDeleteReturn   = new JButton("Huy luot tra");
+
+    /** Lưu Return_ID (Lan_tra) tương ứng với từng dòng của tbReturns,
+     *  vì cột hiển thị là InvoiceID thay vì Return_ID. */
+    private final List<Integer> returnIds = new ArrayList<>();
 
     // =================================================================
     //  Ô CHỌN KHOẢNG NGÀY + NHÃN SỐ DÒNG (khối 6)
@@ -222,12 +225,10 @@ public class InvoiceViewPanel extends JPanel {
 
         btEditLine.addActionListener(e -> onEditLine());
         btDeleteLine.addActionListener(e -> onDeleteLine());
-        btClearLineValue.addActionListener(e -> onTryClearLineValue());
         btReturnLine.addActionListener(e -> onReturnLine());
 
         pnlLineActions.add(btEditLine);
         pnlLineActions.add(btDeleteLine);
-        pnlLineActions.add(btClearLineValue);
         pnlLineActions.add(btReturnLine);
 
         JPanel pnlLinesContainer = new JPanel(new BorderLayout(2, 2));
@@ -330,7 +331,6 @@ public class InvoiceViewPanel extends JPanel {
         btDeleteInvoice.setEnabled(isManager);
         btEditLine.setEnabled(isManager);
         btDeleteLine.setEnabled(isManager);
-        btClearLineValue.setEnabled(isManager);
         btReturnLine.setEnabled(isManager);
         btDeleteReturn.setEnabled(isManager);
 
@@ -341,7 +341,6 @@ public class InvoiceViewPanel extends JPanel {
             btDeleteInvoice.setToolTipText(lockHint);
             btEditLine.setToolTipText(lockHint);
             btDeleteLine.setToolTipText(lockHint);
-            btClearLineValue.setToolTipText(lockHint);
             btReturnLine.setToolTipText(lockHint);
             btDeleteReturn.setToolTipText(lockHint);
         } else {
@@ -350,7 +349,6 @@ public class InvoiceViewPanel extends JPanel {
             btDeleteInvoice.setToolTipText("Xoa hoa don va toan bo du lieu lien quan khoi DB");
             btEditLine.setToolTipText("Chinh sua so luong, don gia dong hang trong DB");
             btDeleteLine.setToolTipText("Xoa dong hang khoi DB");
-            btClearLineValue.setToolTipText("Thu nghiem co che canh bao xoa gia tri NOT NULL");
             btReturnLine.setToolTipText("Ghi mot luot tra hang cho cac dong cua hoa don dang chon");
             btDeleteReturn.setToolTipText("Huy mot luot tra hang da ghi (chon dong trong bang Tra hang)");
         }
@@ -436,7 +434,18 @@ public class InvoiceViewPanel extends JPanel {
             // SL_tra (4) la so luong; Tien_hoan (5) la tien. Chi so da dich mot cot
             // so voi truoc khoi 3 vi sp_get_invoice_returns them cot Lan_tra.
             QueryResult returns = dao.invoiceReturns(invoiceId);
+            
+            // Lưu Return_ID (Lan_tra) vào danh sách ẩn, thay cột hiển thị thành InvoiceID
+            returnIds.clear();
+            for (Object[] row : returns.rows) {
+                returnIds.add(intOf(row[1]));  // cột 1 là Lan_tra/Return_ID
+                row[1] = invoiceId;             // thay bằng InvoiceID để hiển thị
+            }
+            
             fillFormatted(tbReturns, returns, new int[]{5}, null, new int[]{4}, null);
+            
+            // Đổi tiêu đề cột 1 từ "Lan_tra" thành "InvoiceID"
+            tbReturns.getColumnModel().getColumn(1).setHeaderValue("InvoiceID");
 
         } catch (Exception ex) {
             Ui.error(this, ex);
@@ -685,21 +694,7 @@ public class InvoiceViewPanel extends JPanel {
                 Ui.error(this, ex);
             }
         }
-    }
-
-    /** Nút thử xóa giá trị (Set NULL) để minh họa cơ chế cảnh báo của Database */
-    private void onTryClearLineValue() {
-        JOptionPane.showMessageDialog(this,
-                "CANH BAO DATABASE:\n\n"
-              + "Toan bo cac truong trong bang Invoice_Line (Quantity, Unit_Price, Barcode, Line_Number)\n"
-              + "deu duoc dinh nghia rang buoc [NOT NULL] trong Schema!\n\n"
-              + "Ban KHONG THE xoa bat ky gia tri nao ve NULL.\n"
-              + "Hay su dung nut 'Sua dong hang' va bam 'Thu xoa (Set NULL)' de thay app ngan chan hanh vi nay!",
-                "Canh bao rang buoc NOT NULL",
-                JOptionPane.WARNING_MESSAGE);
-    }
-
-    // =================================================================
+    }// =================================================================
     //  TRẢ HÀNG (RETURN)
     // =================================================================
 
@@ -1288,8 +1283,13 @@ public class InvoiceViewPanel extends JPanel {
         int lineNo;
         int returnId;
         try {
-            lineNo   = Integer.parseInt(String.valueOf(tbReturns.getValueAt(row, 0)).trim());
-            returnId = Integer.parseInt(String.valueOf(tbReturns.getValueAt(row, 1)).trim());
+            lineNo = Integer.parseInt(String.valueOf(tbReturns.getValueAt(row, 0)).trim());
+            // Lấy Return_ID từ danh sách ẩn thay vì từ cột hiển thị (giờ là InvoiceID)
+            if (row >= 0 && row < returnIds.size()) {
+                returnId = returnIds.get(row);
+            } else {
+                throw new NumberFormatException("Row index out of bounds");
+            }
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this,
                     "Khong doc duoc so dong / lan tra cua hang dang chon.",

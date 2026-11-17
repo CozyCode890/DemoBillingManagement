@@ -637,6 +637,15 @@ public class InvoiceDao {
                 }
             }
 
+            // Cập nhật trạng thái hóa đơn sang VOIDED sau khi trả hàng thành công
+            // (chỉ khi hóa đơn đang ở trạng thái PAID)
+            try (CallableStatement cs = conn.prepareCall(
+                    "{call sp_void_invoice(?)}")) {
+                cs.setString(1, invoiceId);
+                cs.executeUpdate();
+                SqlLog.add("sp_void_invoice", new Object[]{invoiceId}, 0, 1);
+            }
+
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
             SqlLog.add("COMMIT;  -- luu thanh cong tra hang hoa don " + invoiceId,
                        null, System.currentTimeMillis() - t0, 0);
