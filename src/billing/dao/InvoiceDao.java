@@ -75,7 +75,8 @@ public class InvoiceDao {
      *      - Gọi sp_add_invoice_line: ghi từng dòng hàng (batching)
      *      - Gọi fn_next_payment_id + sp_add_payment: ghi thanh toán
      *        (SQL tự rẽ nhánh bảng con)
-     *      - Gọi sp_settle_invoice: chuyển sang PAID nếu đã thu đủ tiền
+     *      - Gọi sp_settle_invoice: CHỐT -- thiếu dòng hàng hoặc thu thiếu
+     *        tiền thì thủ tục SIGNAL và cả transaction ROLLBACK
      *      conn.commit();
      *
      * @param invoiceId mã hóa đơn, hoặc {@code null} để tự sinh TRONG
@@ -195,10 +196,11 @@ public class InvoiceDao {
                 }
             }
 
-            // ---- 4. Chuyển trạng thái nếu đã thu đủ tiền --------------
-            // Java KHÔNG tự quyết định PAID (plan/13 mục 2.2): thủ tục tự đọc
-            // bảng Payment và so với tổng tiền các dòng hàng. Trả thiếu thì hóa
-            // đơn ở lại OPEN, và đây KHÔNG phải lỗi.
+            // ---- 4. Chốt hóa đơn: phải có dòng hàng và đã thu đủ tiền ---
+            // Đầu hóa đơn đã được ghi là PAID (không còn trạng thái OPEN --
+            // 01_schema.sql mục 9). sp_settle_invoice là phép KIỂM cuối: thu
+            // thiếu thì nó SIGNAL, khối catch bên dưới ROLLBACK, và hóa đơn
+            // không bao giờ tồn tại. Tab 1 đã chặn trước ở giao diện.
             //
             // PHẢI nằm TRONG transaction: thủ tục đọc các dòng Payment vừa
             // INSERT mà chưa commit -- chỉ cùng một Connection mới thấy chúng.

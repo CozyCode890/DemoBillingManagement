@@ -193,7 +193,7 @@ public class ReceiptDialog {
         s.append("</div>");
         s.append(dash());
 
-        // --- Dòng trạng thái, chữ to (khối 4 làm OPEN thành trạng thái thật) ---
+        // --- Dòng trạng thái, chữ to ---
         s.append(statusBlock(statusRaw, missing));
         s.append(dash());
 
@@ -299,9 +299,11 @@ public class ReceiptDialog {
     /**
      * Dòng trạng thái.
      *
-     * <p>Khối 4 làm {@code OPEN} thành trạng thái thật và tab 1 đã cảnh báo
-     * trước khi lưu; <b>một tờ hoá đơn in ra trông như đã thu đủ tiền sẽ phá
-     * hết công đó</b> (plan/14 mục 5.7, rủi ro #10 của plan/13).
+     * <p>Trạng thái {@code OPEN} đã bị bỏ, nên một hóa đơn lưu được thì đã
+     * thu đủ tiền lúc lập. {@code missing} vẫn được hiện cho hóa đơn PAID nếu
+     * sau đó quản lý sửa dòng hàng làm tổng tăng (EditInvoiceDialog cảnh báo
+     * cùng tình huống này) -- một tờ in ra trông như đã thu đủ trong khi
+     * thiếu tiền là sai (plan/14 mục 5.7).
      */
     private static String statusBlock(String statusRaw, BigDecimal missing) {
         InvoiceStatus st = InvoiceStatus.of(statusRaw);
@@ -310,15 +312,13 @@ public class ReceiptDialog {
         if (st == InvoiceStatus.PAID) {
             text  = st.display().toUpperCase();
             color = "#1b7f1b";
+            if (missing.signum() > 0) {
+                text += " -- con thieu " + Ui.money(missing);
+                color = "#d35400";
+            }
         } else if (st == InvoiceStatus.VOIDED) {
             text  = st.display().toUpperCase();
             color = "#c0392b";
-        } else if (st == InvoiceStatus.OPEN) {
-            text  = st.display().toUpperCase();
-            if (missing.signum() > 0) {
-                text += " -- con thieu " + Ui.money(missing);
-            }
-            color = "#d35400";
         } else {
             text  = statusRaw;                  // gia tri la trong cot Status
             color = "#555555";

@@ -573,20 +573,43 @@ public class ContractCheck {
             int n2 = Integer.parseInt(ids.rows.get(1)[0].toString().substring(4));
             check("#40b", n2 - n1, 1);
 
-            // --- #33: tra thieu -> OPEN -----------------------------------
+            // --- #33: tra thieu -> TU CHOI + ROLLBACK (da bo trang thai OPEN)
             List<CartLine> l3 = new ArrayList<>();
             l3.add(new CartLine(prod, qty, price, BigDecimal.ZERO, ""));
             BigDecimal part = due2.subtract(new BigDecimal("1000.00"));
             List<PaymentEntry> p3 = new ArrayList<>();
             p3.add(new PaymentEntry(PayMethod.CASH.code(), part, part, null, null));
-            String id3 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                    counterId, cashierId, null, l3, p3);
-            created.add(id3);
-            QueryResult st3 = QueryResult.run("SELECT Status FROM Invoice WHERE Invoice_ID=?", id3);
-            check("#33", st3.rows.get(0)[0], "OPEN");
+            String before33 = String.valueOf(QueryResult.run(
+                    "SELECT COUNT(*) FROM Invoice").rows.get(0)[0]);
+            String msg33;
+            try {
+                String id3 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
+                        counterId, cashierId, null, l3, p3);
+                created.add(id3);
+                msg33 = "da luu " + id3;
+            } catch (RuntimeException ex) {
+                msg33 = ex.getMessage();
+            }
+            check("#33a", msg33.contains("chua thu du tien"), true);
+            check("#33b", String.valueOf(QueryResult.run(
+                    "SELECT COUNT(*) FROM Invoice").rows.get(0)[0]), before33);   // ROLLBACK that
+
+            // #33c: MySQL tu chan gia tri 'OPEN' o cot Status (ENUM 2 gia tri)
+            String msg33c;
+            // (id la hoa don thu nghiem, bi xoa o finally ben duoi)
+            try (java.sql.Connection c = billing.db.Db.getConnection();
+                 java.sql.PreparedStatement ps = c.prepareStatement(
+                         "UPDATE Invoice SET Status = 'OPEN' WHERE Invoice_ID = ?")) {
+                ps.setString(1, id);
+                ps.executeUpdate();
+                msg33c = "chap nhan OPEN";
+            } catch (java.sql.SQLException ex) {
+                msg33c = "tu choi";
+            }
+            check("#33c", msg33c, "tu choi");
 
             // --- #38: hai lan luu lien tiep -> hai ma KHAC NHAU -----------
-            check("#38", id.equals(id2) || id2.equals(id3), false);
+            check("#38", id.equals(id2), false);
 
             // --- bat bien muc 3.1 tren TOAN BO database -------------------
             QueryResult bad = QueryResult.run(

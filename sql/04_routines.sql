@@ -434,7 +434,8 @@ END$$
 --     dong hang nao van PHAI hien ra, voi Tong_tien = 0. Ban cu dung inner
 --     join nen hoa don bi xoa het dong hang bien mat khoi bang -> khong chon
 --     duoc -> khong sua va khong xoa duoc bang giao dien (plan/13 loi #9).
---     Tu khoi 4, 'OPEN' la trang thai thuc su nen day la duong di binh thuong.
+--     (Hoa don rong van co the xuat hien khi nguoi dung xoa het dong hang
+--     bang nut "Xoa dong hang" o tab 3.)
 --
 --     THAM SO p_days THEM O KHOI 6 -- DAY LA MOT DOI HOP DONG
 --     (docs/05 Quy tac 2, plan/15 muc 5.2):
@@ -828,9 +829,12 @@ END$$
 
 -- ---------------------------------------------------------------------
 -- 5.1 sp_create_invoice_header: Tạo thông tin đầu hóa đơn
---     Hoa don MOI LUON la 'OPEN' -- chua thu du tien thi chua PAID.
---     Chi sp_settle_invoice moi duoc chuyen sang 'PAID', va no tu doc bang
---     Payment de quyet dinh (plan/13 muc 2.2). Dung ghi 'PAID' o day.
+--     Trang thai 'OPEN' DA BI BO (01_schema.sql muc 9): hoa don chi co
+--     PAID va VOIDED. Dau hoa don duoc ghi THANG la 'PAID', va
+--     sp_settle_invoice o CUOI transaction kiem lai "co dong hang + thu du
+--     tien" -- sai thi SIGNAL, Java ROLLBACK, hoa don khong bao gio ton tai.
+--     Trong luc transaction chua commit, khong ai khac nhin thay dong nay
+--     (InnoDB, REPEATABLE READ), nen "PAID nhung chua co tien" khong lo ra.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_create_invoice_header(
     IN p_invoice_id  VARCHAR(30),
@@ -842,7 +846,7 @@ CREATE PROCEDURE sp_create_invoice_header(
 )
 BEGIN
     INSERT INTO Invoice (Invoice_ID, `Date`, `Time`, Status, Counter_ID, Cashier_ID, Customer_ID)
-    VALUES (p_invoice_id, p_date, p_time, 'OPEN', p_counter_id, p_cashier_id, p_customer_id);
+    VALUES (p_invoice_id, p_date, p_time, 'PAID', p_counter_id, p_cashier_id, p_customer_id);
 END$$
 
 
@@ -898,18 +902,20 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.4 sp_settle_invoice: Chuyen hoa don sang 'PAID' NEU da thu du tien
+-- 5.4 sp_settle_invoice: CHOT hoa don -- phai co dong hang va thu du tien
 --     Java goi thu tuc nay o cuoi transaction lap hoa don, TRUOC commit,
 --     tren cung mot Connection (InvoiceDao.createInvoice) -- dung nhu
 --     sp_add_invoice_line va sp_add_payment.
 --
 --     KHONG tra ResultSet: Java goi bang cs.executeUpdate(), va
 --     Connector/J nem loi "Can not issue SELECT via executeUpdate()" neu
---     thu tuc tra ve bang. Muon biet trang thai sau khi chay thi doc lai
---     bang sp_get_invoice_edit_fields.
+--     thu tuc tra ve bang.
 --
---     Khong thu du tien -> KHONG loi, chi la khong chuyen (hoa don o lai
---     'OPEN'). Tra thieu la mot trang thai hop le, khong phai mot loi.
+--     DOI NGHIA KHI BO 'OPEN': truoc day tra thieu la mot trang thai hop le
+--     (hoa don o lai 'OPEN'). Nay tra thieu la LOI -- thu tuc SIGNAL va
+--     transaction cua Java ROLLBACK, nen database khong bao gio chua mot
+--     hoa don chua thu du tien. Tab 1 da chan truoc o giao dien; day la
+--     chot cuoi cho moi duong ghi khac (seed, script, ContractCheck).
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_settle_invoice(
     IN p_invoice_id VARCHAR(30)
@@ -943,13 +949,16 @@ BEGIN
 
     -- Hoa don rong KHONG bao gio PAID, du co bao nhieu tien: fn_invoice_amount_due
     -- tra 0.00 cho hoa don rong nen phep so sanh mot minh se noi "da thu du".
-    IF v_status = 'OPEN'
-       AND v_has_line = 1
-       AND fn_invoice_amount_paid(p_invoice_id) >= fn_invoice_amount_due(p_invoice_id) THEN
+    IF v_has_line = 0 THEN
+        SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' khong co dong hang nao');
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+    END IF;
 
-        UPDATE Invoice
-        SET    Status = 'PAID'
-        WHERE  Invoice_ID = p_invoice_id;
+    IF fn_invoice_amount_paid(p_invoice_id) < fn_invoice_amount_due(p_invoice_id) THEN
+        SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' chua thu du tien: phai thu ',
+                           fn_invoice_amount_due(p_invoice_id), ', moi ghi nhan ',
+                           fn_invoice_amount_paid(p_invoice_id));
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
 END$$
 
@@ -1009,8 +1018,8 @@ END$$
 --     Dung them trang thai moi vao day.
 --
 --     Thu tuc nay CHI DOC cot Invoice.Status, khong bao gio ghi. Chi hoa don
---     'PAID' moi tra hang duoc: 'OPEN' nghia la chua thu du tien, ma hoan
---     tien cho mot hoa don chua thu tien la vo nghia.
+--     'PAID' moi tra hang duoc: hoa don 'VOIDED' da bi huy (hoac da tra
+--     hang roi), hoan tien them cho no la vo nghia.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_add_return(
     IN p_invoice_id  VARCHAR(30),
@@ -1049,8 +1058,8 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
 
-    -- Mot IF thay cho hai: '<> PAID' bao ca 'OPEN' va 'VOIDED', va khong co
-    -- ke ho neu sau nay ENUM co them gia tri. Thong diep neu dung trang thai
+    -- '<> PAID' chu khong '= VOIDED': khong co ke ho neu sau nay ENUM co
+    -- them gia tri. Thong diep neu dung trang thai
     -- dang gap de nguoi dung biet vi sao bi tu choi (plan/13 muc 4.9).
     IF v_status <> 'PAID' THEN
         SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' dang o trang thai ', v_status,
@@ -1183,7 +1192,7 @@ CREATE PROCEDURE sp_update_invoice_header(
     IN p_invoice_id  VARCHAR(30),
     IN p_date        DATE,
     IN p_time        TIME,
-    IN p_status      ENUM('OPEN','PAID','VOIDED'),
+    IN p_status      ENUM('PAID','VOIDED'),
     IN p_counter_id  VARCHAR(10),
     IN p_cashier_id  VARCHAR(10),
     IN p_customer_id VARCHAR(15)

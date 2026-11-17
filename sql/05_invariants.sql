@@ -104,19 +104,21 @@ BEGIN
         'muc 3.4 (G3)');
 
     -- -----------------------------------------------------------------
-    -- R4 -- mat con lai cua G3: 'OPEN' co dong hang va da thu du tien
-    --       nghia la sp_settle_invoice dang ra DA phai chuyen no sang
-    --       'PAID'. Quy tac nay bat loi "quen goi sp_settle_invoice".
+    -- R4 -- mat con lai cua G3, sau khi BO trang thai 'OPEN': hoa don
+    --       'VOIDED' cung da tung thu du tien (huy / tra hang khong xoa
+    --       dong Payment nao). Truoc day R4 kiem "OPEN thi chua thu du";
+    --       nay khong con OPEN, nen moi hoa don co dong hang -- bat ke
+    --       trang thai -- deu phai co paid >= due.
     -- -----------------------------------------------------------------
     INSERT INTO tmp_check_seed VALUES (4, 'R4',
-        'OPEN thi chua thu du tien (neu khong sp_settle_invoice da chuyen)',
+        'VOIDED cung da thu du tien luc lap (khong con OPEN)',
         (SELECT COUNT(*)
          FROM   Invoice i
-         WHERE  i.Status = 'OPEN'
+         WHERE  i.Status = 'VOIDED'
            AND  EXISTS (SELECT 1 FROM Invoice_Line l
                         WHERE l.Invoice_ID = i.Invoice_ID)
            AND  fn_invoice_amount_paid(i.Invoice_ID)
-             >= fn_invoice_amount_due(i.Invoice_ID)),
+              < fn_invoice_amount_due(i.Invoice_ID)),
         'muc 3.4 (G3)');
 
     -- -----------------------------------------------------------------

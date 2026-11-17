@@ -151,12 +151,11 @@ public class EditInvoiceDialog extends JDialog {
      *
      * Đây là dấu vết nhìn thấy được của lỗi #4 (plan/13): quản lý sửa dòng hàng
      * làm tổng phải trả tăng, Payment giữ nguyên, trạng thái vẫn PAID. Khối 4
-     * CỐ Ý không tự chuyển PAID -> OPEN (chuyển ngược bị cấm, mục 3.2) nên chỗ
+     * CỐ Ý không tự đổi trạng thái của hóa đơn đã thu tiền (mục 3.2) nên chỗ
      * duy nhất làm được gì là nói cho người dùng biết.
      *
-     * CHỈ cảnh báo trên hóa đơn PAID. Trên hóa đơn OPEN thì paid < due là
-     * trạng thái BÌNH THƯỜNG (đó chính là định nghĩa của OPEN), báo động ở đó
-     * là báo động giả.
+     * CHỈ cảnh báo trên hóa đơn PAID: hóa đơn VOIDED đã ra khỏi vòng đời
+     * thanh toán (trạng thái OPEN cũ không còn nữa).
      *
      * Hai lời gọi DAO này đi ra database, nên chạy NGOÀI EDT: dựng form xong
      * là hộp thoại hiện ra ngay, dòng cảnh báo điền sau.

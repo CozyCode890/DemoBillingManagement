@@ -951,9 +951,9 @@ public class InvoiceViewPanel extends JPanel {
                 status = row[3] == null ? "" : String.valueOf(row[3]);
             }
 
-            // Khối 4 sở hữu cột Status và đã định nghĩa: OPEN = chưa thu đủ tiền
-            // -> hoàn tiền cho một hóa đơn chưa thu tiền là vô nghĩa. SQL cũng
-            // chặn (sp_add_return), đây chỉ là lớp thông báo sớm.
+            // Chỉ hóa đơn PAID mới trả hàng được: VOIDED nghĩa là đã bị hủy
+            // hoặc ĐÃ trả hàng một lần rồi. SQL cũng chặn (sp_add_return),
+            // đây chỉ là lớp thông báo sớm.
             InvoiceStatus st = InvoiceStatus.of(status);
             if (st != InvoiceStatus.PAID) {
                 JOptionPane.showMessageDialog(this,

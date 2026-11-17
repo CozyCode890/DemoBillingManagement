@@ -201,10 +201,10 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc | `ReportDao.bestCashier()` |
 | `sp_report_big_returns` | PROCEDURE | *(không)* | Báo cáo hóa đơn trả hàng > 50% | `ReportDao.bigReturns()` |
 | `sp_report_old_price_proof`| PROCEDURE | *(không)* | Chứng minh hóa đơn cũ giữ giá. **Đổi ở khối 6 — 6 cột, gộp theo (sản phẩm, đơn giá)**: `San_pham, Gia_ghi_tren_HD, Gia_hom_nay, So_dong_hang, Ban_tu_ngay, Ban_den_ngay`. Bản cũ không có `WHERE` nên với seed 91 ngày nó trả ~1.200 dòng cho một báo cáo mang tên *"chứng minh"* | `ReportDao.oldPriceProof()` |
-| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **luôn là `OPEN`** -- chưa thu đủ tiền thì chưa `PAID` | `InvoiceDao.createInvoice()` |
+| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **thẳng là `PAID`** (trạng thái `OPEN` đã bị bỏ, `Status` chỉ còn `ENUM('PAID','VOIDED')`); `sp_settle_invoice` kiểm lại ở cuối transaction | `InvoiceDao.createInvoice()` |
 | `sp_add_invoice_line` | PROCEDURE | `(6 tham số)` | Ghi dòng chi tiết hóa đơn | `InvoiceDao.createInvoice()` |
 | `sp_add_payment` | PROCEDURE | `(6 tham số)` | Ghi thanh toán & rẽ nhánh bảng con | `InvoiceDao.createInvoice()` |
-| `sp_settle_invoice` | PROCEDURE | `p_invoice_id` | **Chỗ duy nhất đặt `PAID`**: chuyển khi đã thu đủ (`paid >= due` và có dòng hàng). Không trả ResultSet, idempotent | `InvoiceDao.createInvoice()` |
+| `sp_settle_invoice` | PROCEDURE | `p_invoice_id` | **Chốt hóa đơn**: thiếu dòng hàng hoặc `paid < due` thì `SIGNAL '45000'` và Java `ROLLBACK` -- thu thiếu tiền thì không lưu được. Không trả ResultSet | `InvoiceDao.createInvoice()` |
 | `sp_void_invoice` | PROCEDURE | `p_invoice_id` | **Đường duy nhất tới `VOIDED`**. Huỷ ≠ xoá: dữ liệu còn nguyên, chỉ không vào báo cáo | `InvoiceDao.voidInvoice()` |
 | `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn không phải `PAID` | `InvoiceDao.processReturn()` |
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
