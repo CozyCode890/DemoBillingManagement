@@ -130,12 +130,21 @@ CREATE TABLE Applies_To (
 -- ---------------------------------------------------------------------
 -- 9. Invoice -- phần ĐẦU hóa đơn (thông tin chung, chưa có sản phẩm)
 --    Customer_ID cho phép NULL = khách vãng lai không xuất trình thẻ.
+--
+--    Status CHỈ CÓ HAI GIÁ TRỊ. Trạng thái 'OPEN' (thu thiếu tiền vẫn lưu)
+--    đã bị bỏ: hóa đơn chưa thu đủ tiền thì KHÔNG được lưu. ENUM là chỗ
+--    MySQL tự chặn -- INSERT/UPDATE giá trị khác 'PAID'/'VOIDED' báo lỗi
+--    "Data truncated for column 'Status'" (chế độ STRICT mặc định của 8.0).
+--      PAID   = đã thu đủ tiền
+--      VOIDED = bị hủy (nút "Huy hoa don"), HOẶC đã trả hàng -- hai trường
+--               hợp phân biệt bằng việc có dòng trong bảng `Return` hay
+--               không (xem fn_invoice_in_revenue ở 04_routines.sql).
 -- ---------------------------------------------------------------------
 CREATE TABLE Invoice (
     Invoice_ID  VARCHAR(30) NOT NULL,
     `Date`      DATE NOT NULL,
     `Time`      TIME NOT NULL,
-    Status      ENUM('OPEN','PAID','VOIDED') NOT NULL,
+    Status      ENUM('PAID','VOIDED') NOT NULL,
     Counter_ID  VARCHAR(10) NOT NULL,
     Cashier_ID  VARCHAR(10) NOT NULL,
     Customer_ID VARCHAR(15) NULL,

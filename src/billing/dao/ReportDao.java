@@ -86,4 +86,20 @@ public class ReportDao {
     public QueryResult oldPriceProof() {
         return QueryResult.call("{call sp_report_old_price_proof()}");
     }
+
+
+    // =================================================================
+    //  BÁO CÁO 6: giá của MỘT sản phẩm, số lượng 1, trong 30 ngày
+    // =================================================================
+    //  Note của nhóm: "chứng minh giá tiền mỗi ngày thay đổi".
+    //  CTE đệ quy sinh 30 ngày + LAG so với hôm trước: sp_report_price_30_days(ma)
+    // -----------------------------------------------------------------
+    public static String sqlPrice30Days(String barcode) {
+        return "-- [Goi Stored Procedure do Dev SQL thiet ke trong 04_routines.sql]\n"
+             + "CALL sp_report_price_30_days('" + barcode + "');";
+    }
+
+    public QueryResult price30Days(String barcode) {
+        return QueryResult.call("{call sp_report_price_30_days(?)}", barcode);
+    }
 }
