@@ -183,6 +183,10 @@ public class ContractCheck {
         returnsFlow();
 
         System.out.println();
+        System.out.println("=== Bao cao 6: gia 30 ngay, SL 1 (gia doi moi ngay) ===");
+        price30();
+
+        System.out.println();
         System.out.println("=== SEED (khoi 6)  14 bat bien du lieu + hai ban chep ===");
         seed();
 
@@ -561,6 +565,25 @@ public class ContractCheck {
         check("#c2", billing.util.CashRules.cardDetailProblem("123", "A1B2C3") != null, true);
         check("#c3", billing.util.CashRules.cardDetailProblem("1234", "AB") != null, true);
         check("#c4", billing.util.CashRules.maskedCard("1234"), "****-****-****-1234");
+    }
+
+    /**
+     *   #p1  30 dong, 5 cot
+     *   #p2  8934005 (seed cho doi gia moi ngay): KHONG co hai ngay lien nhau
+     *        cung gia -- Chenh_lech khac 0 o ca 29 dong sau dong dau
+     *   #p3  bao cao tang gia > 10% van dung 5 dong (kich ban #92)
+     */
+    static void price30() {
+        QueryResult r = new billing.dao.ReportDao().price30Days("8934005");
+        check("#p1a", r.rows.size(), 30);
+        check("#p1b", r.columns.size(), 5);
+        int same = 0;
+        for (int i = 1; i < r.rows.size(); i++) {
+            Object d = r.rows.get(i)[4];
+            if (d == null || Ui.dec(d).signum() == 0) same++;
+        }
+        check("#p2", same, 0);
+        check("#p3", new billing.dao.ReportDao().priceRise().rows.size(), 5);
     }
 
     static void qr() {

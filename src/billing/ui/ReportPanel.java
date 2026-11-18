@@ -1,7 +1,9 @@
 package billing.ui;
 
+import billing.dao.ProductDao;
 import billing.dao.ReportDao;
 import billing.db.QueryResult;
+import billing.model.Product;
 
 import javax.swing.*;
 import java.awt.*;
@@ -31,7 +33,12 @@ public class ReportPanel extends JPanel {
     //  Giữ danh sách vì cả năm phải bị khoá cùng lúc: bấm nhanh năm nút
     //  liên tiếp mà không khoá là năm câu SQL cùng chạy và năm lần đổ bảng
     //  tranh nhau (kịch bản #107).
-    private final List<JButton> reportButtons = new ArrayList<>(5);
+    private final List<JButton> reportButtons = new ArrayList<>(6);
+
+    /** Báo cáo 6 cần chọn sản phẩm; danh mục nạp NGOÀI EDT. */
+    private final JComboBox<Product> cbPriceProduct = new JComboBox<>();
+    /** Ba sản phẩm seed cho đổi giá MỖI NGÀY trong 30 ngày (02_seed.sql). */
+    private static final String DEFAULT_PRICE_BARCODE = "8934005";
 
     public ReportPanel() {
         setLayout(new BorderLayout(8, 8));
@@ -89,6 +96,31 @@ public class ReportPanel extends JPanel {
               + "hoa don INV-OLD-* tu nam truoc.",
                 dao::oldPriceProof));
 
+        // --- Báo cáo 6: cần chọn sản phẩm -> nút riêng + ô chọn -----------
+        JButton btPrice30 = new JButton("6. Gia 30 ngay (SL 1)");
+        reportButtons.add(btPrice30);
+        cbPriceProduct.setPreferredSize(new Dimension(300, 26));
+        btPrice30.addActionListener(e -> {
+            Product p = (Product) cbPriceProduct.getSelectedItem();
+            if (p == null) {
+                Ui.warn(this, "Chua nap duoc danh sach san pham.", "Chua chon san pham");
+                return;
+            }
+            final String barcode = p.barcode;            // doc o tren EDT
+            runReport(btPrice30, btPrice30.getText(), ReportDao.sqlPrice30Days(barcode),
+                    "Gia cua MOT san pham khi mua SO LUONG 1, tung ngay trong 30 ngay gan nhat "
+                  + "(chung minh gia doi theo ngay). CTE de quy sinh 30 ngay; moi ngay goi "
+                  + "fn_get_product_price, fn_active_promo_pct, fn_line_discount -- dung ba ham tab 1 "
+                  + "dung khi lap hoa don. Cot Chenh_lech dung LAG() so voi hom truoc. "
+                  + "Seed cho 3 san pham doi gia MOI NGAY: Nuoc mam Nam Ngu, Ca phe G7, Nuoc rua tay Lifebuoy.",
+                    () -> dao.price30Days(barcode));
+        });
+        JPanel pricePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        pricePanel.add(cbPriceProduct);
+        pricePanel.add(btPrice30);
+        buttons.add(pricePanel);
+        loadPriceProducts();
+
         JScrollPane spSql = new JScrollPane(taSql);
         spSql.setPreferredSize(new Dimension(100, 230));
 
@@ -118,41 +150,72 @@ public class ReportPanel extends JPanel {
                                Supplier<QueryResult> action) {
         JButton b = new JButton(label);
         reportButtons.add(b);
-        b.addActionListener(e -> {
-            taSql.setText(sql);
-            taSql.setCaretPosition(0);
-            taWhat.setText(explain);
-            taWhat.setCaretPosition(0);
-
-            // Khoá cả năm nút và đổi nhãn nút đang chạy: một cửa sổ không
-            // phản hồi mà không nói gì thì người dùng tưởng app treo.
-            setButtonsEnabled(false);
-            b.setText(label + " -- dang chay...");
-
-            new SwingWorker<QueryResult, Void>() {
-                @Override
-                protected QueryResult doInBackground() {
-                    return action.get();          // câu SQL: NGOÀI EDT
-                }
-
-                @Override
-                protected void done() {
-                    b.setText(label);
-                    setButtonsEnabled(true);
-                    try {
-                        QueryResult qr = get();   // ném lại lỗi của doInBackground
-                        Ui.fill(tbData, qr);
-                        if (qr.isEmpty()) {
-                            JOptionPane.showMessageDialog(ReportPanel.this,
-                                    "Cau lenh chay xong nhung khong co dong nao thoa dieu kien.");
-                        }
-                    } catch (Exception ex) {
-                        Ui.error(ReportPanel.this, ex);
-                    }
-                }
-            }.execute();
-        });
+        b.addActionListener(e -> runReport(b, label, sql, explain, action));
         return b;
+    }
+
+    /**
+     * Hiện câu SQL + ý nghĩa, rồi chạy {@code action} NGOÀI EDT và đổ kết quả
+     * vào bảng. Sáu nút báo cáo dùng chung -- một chỗ sửa cho cả sáu.
+     */
+    private void runReport(JButton b, String label, String sql, String explain,
+                           Supplier<QueryResult> action) {
+        taSql.setText(sql);
+        taSql.setCaretPosition(0);
+        taWhat.setText(explain);
+        taWhat.setCaretPosition(0);
+
+        // Khoá cả sáu nút và đổi nhãn nút đang chạy: một cửa sổ không
+        // phản hồi mà không nói gì thì người dùng tưởng app treo.
+        setButtonsEnabled(false);
+        b.setText(label + " -- dang chay...");
+
+        new SwingWorker<QueryResult, Void>() {
+            @Override
+            protected QueryResult doInBackground() {
+                return action.get();          // câu SQL: NGOÀI EDT
+            }
+
+            @Override
+            protected void done() {
+                b.setText(label);
+                setButtonsEnabled(true);
+                try {
+                    QueryResult qr = get();   // ném lại lỗi của doInBackground
+                    Ui.fill(tbData, qr);
+                    if (qr.isEmpty()) {
+                        JOptionPane.showMessageDialog(ReportPanel.this,
+                                "Cau lenh chay xong nhung khong co dong nao thoa dieu kien.");
+                    }
+                } catch (Exception ex) {
+                    Ui.error(ReportPanel.this, ex);
+                }
+            }
+        }.execute();
+    }
+
+    /** Nạp danh mục sản phẩm cho ô chọn của báo cáo 6 -- NGOÀI EDT. */
+    private void loadPriceProducts() {
+        new SwingWorker<List<Product>, Void>() {
+            @Override
+            protected List<Product> doInBackground() {
+                return new ProductDao().findAll();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    cbPriceProduct.removeAllItems();
+                    for (Product p : get()) {
+                        cbPriceProduct.addItem(p);
+                        if (DEFAULT_PRICE_BARCODE.equals(p.barcode)) cbPriceProduct.setSelectedItem(p);
+                    }
+                } catch (Exception ex) {
+                    // Khong chan ca tab: 5 bao cao kia van chay duoc.
+                    System.out.println("[ReportPanel] Khong nap duoc san pham: " + ex.getMessage());
+                }
+            }
+        }.execute();
     }
 
     private void setButtonsEnabled(boolean on) {

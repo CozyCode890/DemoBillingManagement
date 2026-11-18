@@ -204,7 +204,7 @@ INSERT INTO Product (Barcode, Name, Unit, Tax_Rate) VALUES
 
 
 -- ---------------------------------------------------------------------
--- Lịch sử giá -- 28 mốc
+-- Lịch sử giá -- 28 mốc ở đây + 90 mốc "giá đổi mỗi ngày" ngay bên dưới
 --
 --   20 mốc "giá cũ" ở @old_day (CURDATE() - 400): MỌI sản phẩm đều có giá
 --      từ ngày đó, nên fn_get_product_price không bao giờ trả NULL cho một
@@ -254,6 +254,42 @@ INSERT INTO Price_History (Barcode, Valid_From_Date, Price) VALUES
 ('8934007', @new_day, 128000.00),   --  +6.67%
 ('8934008', @new_day, 158000.00),   -- +21.54%  <-- tang > 10%
 ('8934010', @new_day,  21000.00);   -- +16.67%  <-- tang > 10%
+
+
+-- ---------------------------------------------------------------------
+-- GIÁ ĐỔI MỖI NGÀY trong 30 ngày gần nhất -- 3 sản phẩm (90 mốc)
+--
+--   Note của nhóm: "chứng minh giá tiền mỗi ngày thay đổi" + "bảng giá của
+--   1 món hàng, số lượng 1, trong 30 ngày" (báo cáo sp_report_price_30_days,
+--   tab 4). Với chỉ 2 mốc/sản phẩm (-400 và -45) thì 30 ngày gần nhất giá
+--   đứng yên và bảng đó phẳng.
+--
+--   Chọn 3 sản phẩm thuộc nhóm "CHƯA ĐỔI GIÁ" (không có mốc @new_day), mốc
+--   là CURDATE() - n với n = 29..0 -- đúng quy ước của seed.
+--
+--   Giá = giá cũ x (1 + 0,4% x k), k = MOD(7n + lệch, 11) - 5 thuộc {-5..5}:
+--     * hai ngày liền nhau k lệch nhau +7 hoặc -4 bậc (không bao giờ 0), tức
+--       ít nhất ~700 đồng -> làm tròn 100 đồng xong vẫn KHÁC: ngày nào cũng đổi
+--     * tăng mạnh nhất giữa hai mốc liền nhau là 7 bậc (~2,8%) < 10%, và mốc
+--       đầu so với giá cũ cao nhất +2% -- nên sp_report_price_rise vẫn ra
+--       ĐÚNG 5 dòng (kịch bản #92)
+--     * chu kỳ 11 ngày, không lặp đều từng tuần
+--   Làm tròn tới 100 đồng. Hóa đơn trong seed tự lấy giá này qua
+--   fn_get_product_price (bất biến G1/R1), không có gì phải sửa thêm.
+-- ---------------------------------------------------------------------
+INSERT INTO Price_History (Barcode, Valid_From_Date, Price)
+WITH RECURSIVE d (n) AS (
+    SELECT 0
+    UNION ALL
+    SELECT n + 1 FROM d WHERE n < 29
+)
+SELECT  p.Barcode,
+        DATE_SUB(CURDATE(), INTERVAL d.n DAY),
+        ROUND(p.Base * (1 + 0.004 * (MOD(d.n * 7 + p.Lech, 11) - 5)), -2)
+FROM    d
+CROSS JOIN (SELECT '8934005' AS Barcode, 45000 AS Base, 0 AS Lech   -- Nuoc mam Nam Ngu
+            UNION ALL SELECT '8934009', 78000, 4                    -- Ca phe G7
+            UNION ALL SELECT '8934018', 48000, 8) p;                -- Nuoc rua tay Lifebuoy
 
 
 -- ---------------------------------------------------------------------

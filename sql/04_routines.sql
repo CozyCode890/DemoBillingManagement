@@ -51,6 +51,7 @@ DROP PROCEDURE IF EXISTS sp_report_price_rise;
 DROP PROCEDURE IF EXISTS sp_report_best_cashier;
 DROP PROCEDURE IF EXISTS sp_report_big_returns;
 DROP PROCEDURE IF EXISTS sp_report_old_price_proof;
+DROP PROCEDURE IF EXISTS sp_report_price_30_days;
 
 DROP PROCEDURE IF EXISTS sp_create_invoice_header;
 DROP PROCEDURE IF EXISTS sp_add_invoice_line;
@@ -977,6 +978,55 @@ BEGIN
     WHERE   l.Unit_Price <> fn_get_product_price(l.Barcode, CURDATE())
     GROUP BY p.Name, l.Unit_Price, l.Barcode
     ORDER BY p.Name, l.Unit_Price;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 4.6 sp_report_price_30_days: Gia cua MOT san pham, SO LUONG 1, 30 ngay
+--     Note cua nhom: "chung minh gia tien moi ngay thay doi" + "bang gia su
+--     thay doi gia cua 1 mon hang voi so luong 1 trong 30 ngay".
+--
+--     Moi dong la MOT NGAY (CURDATE()-29 .. CURDATE()), sinh bang CTE de quy
+--     -- ngay khong co moc gia moi van hien, voi gia cua moc gan nhat truoc
+--     no. Ca ba con so goi DUNG cac ham ma tab 1 dung khi lap hoa don:
+--       Don_gia        = fn_get_product_price(ma, ngay)
+--       KM_phan_tram   = fn_active_promo_pct(ma, ngay)
+--       Thanh_tien_SL1 = Don_gia - fn_line_discount(ma, ngay, 1, Don_gia)
+--     nen "mua 1 cai vao ngay X" trong bang nay bang dung con so tab 1 se
+--     ghi neu doi o "Ngay ban" ve ngay X.
+--     Chenh_lech = so voi NGAY HOM TRUOC (LAG -- window function cua MySQL 8).
+--
+--     HOP DONG COT: 0 Ngay | 1 Don_gia | 2 KM_phan_tram | 3 Thanh_tien_SL1
+--                   4 Chenh_lech
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_report_price_30_days(
+    IN p_barcode VARCHAR(20)
+)
+BEGIN
+    WITH RECURSIVE d (n) AS (
+        SELECT 29
+        UNION ALL
+        SELECT n - 1 FROM d WHERE n > 0
+    ),
+    gia AS (
+        SELECT  DATE_SUB(CURDATE(), INTERVAL d.n DAY)                         AS Ngay,
+                fn_get_product_price(p_barcode, DATE_SUB(CURDATE(), INTERVAL d.n DAY)) AS Don_gia
+        FROM    d
+    ),
+    tien AS (
+        SELECT  g.Ngay,
+                g.Don_gia,
+                fn_active_promo_pct(p_barcode, g.Ngay)                         AS KM_phan_tram,
+                g.Don_gia - fn_line_discount(p_barcode, g.Ngay, 1, g.Don_gia)  AS Thanh_tien_SL1
+        FROM    gia g
+    )
+    SELECT  t.Ngay,
+            t.Don_gia,
+            t.KM_phan_tram,
+            t.Thanh_tien_SL1,
+            t.Thanh_tien_SL1 - LAG(t.Thanh_tien_SL1) OVER (ORDER BY t.Ngay)    AS Chenh_lech
+    FROM    tien t
+    ORDER BY t.Ngay;
 END$$
 
 
