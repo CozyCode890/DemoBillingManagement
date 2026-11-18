@@ -93,6 +93,18 @@ Setup App không bao giờ sửa MySQL không phải của nó. Nếu cổng 330
 
 Mở thư mục repo, IDE nhận `pom.xml`. Bấm CHẠY trong Setup App **một lần** để có MySQL và database, sau đó chạy `billing.Main` từ IDE như bình thường (thư mục làm việc = gốc repo, để app đọc được `config.properties`).
 
+### App gọn `billing2`
+
+`src/billing2/` là bản viết lại gọn của `src/billing/`: **cùng bộ khung** (package `db / model / dao / ui`, cùng tên lớp, cùng tên hàm như `ProductDao.priceOn()`, `InvoiceDao.createInvoice()`) và **gọi đúng các thủ tục SQL đó**, nên nghiệp vụ giữ nguyên — khoảng 4.000 dòng thay vì 11.800. Giao diện chỉ tiếng Anh, không có tab Tra cứu và nút QR.
+
+Chạy bản gọn: đổi một dòng trong `config.properties` rồi bấm CHẠY — Setup App biên dịch cả hai app và chạy lớp ghi ở đây (từ IDE thì chạy thẳng `billing2.Main`):
+
+```properties
+app.main.class=billing2.Main
+```
+
+Quy trình: tính năng mới làm trước ở `billing`, sau đó `billing2` tham khảo cách `billing` làm và viết lại cho gọn.
+
 ---
 
 ## Bốn màn hình của app
@@ -175,12 +187,14 @@ DemoBillingManagement/
 ├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
 │   └── plan/               <- kế hoạch từng khối (comment trong code / SQL ghi tắt là "plan/NN")
 │
-└── src/billing/
-    ├── Main.java           <- điểm khởi động ứng dụng bán hàng
-    ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
-    ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
-    ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
-    └── ui/                 <- giao diện Swing, không có SQL
+├── src/billing/            <- app đầy đủ (song ngữ, tab Tra cứu, QR)
+│   ├── Main.java           <- điểm khởi động ứng dụng bán hàng
+│   ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
+│   ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
+│   ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
+│   └── ui/                 <- giao diện Swing, không có SQL
+│
+└── src/billing2/           <- app gọn: cùng khung và cùng thủ tục SQL với billing (xem mục "App gọn billing2")
 ```
 
 Kiến trúc ba tầng: **ui → dao → db → MySQL**. Tầng giao diện không được viết SQL, tầng DAO không được mở cửa sổ. Đây cũng là cách Spring Boot tổ chức code, chỉ khác tên gọi.
