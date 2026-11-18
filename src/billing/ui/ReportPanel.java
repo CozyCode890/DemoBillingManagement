@@ -54,34 +54,40 @@ public class ReportPanel extends JPanel {
         taWhat.setBackground(new Color(255, 250, 225));
         taWhat.setMargin(new Insets(8, 8, 8, 8));
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
+        // Hai hang CO DINH: nhan tieng Anh dai hon, mot FlowLayout tu xuong dong
+        // thi hang thu hai bi cat mat (khung khong tu cao them).
+        JPanel buttons = new JPanel(new GridLayout(2, 1, 0, 0));
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        buttons.add(row1);
+        buttons.add(row2);
         buttons.setBorder(BorderFactory.createTitledBorder(I18n.text("Chọn báo cáo", "Choose a report")));
 
-        buttons.add(makeButton(I18n.text("2. Doanh thu 7 ngày / cửa hàng", "2. 7-day revenue by shop"),
+        row1.add(makeButton(I18n.text("2. Doanh thu 7 ngày / cửa hàng", "2. 7-day revenue by shop"),
                 I18n.text("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất. "
                         + "Hóa đơn đã trả hàng chỉ tính phần khách còn giữ; hóa đơn bị hủy không tính.",
                           "Revenue for each SHOP on each DAY of the last 7 days. "
                         + "Invoices with returns count only what the customer kept; voided invoices are excluded."),
                 dao::dailyTakings));
 
-        buttons.add(makeButton(I18n.text("3. Sản phẩm tăng giá > 10%", "3. Price rises > 10%"),
+        row1.add(makeButton(I18n.text("3. Sản phẩm tăng giá > 10%", "3. Price rises > 10%"),
                 I18n.text("Các lần đổi giá trong năm nay mà giá mới cao hơn giá ngay trước đó trên 10%.",
                           "Price changes this year where the new price is more than 10% above the previous one."),
                 dao::priceRise));
 
-        buttons.add(makeButton(I18n.text("4. Thu ngân giỏ hàng TB cao nhất", "4. Cashier with the highest average basket"),
+        row1.add(makeButton(I18n.text("4. Thu ngân giỏ hàng TB cao nhất", "4. Cashier with the highest average basket"),
                 I18n.text("Giá trị trung bình MỘT HÓA ĐƠN của từng thu ngân, cao nhất ở trên cùng.",
                           "Average value PER INVOICE for each cashier, highest first."),
                 dao::bestCashier));
 
-        buttons.add(makeButton(I18n.text("5. Hóa đơn trả hàng > 50%", "5. Invoices with > 50% returned"),
+        row1.add(makeButton(I18n.text("5. Hóa đơn trả hàng > 50%", "5. Invoices with > 50% returned"),
                 I18n.text("Hóa đơn mà khách đã trả lại hơn một nửa giá trị. "
                         + "Tiền hoàn tính theo tỷ lệ số lượng trả, kể cả phần giảm giá.",
                           "Invoices where the customer returned more than half of the value. "
                         + "Refunds follow the returned quantity, discounts included."),
                 dao::bigReturns));
 
-        buttons.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
+        row1.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
                 I18n.text("So sánh giá ghi trên hóa đơn (giá lúc bán) với giá hôm nay. "
                         + "Mỗi dòng: bao nhiêu dòng hàng đang ghi giá đó, bán từ ngày nào đến ngày nào, "
                         + "và giá hôm nay là bao nhiêu -- giá trên hóa đơn cũ không đổi khi giá mới được áp dụng.",
@@ -116,7 +122,7 @@ public class ReportPanel extends JPanel {
         JPanel pricePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         pricePanel.add(cbPriceProduct);
         pricePanel.add(btPrice30);
-        buttons.add(pricePanel);
+        row2.add(pricePanel);
         loadPriceProducts();
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
