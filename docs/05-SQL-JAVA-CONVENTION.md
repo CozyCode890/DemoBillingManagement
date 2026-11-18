@@ -215,14 +215,14 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `OUT p_deleted` | Hủy **mọi** lượt trả của một dòng. Hóa đơn không còn dòng trả nào thì `VOIDED` → `PAID` (lối ra duy nhất khỏi `VOIDED`, chỉ cho hóa đơn VOIDED vì trả hàng) | `InvoiceDao.deleteLineReturns()` |
 | `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |
 | `sp_check_seed` | PROCEDURE | `OUT p_violations` | 14 bất biến dữ liệu, mỗi quy tắc một dòng kèm số vi phạm; `OUT` là tổng. Nằm ở `sql/05_invariants.sql`, **không** ở `04_routines.sql`: nó là dụng cụ kiểm, app không gọi nó | `ContractCheck`, `check-seed.ps1` / `.sh` |
-| `sp_wipe_transactions` | PROCEDURE | *(không)* | Xoá **dòng** của 7 bảng giao dịch, giữ 9 bảng danh mục, mọi bảng và routine. Gọi hai lần như gọi một lần. **Chỗ duy nhất** giữ thứ tự xoá ngược khoá ngoại (`plan/16` mục 3.2) | *(app không gọi — nút *Xoá dữ liệu* của Setup App, seed tự viết)* |
+| `sp_wipe_transactions` | PROCEDURE | *(không)* | Xoá **dòng** của 7 bảng giao dịch, giữ 9 bảng danh mục, mọi bảng và routine. Gọi hai lần như gọi một lần. **Chỗ duy nhất** giữ thứ tự xoá ngược khoá ngoại (`docs/plan/16` mục 3.2) | *(app không gọi — nút *Xoá dữ liệu* của Setup App, seed tự viết)* |
 | `sp_wipe_all_data` | PROCEDURE | *(không)* | Gọi `sp_wipe_transactions` rồi xoá nốt 9 bảng danh mục, kể cả `Account` → app không đăng nhập được cho tới khi seed thêm tài khoản | *(app không gọi — `02_seed.sql` khối 0, nút *Xoá dữ liệu* của Setup App)* |
 
 ---
 
 ## 7. Quy Ước Nhãn & Con Số Trên Giao Diện
 
-Bốn quy ước dưới đây sinh ra từ khối 5 (`plan/14`), sau khi phát hiện bộ định
+Bốn quy ước dưới đây sinh ra từ khối 5 (`docs/plan/14`), sau khi phát hiện bộ định
 dạng số bị chép **bốn** lần và nhãn phương thức thanh toán bị chép **ba** lần.
 
 ### 7.1. Định dạng số chỉ qua `Ui`
@@ -240,7 +240,7 @@ dạng số bị chép **bốn** lần và nhãn phương thức thanh toán b�
 | `Ui.dec(Object)` | — | — | giá trị thô từ JDBC → `BigDecimal`, không qua `double` |
 
 **Phần trăm không thuộc nhóm tiền tệ.** Xếp `VAT_pct` vào nhóm tiền là nó hiện
-ra thành `"8đ"` -- lỗi #21 của `plan/14`, và là lý do
+ra thành `"8đ"` -- lỗi #21 của `docs/plan/14`, và là lý do
 `InvoiceViewPanel.fillFormatted` có tham số thứ sáu `percentCols`.
 
 ### 7.2. Đọc số chỉ qua `Ui.readMoney` / `Ui.readQuantity`
@@ -269,7 +269,7 @@ nghĩa, nhưng `Invoice_Line.Discount = 0.00` là giá trị bình thường nh�
 ### 7.3. Không rẽ nhánh theo nhãn hiển thị
 
 So sánh bằng **mã**, không bằng chữ hiện trên màn hình. Án lệ: lỗi #5 của
-`plan/14` so `"Tiền mặt"` (có dấu) với `PaymentEntry.methodLabel()` trả
+`docs/plan/14` so `"Tiền mặt"` (có dấu) với `PaymentEntry.methodLabel()` trả
 `"Tien mat"` (không dấu) -- hai chuỗi không bao giờ bằng nhau, nên 12 dòng code
 **chưa từng chạy một lần nào**.
 
@@ -287,7 +287,7 @@ tệ hơn là hiện `"Tien mat"` ở cả hai.
 **Chuỗi do SQL sinh ra thì giữ nguyên dạng SQL.** Vì `CASE` trong
 `sp_get_invoice_payments` trả về chuỗi không dấu và chuỗi đó hiện ở tab 2 và tab
 3, `NewInvoicePanel` (tab 1), `InvoiceViewPanel` (tab 3) và các hộp thoại đều
-dùng **không dấu**. `SearchPanel` (tab 2) giữ **có dấu** như `plan/13` mục 5.6
+dùng **không dấu**. `SearchPanel` (tab 2) giữ **có dấu** như `docs/plan/13` mục 5.6
 đã chốt -- nó không hiển thị nhãn nào do SQL sinh ra.
 
 ### 7.5. Bốn quy ước trên có một cái chốt bằng số
@@ -299,13 +299,13 @@ dùng **không dấu**. `SearchPanel` (tab 2) giữ **có dấu** như `plan/13`
 `tools/check/ContractCheck.java` kiểm bằng code những thứ **sai thì không ai
 thấy**: hai quy tắc đọc số, công thức giảm giá, hợp đồng tiền mặt
 (`tendered`/`recorded`/`change`), và mã QR có thật sự đọc `config.properties`
-hay không. Án lệ của nó là lỗi #1 của `plan/14` -- thu ngân gõ `500.000` và app
+hay không. Án lệ của nó là lỗi #1 của `docs/plan/14` -- thu ngân gõ `500.000` và app
 ghi vào database **500 đồng**, sai đúng 1000 lần, không một ngoại lệ, không một
 cảnh báo. Loại sai đó phải có một cái chốt bằng số.
 
 Nó **chỉ** kiểm các kịch bản không cần bấm chuột; phần tương tác Swing vẫn phải
-kiểm bằng tay (`plan/14` mục 9.3 ghi rõ cái nào đã chạy, cái nào chưa). Nó ghi
-3 hoá đơn thật rồi xoá, không chạm dữ liệu seed. Sửa file đó thì đọc `plan/14`
+kiểm bằng tay (`docs/plan/14` mục 9.3 ghi rõ cái nào đã chạy, cái nào chưa). Nó ghi
+3 hoá đơn thật rồi xoá, không chạm dữ liệu seed. Sửa file đó thì đọc `docs/plan/14`
 mục 9.4 trước -- tham số `-Djava.awt.headless=true` là bắt buộc, không phải
 tuỳ chọn.
 
@@ -313,7 +313,7 @@ tuỳ chọn.
 
 ## 8. Quy Ước Dữ Liệu Mẫu
 
-Bốn quy ước dưới đây sinh ra từ khối 6 (`plan/15`), sau khi phát hiện
+Bốn quy ước dưới đây sinh ra từ khối 6 (`docs/plan/15`), sau khi phát hiện
 `02_seed.sql` là chỗ **duy nhất** trong cả dự án đi vòng qua mọi quy tắc nghiệp
 vụ mà năm khối trước đã dựng: nó `INSERT` thẳng vào bảng giao dịch với
 `Status`, `Unit_Price`, `Discount`, `Return_ID` **gõ tay**.
@@ -388,7 +388,7 @@ sửa một bên.**
 ### 8.5. Seed của bạn chạy lại được bằng một dòng
 
 Muốn tập viết seed riêng, đừng chép khối `DELETE` vào file của mình — gọi lại
-chỗ duy nhất giữ thứ tự xoá (`plan/16`):
+chỗ duy nhất giữ thứ tự xoá (`docs/plan/16`):
 
 ```sql
 USE retail_billing;

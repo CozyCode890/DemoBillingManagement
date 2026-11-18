@@ -56,7 +56,7 @@ Hàng nút phụ dưới năm bước:
 | **Nạp lại database** | Xoá và nạp lại từ `sql/` dù SQL không đổi — về đúng dữ liệu mẫu |
 | **Xoá dữ liệu...** | Xoá các dòng, giữ mọi bảng và hàm/thủ tục. Hai mức: chỉ giao dịch (vẫn đăng nhập được) hoặc toàn bộ (kể cả tài khoản) — dành cho người tập viết seed |
 | **Chạy 03_queries.sql** | Chạy bài tập truy vấn, in kết quả dạng bảng vào log |
-| **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (plan/15) |
+| **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (docs/plan/15) |
 | **Tắt MySQL** | Tắt MySQL riêng của Setup App. MySQL có sẵn trên máy (service MySQL80, Homebrew...) thì không đụng tới |
 
 Tab **Nhật ký SQL** hiện mọi câu SQL mà app billing gửi xuống MySQL.
@@ -173,6 +173,7 @@ DemoBillingManagement/
 │   └── 05_invariants.sql   <- 14 bất biến của dữ liệu (sp_check_seed)
 │
 ├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
+│   └── plan/               <- kế hoạch từng khối (comment trong code / SQL ghi tắt là "plan/NN")
 │
 └── src/billing/
     ├── Main.java           <- điểm khởi động ứng dụng bán hàng
@@ -230,7 +231,7 @@ Gần như mọi lỗi môi trường đều sửa được bằng cách **bấm
 | `UnsupportedClassVersionError ... class file version 69` | `SetupApp.jar` bị đóng gói bằng JDK mới hơn JDK đang chạy. Đóng gói lại bằng script `build-setup` (script đã khoá `--release 21`) |
 | Bấm đúp `Setup.exe` báo `side-by-side configuration is incorrect` | `tools/launcher/app.manifest` hỏng cú pháp XML — chạy `scripts\ps1\build-launcher.ps1`, nó kiểm tra và chỉ ra lỗi |
 | *"MySQL riêng không cho root đăng nhập"* | Tắt Setup App, xoá thư mục `~/.retail-billing/mysql-data` rồi bấm CHẠY — MySQL riêng được khởi tạo lại |
-| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `plan/15` đang bị vi phạm. Bấm **Nạp lại database** là về 0. R12 (91 ngày liên tục) sai riêng một mình thường chỉ vì database được nạp từ nhiều ngày trước |
+| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `docs/plan/15` đang bị vi phạm. Bấm **Nạp lại database** là về 0. R12 (91 ngày liên tục) sai riêng một mình thường chỉ vì database được nạp từ nhiều ngày trước |
 
 Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
 

@@ -30,24 +30,24 @@ import java.util.List;
  *  ContractCheck -- kiem BON HOP DONG cua tang giao dien bang code
  * ====================================================================
  *
- *  Bon hop dong (plan/14 muc 3, va docs/05 muc 7):
+ *  Bon hop dong (docs/plan/14 muc 3, va docs/05 muc 7):
  *    1. TIEN MAT     -- tendered / recorded / change la ba con so o ba cho
  *    2. GIAM GIA     -- discount la ham cua (san pham, ngay, SO LUONG)
  *    3. DOC / HIEN SO -- hai quy tac doc so, mot ban chep moi phep dinh dang
  *    4. MA QR        -- tai khoan lay tu config.properties va CO TAC DUNG
  *
- *  NHOM SEED, them o khoi 6 (plan/15 muc 5.6): ba phep kiem cuoi file.
+ *  NHOM SEED, them o khoi 6 (docs/plan/15 muc 5.6): ba phep kiem cuoi file.
  *  Chung PHAI nam o day chu khong trong 05_invariants.sql vi hai trong ba
  *  so SQL VOI JAVA, nen chi chay duoc o cho goi duoc ca hai.
  *
  *  VI SAO CO FILE NAY: ba trong bon hop dong tren la "thu kiem duoc bang
- *  mat nhung sai thi khong ai thay". Vi du loi #1 cua plan/14: thu ngan go
+ *  mat nhung sai thi khong ai thay". Vi du loi #1 cua docs/plan/14: thu ngan go
  *  500.000 va app ghi vao database 500 dong -- sai dung 1000 lan, khong mot
  *  ngoai le, khong mot canh bao. Loai sai do phai co mot cai chot bang so.
  *
  *  PHAM VI: chi cac kich ban KHONG can bam chuot. Cac kich ban tuong tac
  *  Swing (popup khach hang, hoa don in ra, bam luu hai lan...) van phai kiem
- *  bang tay -- xem plan/14 muc 9.3 de biet cai nao da chay cai nao chua.
+ *  bang tay -- xem docs/plan/14 muc 9.3 de biet cai nao da chay cai nao chua.
  *
  *  YEU CAU: MySQL dang chay va database retail_billing co du lieu seed.
  *
@@ -282,7 +282,7 @@ public class ContractCheck {
     }
 
     // =================================================================
-    //  NHOM SEED -- plan/15 muc 5.6
+    //  NHOM SEED -- docs/plan/15 muc 5.6
     // =================================================================
 
     /**
@@ -291,7 +291,7 @@ public class ContractCheck {
      *   #76  fn_active_promo_pct == Discount_Percent cua sp_get_active_promo
      *   #77  fn_line_discount (SQL) == NewInvoicePanel.lineDiscount (Java)
      *
-     * #76 va #77 la CAI CHOT ma plan/15 muc 3.1 hua khi chap nhan ban chep
+     * #76 va #77 la CAI CHOT ma docs/plan/15 muc 3.1 hua khi chap nhan ban chep
      * thu hai cua dieu kien chon khuyen mai. Rui ro #1/#2 cua muc 8 la:
      * ca seed va bat bien R2 deu hoi fn_line_discount, nen neu HAM sai thi
      * R2 van tra 0 -- hai ben sai khop nhau. Hai phep kiem duoi day pha
@@ -390,7 +390,7 @@ public class ContractCheck {
         }
 
         // --- #110 / #111: du lieu do APP sinh ra thoa CUNG bo bat bien ---
-        // Day la noi dung cua plan/15 muc 3.1 duoi dang mot phep kiem CHAY
+        // Day la noi dung cua docs/plan/15 muc 3.1 duoi dang mot phep kiem CHAY
         // DUOC: seed di qua thu tuc cua app, nen mot hoa don do tab 1 lap ra
         // va mot hoa don do seed sinh ra phai thoa CUNG 14 quy tac.
         //
