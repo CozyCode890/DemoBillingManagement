@@ -47,6 +47,7 @@ public class ReportPanel extends JPanel {
         taWhat.setEditable(false);
         taWhat.setLineWrap(true);
         taWhat.setWrapStyleWord(true);
+        I18n.markLocalizedText(taWhat);
         taWhat.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         taWhat.setBackground(new Color(255, 250, 225));
         taWhat.setMargin(new Insets(8, 8, 8, 8));
@@ -162,7 +163,7 @@ public class ReportPanel extends JPanel {
                            Supplier<QueryResult> action) {
         taSql.setText(sql);
         taSql.setCaretPosition(0);
-        taWhat.setText(explain);
+        taWhat.setText(I18n.translate(explain));
         taWhat.setCaretPosition(0);
 
         // Khoá cả sáu nút và đổi nhãn nút đang chạy: một cửa sổ không

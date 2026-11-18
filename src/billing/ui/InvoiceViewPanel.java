@@ -173,6 +173,7 @@ public class InvoiceViewPanel extends JPanel {
 
         taHeader.setEditable(false);
         taHeader.setFont(Ui.MONO);
+        I18n.markKeyValueText(taHeader);
 
         // --- Cột trái: Danh sách hóa đơn và nút thao tác ---
         JButton btReload = new JButton("Tai lai danh sach");

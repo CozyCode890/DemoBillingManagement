@@ -49,9 +49,11 @@ public class LoginDialog extends JDialog {
     private final JLabel lbStatus = new JLabel(" ");
     private final JButton btLogin = new JButton("Dang nhap");
     private final JButton btExit  = new JButton("Thoat");
+    private final JButton btLanguage = new JButton();
 
     /** Các nút nhanh, giữ lại để {@link #setBusy} khoá/mở được cả hàng. */
     private final List<JButton> quickButtons = new ArrayList<>();
+    private final List<QuickAccount> quickAccountsForLabels = new ArrayList<>();
 
     private boolean succeeded = false;
 
@@ -108,6 +110,11 @@ public class LoginDialog extends JDialog {
         btLogin.setFont(Ui.BOLD);
         btLogin.addActionListener(e -> doLogin());
         btExit.addActionListener(e -> System.exit(0));
+        btLanguage.addActionListener(e -> {
+            I18n.toggle();
+            refreshLanguageControls();
+        });
+        I18n.markDynamicText(btLanguage);
 
         add(form, BorderLayout.CENTER);
         add(southPanel(), BorderLayout.SOUTH);
@@ -124,8 +131,10 @@ public class LoginDialog extends JDialog {
             setStatus(notice, COLOR_NOTICE);
         }
 
+        refreshLanguageControls();
         pack();
         setLocationRelativeTo(parent);
+        I18n.install(this);
 
         addWindowListener(new WindowAdapter() {
             /** Khi bấm nút X trên cửa sổ thì thoát chương trình. */
@@ -168,12 +177,14 @@ public class LoginDialog extends JDialog {
             // Mục thứ 10 trở đi không có phím tắt (hết số) -- không phải lỗi.
             String prefix = (i < 9) ? (i + 1) + ". " : "";
             JButton bt = new JButton(prefix + acc.getButtonLabel());
+            I18n.markDynamicText(bt);
             if (i < 9) {
                 bt.setMnemonic(Character.forDigit(i + 1, 10));
             }
             bt.setToolTipText("Dien san va dang nhap bang tai khoan '" + acc.getUsername() + "'");
             bt.addActionListener(e -> quickLogin(acc));
             quickButtons.add(bt);
+            quickAccountsForLabels.add(acc);
             grid.add(bt);
         }
 
@@ -211,12 +222,28 @@ public class LoginDialog extends JDialog {
         lbStatus.setForeground(COLOR_INFO);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 6));
+        buttons.add(btLanguage);
         buttons.add(btLogin);
         buttons.add(btExit);
 
         south.add(lbStatus, BorderLayout.NORTH);
         south.add(buttons, BorderLayout.CENTER);
         return south;
+    }
+
+    private void refreshLanguageControls() {
+        btLanguage.setText(I18n.languageSwitchLabel());
+        setTitle(I18n.text("Dang nhap he thong -- Retail Invoicing", "Sign in -- Retail Invoicing"));
+        refreshQuickButtonLabels();
+    }
+
+    private void refreshQuickButtonLabels() {
+        for (int i = 0; i < quickButtons.size(); i++) {
+            QuickAccount account = quickAccountsForLabels.get(i);
+            String prefix = (i < 9) ? (i + 1) + ". " : "";
+            String label = I18n.quickAccountLabel(account.getLabel());
+            quickButtons.get(i).setText(prefix + label + " (" + account.getUsername() + ")");
+        }
     }
 
     // ------------------------------------------------------------------

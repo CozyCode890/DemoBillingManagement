@@ -6,6 +6,8 @@ import billing.model.InvoiceStatus;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.math.BigDecimal;
 
 /**
@@ -88,7 +90,7 @@ public class ReceiptDialog {
 
     private static void display(Component parent, String invoiceId, Data d) {
         Window owner = (parent == null) ? null : SwingUtilities.getWindowAncestor(parent);
-        JDialog dialog = new JDialog(owner, "HOA DON BAN LE -- " + invoiceId,
+        JDialog dialog = new JDialog(owner, I18n.translate("HOA DON BAN LE -- ") + invoiceId,
                                      Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.getContentPane().setLayout(new BorderLayout());
@@ -99,6 +101,15 @@ public class ReceiptDialog {
         pane.setEditable(false);
         pane.setBackground(Color.WHITE);
         pane.setCaretPosition(0);
+        I18n.onLanguageChange(pane, () -> {
+            pane.setText(buildHtml(d));
+            pane.setCaretPosition(0);
+        });
+        dialog.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent event) {
+                I18n.removeLanguageChangeListener(pane);
+            }
+        });
 
         JScrollPane scroll = new JScrollPane(pane);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -194,7 +205,8 @@ public class ReceiptDialog {
         if (!address.isEmpty()) {
             s.append("<font size=\"-1\" color=\"#555555\">").append(esc(address)).append("</font><br/>");
         }
-        s.append("<font size=\"+1\"><b>HOA DON BAN LE</b></font>");
+        s.append("<font size=\"+1\"><b>").append(I18n.translate("HOA DON BAN LE"))
+         .append("</b></font>");
         s.append("</div>");
         s.append(dash());
 
@@ -216,13 +228,13 @@ public class ReceiptDialog {
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:12px;\">");
         s.append("<tr style=\"color:#666666;\">")
-         .append("<th align=\"left\">Ten hang</th>")
-         .append("<th align=\"right\" nowrap>SL</th>")
-         .append("<th align=\"left\">DVT</th>")
-         .append("<th align=\"right\" nowrap>Don gia</th>")
-         .append("<th align=\"right\" nowrap>Giam gia</th>")
-         .append("<th align=\"right\" nowrap>Thanh tien</th>")
-         .append("<th align=\"right\" nowrap>VAT %</th>")
+         .append("<th align=\"left\">").append(I18n.translate("Ten hang")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("SL")).append("</th>")
+         .append("<th align=\"left\">").append(I18n.translate("DVT")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Don gia")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Giam gia")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Thanh tien")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("VAT %")).append("</th>")
          .append("</tr>");
         for (Object[] l : d.lines.rows) {
             s.append("<tr>")
@@ -238,7 +250,7 @@ public class ReceiptDialog {
         }
         s.append("</table>");
         s.append("<div align=\"right\"><font size=\"-2\" color=\"#888888\">")
-         .append("don gia da gom VAT -- thue suat chi la thong tin")
+         .append(I18n.translate("don gia da gom VAT -- thue suat chi la thong tin"))
          .append("</font></div>");
         s.append(dash());
 
@@ -263,15 +275,15 @@ public class ReceiptDialog {
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:12px;\">");
         s.append("<tr style=\"color:#666666;\">")
-         .append("<th align=\"left\">Phuong thuc</th>")
-         .append("<th align=\"right\" nowrap>So tien</th>")
-         .append("<th align=\"right\" nowrap>Khach dua</th>")
-         .append("<th align=\"right\" nowrap>Tien thoi</th>")
-         .append("<th align=\"left\">Chi tiet</th>")
+         .append("<th align=\"left\">").append(I18n.translate("Phuong thuc")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("So tien")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Khach dua")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Tien thoi")).append("</th>")
+         .append("<th align=\"left\">").append(I18n.translate("Chi tiet")).append("</th>")
          .append("</tr>");
         if (d.payments.rows.isEmpty()) {
             s.append("<tr><td colspan=\"5\" style=\"color:#999999;\">")
-             .append("(chua co dong thanh toan nao)</td></tr>");
+             .append(I18n.translate("(chua co dong thanh toan nao)")).append("</td></tr>");
         }
         for (Object[] p : d.payments.rows) {
             BigDecimal amt  = Ui.dec(p[1]);
@@ -300,7 +312,7 @@ public class ReceiptDialog {
         // --- Chân hoá đơn ----------------------------------------------
         s.append(dash());
         s.append("<div align=\"center\"><font size=\"-1\" color=\"#777777\">")
-         .append("Cam on Quy khach &amp; Hen gap lai!")
+         .append(I18n.translate("Cam on Quy khach &amp; Hen gap lai!"))
          .append("</font></div>");
 
         s.append("</body></html>");
@@ -321,7 +333,7 @@ public class ReceiptDialog {
         String text;
         String color;
         if (st == InvoiceStatus.PAID) {
-            text  = st.display().toUpperCase();
+            text  = I18n.translate(st.display()).toUpperCase();
             color = "#1b7f1b";
             if (missing.signum() > 0) {
                 text += " -- con thieu " + Ui.money(missing);
@@ -333,7 +345,7 @@ public class ReceiptDialog {
             text  = "DA TRA HANG -- XEM HOA DON DIEU CHINH (VOIDED)";
             color = "#d35400";
         } else if (st == InvoiceStatus.VOIDED) {
-            text  = st.display().toUpperCase();
+            text  = I18n.translate(st.display()).toUpperCase();
             color = "#c0392b";
         } else {
             text  = statusRaw;                  // gia tri la trong cot Status
@@ -348,13 +360,13 @@ public class ReceiptDialog {
     }
 
     private static String kv(String key, String value) {
-        return "<div><span style=\"color:#555555;\"><b>" + key + ":</b> </span>" + value + "</div>";
+        return "<div><span style=\"color:#555555;\"><b>" + I18n.translate(key) + ":</b> </span>" + value + "</div>";
     }
 
     private static String row2(String label, String value, boolean strong) {
         String open  = strong ? "<b>" : "";
         String close = strong ? "</b>" : "";
-        return "<tr><td align=\"left\"><span style=\"color:#555555;\">" + open + label + close
+        return "<tr><td align=\"left\"><span style=\"color:#555555;\">" + open + I18n.translate(label) + close
              + "</span></td><td align=\"right\" nowrap>" + open + value + close + "</td></tr>";
     }
 
