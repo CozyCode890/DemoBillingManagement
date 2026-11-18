@@ -72,10 +72,10 @@ public class SqlLog {
     public static synchronized void add(String sql, Object[] params, long millis, int rows) {
         String line = LocalDateTime.now().format(STAMP)
             + " | " + millis + " ms"
-            + " | " + rows + " dong"
+            + " | " + rows + " rows"
             + " | " + oneLine(sql, MAX_SQL_LEN)
             + " | " + formatParams(params);
-        System.out.println(line);   // console vẫn thấy, tab Java của Setup App cũng thấy
+        System.out.println(line);   // console vẫn thấy, log của Setup App cũng thấy
         write(line);
     }
 
@@ -145,8 +145,8 @@ public class SqlLog {
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception e) {
             disabled = true;
-            System.err.println("[SqlLog] Khong ghi duoc " + LOG_FILE.toAbsolutePath()
-                + " -- tat ghi file, chi con in console. Ly do: " + e.getMessage());
+            System.err.println("[SqlLog] Cannot write " + LOG_FILE.toAbsolutePath()
+                + " -- file logging turned off, console only. Reason: " + e.getMessage());
         }
     }
 

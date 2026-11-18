@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ===================================================================
-   pom.xml -- KHÔNG BẮT BUỘC.
+   pom.xml -- danh sách thư viện của app (KHÔNG cần cài Maven).
   ===================================================================
-   Project này chạy được bằng javac thuần (xem run.ps1). File này chỉ
-   dành cho bạn nào muốn mở bằng IntelliJ IDEA / Eclipse / NetBeans:
-   IDE sẽ tự tải driver MySQL về, không cần chạy setup.ps1.
+   Project chạy bằng javac thuần qua Setup App. Nhưng khối <dependencies>
+   bên dưới là NGUỒN DUY NHẤT về thư viện: Setup App đọc nó để tải jar
+   vào lib/ khi bấm CHẠY -- thêm thư viện mới thì thêm ở đây.
+   IDE (IntelliJ IDEA / Eclipse / NetBeans) cũng đọc file này.
 
    Mở IntelliJ -> File -> Open -> chọn thư mục này -> nó nhận ra pom.xml.
    Sau đó chạy lớp billing.Main.

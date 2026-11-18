@@ -8,12 +8,15 @@ package billing.model;
  * cau WHERE cua SearchPanel. Them mot trang thai la phai sua ba cho, ma
  * khong cho nao bao neu quen (plan/13 loi #6).
  *
- * Vong doi: OPEN -> PAID (sp_settle_invoice, khi da thu du tien)
- *           OPEN/PAID -> VOIDED (sp_void_invoice)
+ * Vong doi: hoa don ra doi o PAID (sp_create_invoice_header + sp_settle_invoice
+ *           kiem "co dong hang, thu du tien" -- thieu thi ROLLBACK)
+ *           PAID -> VOIDED (sp_void_invoice: nut "Huy hoa don", hoac tra hang)
  *           VOIDED khong co duong ra (plan/13 muc 3.2).
+ *
+ * Trang thai OPEN (thu thieu tien van luu) DA BI BO: ENUM cua cot Status
+ * chi con ('PAID','VOIDED') -- 01_schema.sql muc 9.
  */
 public enum InvoiceStatus {
-    OPEN  ("Dang lap"),
     PAID  ("Da thanh toan"),
     VOIDED("Da huy");
 

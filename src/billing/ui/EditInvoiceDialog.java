@@ -52,7 +52,7 @@ public class EditInvoiceDialog extends JDialog {
     public EditInvoiceDialog(Window owner, InvoiceDao dao, String invoiceId,
                              String date, String time, String status,
                              String counterId, String cashierId, String customerId) {
-        super(owner, "Chinh sua Hoa don: " + invoiceId, ModalityType.APPLICATION_MODAL);
+        super(owner, I18n.msg("Sửa hóa đơn: ", "Edit Invoice: ") + invoiceId, ModalityType.APPLICATION_MODAL);
         this.dao = dao;
         this.invoiceId = invoiceId;
         this.originalStatus = status;
@@ -79,17 +79,21 @@ public class EditInvoiceDialog extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         int row = 0;
-        addFormRow(form, gbc, row++, "Ma hoa don (PK):", tfInvoiceId, "(Khong the thay doi)");
-        addFormRow(form, gbc, row++, "Ngay lap (YYYY-MM-DD) *:", tfDate, "(NOT NULL)");
-        addFormRow(form, gbc, row++, "Gio lap (HH:MM:SS) *:", tfTime, "(NOT NULL)");
+        addFormRow(form, gbc, row++, I18n.msg("Mã hóa đơn:", "Invoice ID:"), tfInvoiceId,
+                   I18n.msg("(không thể thay đổi)", "(cannot be changed)"));
+        addFormRow(form, gbc, row++, I18n.msg("Ngày lập (YYYY-MM-DD) *:", "Date (YYYY-MM-DD) *:"), tfDate, I18n.msg("(bắt buộc)", "(required)"));
+        addFormRow(form, gbc, row++, I18n.msg("Giờ lập (HH:MM:SS) *:", "Time (HH:MM:SS) *:"), tfTime, I18n.msg("(bắt buộc)", "(required)"));
         // Trạng thái KHÔNG sửa bằng tay: không phải vì phân quyền, mà vì không
         // ai -- kể cả quản lý -- gõ ra được một trạng thái đúng (plan/13 mục 2.2).
         // Nhãn bỏ dấu '*' và "(NOT NULL)": chú thích đỏ ở dưới nói về các
         // trường BỊ CHẶN KHI ĐỂ TRỐNG, không còn đúng cho ô này.
         cbStatus.setEnabled(false);
-        cbStatus.setToolTipText("Trang thai doi tu dong khi thu du tien, "
-                + "hoac qua nut \"Huy hoa don\" o tab Xem hoa don");
-        addFormRow(form, gbc, row++, "Trang thai:", cbStatus, "(chi doc)");
+        cbStatus.setToolTipText(I18n.msg("Trạng thái đổi tự động khi thu đủ tiền, "
+                + "hoặc qua nút \"Hủy hóa đơn\" ở tab Xem hóa đơn",
+                "The status changes automatically when fully paid, "
+                + "or with the \"Void invoice\" button in the Invoices tab"));
+        addFormRow(form, gbc, row++, I18n.msg("Trạng thái:", "Status:"), cbStatus,
+                   I18n.msg("(chỉ đọc)", "(read only)"));
 
         // Dòng lệch tiền: trống (và vô hình) cho tới khi đọc xong hai số tiền.
         gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 3;
@@ -99,36 +103,34 @@ public class EditInvoiceDialog extends JDialog {
         gbc.gridwidth = 1;
         row++;
 
-        addFormRow(form, gbc, row++, "Ma quay (Counter_ID) *:", tfCounterId, "(NOT NULL)");
-        addFormRow(form, gbc, row++, "Ma thu ngan (Cashier_ID) *:", tfCashierId, "(NOT NULL)");
+        addFormRow(form, gbc, row++, I18n.msg("Mã quầy *:", "Counter ID *:"), tfCounterId, I18n.msg("(bắt buộc)", "(required)"));
+        addFormRow(form, gbc, row++, I18n.msg("Mã thu ngân *:", "Cashier ID *:"), tfCashierId, I18n.msg("(bắt buộc)", "(required)"));
 
         // Dòng Customer_ID kèm nút Xóa mã khách (Set NULL)
         gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 1;
-        form.add(new JLabel("Ma khach hang:"), gbc);
+        form.add(new JLabel(I18n.msg("Mã khách hàng:", "Customer ID:")), gbc);
         gbc.gridx = 1;
         form.add(tfCustomerId, gbc);
 
-        JButton btSetNullCustomer = new JButton("Xoa ma khach (Set NULL)");
+        // Xoa ma khach = hoa don cua khach vang lai (Customer_ID ve NULL khi luu).
+        JButton btSetNullCustomer = new JButton(I18n.msg("Đổi thành khách vãng lai", "Make walk-in customer"));
         btSetNullCustomer.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        btSetNullCustomer.addActionListener(e -> {
-            tfCustomerId.setText("");
-            JOptionPane.showMessageDialog(this,
-                    "Customer_ID la truong cho phep NULL (khach vang lai).\nGia tri nay se duoc cap nhat thanh NULL trong database.",
-                    "Thong bao", JOptionPane.INFORMATION_MESSAGE);
-        });
+        btSetNullCustomer.addActionListener(e -> tfCustomerId.setText(""));
         gbc.gridx = 2;
         form.add(btSetNullCustomer, gbc);
         row++;
 
         // Chú thích
         gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 3;
-        JLabel lbNote = new JLabel("<html><i style='color:#c0392b;'>* Cac truong danh dau (*) co rang buoc NOT NULL. Neu xoa trang se bi he thong canh bao!</i></html>");
+        JLabel lbNote = new JLabel(I18n.msg(
+                "<html><i style='color:#c0392b;'>* Các ô đánh dấu (*) bắt buộc phải có giá trị.</i></html>",
+                "<html><i style='color:#c0392b;'>* Fields marked (*) are required.</i></html>"));
         form.add(lbNote, gbc);
 
         // Nút Lưu / Hủy
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
-        JButton btSave = new JButton("Luu vao Database");
-        JButton btCancel = new JButton("Huy bo");
+        JButton btSave = new JButton(I18n.msg("Lưu", "Save"));
+        JButton btCancel = new JButton(I18n.msg("Hủy bỏ", "Cancel"));
 
         btSave.setFont(Ui.BOLD);
         btSave.addActionListener(e -> doSave());
@@ -151,12 +153,11 @@ public class EditInvoiceDialog extends JDialog {
      *
      * Đây là dấu vết nhìn thấy được của lỗi #4 (plan/13): quản lý sửa dòng hàng
      * làm tổng phải trả tăng, Payment giữ nguyên, trạng thái vẫn PAID. Khối 4
-     * CỐ Ý không tự chuyển PAID -> OPEN (chuyển ngược bị cấm, mục 3.2) nên chỗ
+     * CỐ Ý không tự đổi trạng thái của hóa đơn đã thu tiền (mục 3.2) nên chỗ
      * duy nhất làm được gì là nói cho người dùng biết.
      *
-     * CHỈ cảnh báo trên hóa đơn PAID. Trên hóa đơn OPEN thì paid < due là
-     * trạng thái BÌNH THƯỜNG (đó chính là định nghĩa của OPEN), báo động ở đó
-     * là báo động giả.
+     * CHỈ cảnh báo trên hóa đơn PAID: hóa đơn VOIDED đã ra khỏi vòng đời
+     * thanh toán (trạng thái OPEN cũ không còn nữa).
      *
      * Hai lời gọi DAO này đi ra database, nên chạy NGOÀI EDT: dựng form xong
      * là hộp thoại hiện ra ngay, dòng cảnh báo điền sau.
@@ -190,10 +191,11 @@ public class EditInvoiceDialog extends JDialog {
                     return;
                 }
 
-                lbMoneyGap.setText("<html><b>Da thu " + Ui.money(paid) + " / "
-                        + Ui.money(due) + "  --  LECH " + Ui.money(due.subtract(paid))
-                        + "</b><br>Sua dong hang xong lam lech so tien. "
-                        + "Trang thai KHONG tu doi nguoc -- xem plan/13 muc 2.3.</html>");
+                lbMoneyGap.setText("<html><b>" + I18n.msg("Đã thu ", "Paid ") + Ui.money(paid) + " / "
+                        + Ui.money(due) + I18n.msg("  --  LỆCH ", "  --  SHORT BY ") + Ui.money(due.subtract(paid))
+                        + "</b><br>" + I18n.msg("Sửa dòng hàng xong làm lệch số tiền; trạng thái KHÔNG tự đổi lại.",
+                                                "Editing the lines changed the total; the status does NOT change back.")
+                        + "</html>");
                 pack();
             }
         }.execute();
@@ -216,28 +218,28 @@ public class EditInvoiceDialog extends JDialog {
         // --- KIỂM TRA RÀNG BUỘC NOT NULL ---
         String dateStr = tfDate.getText().trim();
         if (dateStr.isEmpty()) {
-            showNotNullWarning("Ngay lap (Date)");
+            showNotNullWarning(I18n.msg("Ngày lập", "Date"));
             tfDate.requestFocus();
             return;
         }
 
         String timeStr = tfTime.getText().trim();
         if (timeStr.isEmpty()) {
-            showNotNullWarning("Gio lap (Time)");
+            showNotNullWarning(I18n.msg("Giờ lập", "Time"));
             tfTime.requestFocus();
             return;
         }
 
         String counterId = tfCounterId.getText().trim();
         if (counterId.isEmpty()) {
-            showNotNullWarning("Ma quay (Counter_ID)");
+            showNotNullWarning(I18n.msg("Mã quầy", "Counter ID"));
             tfCounterId.requestFocus();
             return;
         }
 
         String cashierId = tfCashierId.getText().trim();
         if (cashierId.isEmpty()) {
-            showNotNullWarning("Ma thu ngan (Cashier_ID)");
+            showNotNullWarning(I18n.msg("Mã thu ngân", "Cashier ID"));
             tfCashierId.requestFocus();
             return;
         }
@@ -246,7 +248,9 @@ public class EditInvoiceDialog extends JDialog {
         try {
             date = LocalDate.parse(dateStr);
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Ngay lap phai dung dinh dang YYYY-MM-DD!", "Loi dinh dang", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    I18n.msg("Ngày lập phải đúng định dạng YYYY-MM-DD!", "The date must be in YYYY-MM-DD format!"),
+                    I18n.msg("Sai định dạng", "Invalid Format"), JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -254,7 +258,9 @@ public class EditInvoiceDialog extends JDialog {
         try {
             time = LocalTime.parse(timeStr);
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Gio lap phai dung dinh dang HH:MM:SS!", "Loi dinh dang", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    I18n.msg("Giờ lập phải đúng định dạng HH:MM:SS!", "The time must be in HH:MM:SS format!"),
+                    I18n.msg("Sai định dạng", "Invalid Format"), JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -276,8 +282,9 @@ public class EditInvoiceDialog extends JDialog {
         try {
             dao.updateInvoiceHeader(invoiceId, date, time, status, counterId, cashierId, customerId);
             JOptionPane.showMessageDialog(this,
-                    "Cap nhat hoa don " + invoiceId + " thanh cong trong Database!",
-                    "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                    I18n.msg("Cập nhật hóa đơn " + invoiceId + " thành công!",
+                             "Invoice " + invoiceId + " updated successfully!"),
+                    I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
             saved = true;
             dispose();
         } catch (Exception ex) {
@@ -285,16 +292,16 @@ public class EditInvoiceDialog extends JDialog {
             // ("Khong huy hoa don bang hop thoai sua. Dung nut..."), hiện nó
             // kèm stack trace là làm người đọc tưởng app hỏng. Hàm này tự rơi
             // về Ui.error khi không phải lỗi nghiệp vụ.
-            InvoiceViewPanel.showSqlFailure(this, ex, "Khong cap nhat duoc hoa don");
+            InvoiceViewPanel.showSqlFailure(this, ex, I18n.msg("Không cập nhật được hóa đơn", "Cannot Update Invoice"));
         }
     }
 
-    /** Bật cảnh báo vi phạm ràng buộc NOT NULL */
+    /** Ô bắt buộc bị để trống. */
     private void showNotNullWarning(String fieldName) {
         JOptionPane.showMessageDialog(this,
-                "CANH BAO DATABASE: Truong '" + fieldName + "' co rang buoc NOT NULL!\n"
-              + "Ban khong duoc phep xoa gia tri nay ve NULL hoac de trong.",
-                "Canh bao rang buoc NOT NULL", JOptionPane.WARNING_MESSAGE);
+                I18n.msg("Ô '" + fieldName + "' bắt buộc phải có giá trị, không được để trống!",
+                         "Please fill in '" + fieldName + "', it cannot be empty!"),
+                I18n.msg("Thiếu thông tin", "Missing Information"), JOptionPane.WARNING_MESSAGE);
     }
 
     public boolean isSaved() {

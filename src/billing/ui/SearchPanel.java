@@ -99,7 +99,18 @@ public class SearchPanel extends JPanel {
         // === Toolbar ===
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         cbTables = new JComboBox<>(tableNames); // reuse the same array
-        cbTables.setPreferredSize(new Dimension(180, 28));
+        cbTables.setPreferredSize(new Dimension(220, 28));
+        // O chon van giu TEN BANG (dung de truy van), nhung nhan vien chi thay
+        // ten de hieu -- khong thay "Invoice_Line", "EWallet_Payment"...
+        cbTables.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                setText(tableLabel(String.valueOf(value)));
+                return this;
+            }
+        });
         cbTables.addActionListener(e -> {
             String tableName = (String) cbTables.getSelectedItem();
             int index = cbTables.getSelectedIndex();
@@ -120,7 +131,7 @@ public class SearchPanel extends JPanel {
         btReload = new JButton("Tải lại / Xem tất cả");
         btReload.addActionListener(e -> reloadCurrentTable());
 
-        toolbar.add(new JLabel("Chọn bảng: "));
+        toolbar.add(new JLabel(I18n.text("Danh mục: ", "Category: ")));
         toolbar.add(cbTables);
         toolbar.add(new JLabel("Từ khóa: "));
         toolbar.add(tfSearch);
@@ -156,6 +167,27 @@ public class SearchPanel extends JPanel {
         loadTableData((String) cbTables.getSelectedItem());
         // Initialize the first filter panel to default state
         resetFilterPanel(0);
+    }
+
+    /** Ten de hieu cho nhan vien cua mot bang trong o chon. */
+    static String tableLabel(String table) {
+        switch (table) {
+            case "Product":         return I18n.msg("Sản phẩm", "Products");
+            case "Invoice":         return I18n.msg("Hóa đơn", "Invoices");
+            case "Invoice_Line":    return I18n.msg("Dòng hàng của hóa đơn", "Invoice items");
+            case "Price_History":   return I18n.msg("Lịch sử giá", "Price history");
+            case "Promotion":       return I18n.msg("Khuyến mãi", "Promotions");
+            case "Return":          return I18n.msg("Trả hàng", "Returns");
+            case "Customer":        return I18n.msg("Khách hàng", "Customers");
+            case "Cashier":         return I18n.msg("Thu ngân", "Cashiers");
+            case "Shop":            return I18n.msg("Cửa hàng", "Shops");
+            case "Counter":         return I18n.msg("Quầy", "Counters");
+            case "Payment":         return I18n.msg("Thanh toán", "Payments");
+            case "Cash_Payment":    return I18n.msg("Thanh toán tiền mặt", "Cash payments");
+            case "Card_Payment":    return I18n.msg("Thanh toán thẻ", "Card payments");
+            case "EWallet_Payment": return I18n.msg("Thanh toán ví điện tử", "E-wallet payments");
+            default:                return table;
+        }
     }
 
     /**
@@ -346,13 +378,9 @@ public class SearchPanel extends JPanel {
 
     /** Filter panel for Invoice table */
     class InvoiceFilterPanel extends JPanel {
-        // Status: all, open, completed, voided
-        // Chip "Đang lập" (OPEN) thêm từ khối 4: trước đó không có hóa đơn OPEN
-        // nào nên thiếu chip là vô hại, giờ OPEN là trạng thái thật nên thiếu
-        // nó là chip "Tất cả" trộn lẫn hóa đơn đang lập mà không lọc riêng
-        // được, còn "Đã hoàn tất" thì im lặng ẩn chúng đi (plan/13 lỗi #7).
+        // Status: all, completed, voided. Chip "Đang lập" (OPEN) đã bị bỏ
+        // cùng với trạng thái OPEN (01_schema.sql mục 9).
         private final JToggleButton rbAllStatus;
-        private final JToggleButton rbOpen;
         private final JToggleButton rbPaid;
         private final JToggleButton rbVoided;
         // Date: all, today, last 7 days, this month
@@ -371,15 +399,12 @@ public class SearchPanel extends JPanel {
             statusRow.add(new JLabel("Trạng thái hóa đơn: "));
             ButtonGroup statusGroup = new ButtonGroup();
             rbAllStatus = createToggleButton("Tất cả", true);
-            rbOpen = createToggleButton("Đang lập", false);
             rbPaid = createToggleButton("Đã hoàn tất", false);
             rbVoided = createToggleButton("Đã hủy", false);
             statusGroup.add(rbAllStatus);
-            statusGroup.add(rbOpen);
             statusGroup.add(rbPaid);
             statusGroup.add(rbVoided);
             statusRow.add(rbAllStatus);
-            statusRow.add(rbOpen);
             statusRow.add(rbPaid);
             statusRow.add(rbVoided);
             add(statusRow);
@@ -409,7 +434,6 @@ public class SearchPanel extends JPanel {
 
             // Add action listeners to all interactive components to trigger search
             rbAllStatus.addItemListener(e -> performSearch());
-            rbOpen.addItemListener(e -> performSearch());
             rbPaid.addItemListener(e -> performSearch());
             rbVoided.addItemListener(e -> performSearch());
             cbDate.addActionListener(e -> performSearch());
@@ -423,7 +447,6 @@ public class SearchPanel extends JPanel {
          */
         public void resetToDefault() {
             rbAllStatus.setSelected(true);
-            rbOpen.setSelected(false);
             rbPaid.setSelected(false);
             rbVoided.setSelected(false);
             cbDate.setSelectedIndex(0);
@@ -447,8 +470,7 @@ public class SearchPanel extends JPanel {
             // '?' thay vì nối chuỗi: hàm này ĐÃ có danh sách params cho các bộ
             // lọc khác nên đây là dùng đúng cơ chế đang có.
             if (!rbAllStatus.isSelected()) {
-                InvoiceStatus want = rbOpen.isSelected()   ? InvoiceStatus.OPEN
-                                   : rbPaid.isSelected()   ? InvoiceStatus.PAID
+                InvoiceStatus want = rbPaid.isSelected()   ? InvoiceStatus.PAID
                                    : rbVoided.isSelected() ? InvoiceStatus.VOIDED
                                    : null;
                 if (want != null) {
@@ -724,9 +746,7 @@ public class SearchPanel extends JPanel {
 
             populateTable(rs);
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Lỗi khi tải dữ liệu từ bảng '" + tableName + "':\n" + ex.getMessage(),
-                    "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
+            Ui.error(this, ex);
             ex.printStackTrace();
         }
     }
@@ -818,9 +838,7 @@ public class SearchPanel extends JPanel {
                     }
                 }
             } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this,
-                        "Lỗi khi xác định cột tìm kiếm:\n" + ex.getMessage(),
-                        "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
+                Ui.error(this, ex);
                 ex.printStackTrace();
             }
         }
@@ -851,9 +869,7 @@ public class SearchPanel extends JPanel {
                 populateTable(rs);
             }
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Lỗi khi thực hiện tìm kiếm:\n" + ex.getMessage(),
-                    "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
+            Ui.error(this, ex);
             ex.printStackTrace();
         }
     }

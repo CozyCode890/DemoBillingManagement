@@ -265,7 +265,7 @@ Lợi ích:
 
 | Thông báo lỗi | Nguyên nhân | Cách sửa |
 |---|---|---|
-| `No suitable driver found` | Thiếu file jar trong classpath | Chạy `setup.ps1`, kiểm tra tham số `-cp` |
+| `No suitable driver found` | Thiếu file jar trong classpath | Bấm CHẠY trong Setup App (tự tải jar theo `pom.xml`), kiểm tra tham số `-cp` |
 | `Access denied for user 'root'@'localhost'` | Sai mật khẩu | Sửa `db.password` trong `config.properties` |
 | `Unknown database 'retail_billing'` | Chưa tạo DB | Chạy `sql/01_schema.sql` |
 | `Communications link failure` | MySQL chưa chạy / sai cổng | Mở Services, bật `MySQL80` |

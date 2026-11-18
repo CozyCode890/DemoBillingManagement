@@ -18,7 +18,7 @@ import java.util.Properties;
  *
  * <p>Đường dẫn {@code config.properties} là <b>tương đối</b> -- giữ đúng
  * giả định đã có của {@code Db}: thư mục làm việc là gốc dự án
- * ({@code run.ps1} / {@code run.sh} đều {@code Set-Location} / {@code cd}
+ * (Setup App và Run configuration của IDE đều đặt thư mục làm việc
  * về đó trước khi gọi java).
  *
  * <p>Đọc cấu hình thất bại không bao giờ được làm app chết: in một dòng rồi
@@ -32,7 +32,7 @@ public final class AppConfig {
         try (InputStream in = new FileInputStream("config.properties")) {
             P.load(in);
         } catch (Exception e) {
-            System.out.println("[AppConfig] Khong doc duoc config.properties, dung gia tri mac dinh.");
+            System.out.println("[AppConfig] Cannot read config.properties, using default values.");
         }
     }
 

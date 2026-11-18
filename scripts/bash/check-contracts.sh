@@ -22,6 +22,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# Cong cu ma Setup App tu tai ve (MySQL rieng, JDK portable) nam ngoai repo, trong
+# ~/.retail-billing. Them vao CUOI PATH: may co san MySQL / JDK thi van dung ban do.
+RB_HOME="${RETAIL_BILLING_HOME:-$HOME/.retail-billing}"
+for d in "$RB_HOME"/mysql-*/bin "$RB_HOME/jdk/Contents/Home/bin" "$RB_HOME/jdk/bin"; do
+    if [ -d "$d" ]; then PATH="$PATH:$d"; fi
+done
+export PATH
+
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
@@ -46,16 +54,16 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 
 if ! command -v javac >/dev/null 2>&1; then
-    echo -e "${RED}Chua co JDK. Chay: ./scripts/bash/setup.sh${NC}"
+    echo -e "${RED}Chua co JDK. Mo Setup.app mot lan (no tu tai JDK portable)${NC}"
     exit 1
 fi
 if ! ls lib/mysql-connector-j-*.jar >/dev/null 2>&1; then
-    echo -e "${RED}Thieu driver MySQL trong lib/. Chay: ./scripts/bash/setup.sh${NC}"
+    echo -e "${RED}Thieu driver MySQL trong lib/. Mo Setup.app va bam CHAY UNG DUNG${NC}"
     exit 1
 fi
 if ! pgrep -x mysqld >/dev/null 2>&1; then
-    echo -e "${RED}MySQL chua chay. Mo mot cua so khac va chay:${NC}"
-    echo -e "${YELLOW}    ./scripts/bash/mysql-start.sh${NC}"
+    echo -e "${RED}MySQL chua chay.${NC}"
+    echo -e "${YELLOW}    Mo Setup.app va bam CHAY UNG DUNG (tu bat MySQL)${NC}"
     exit 1
 fi
 

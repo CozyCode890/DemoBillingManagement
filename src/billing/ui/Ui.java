@@ -231,22 +231,31 @@ public class Ui {
         if (input == null) return null;                       // bấm Cancel
         String s = normalizeMoney(input);
         if (s.isEmpty()) {
-            warn(parent, "Chua nhap " + fieldLabel + ".", "Chua nhap so tien");
+            warn(parent, I18n.msg("Chưa nhập " + fieldLabel + ".", "Please enter the " + fieldLabel.toLowerCase() + "!"),
+                    I18n.msg("Chưa nhập số tiền", "Missing Amount"));
             return null;
         }
         if (!MONEY_IN.matcher(s).matches()) {
-            warn(parent, fieldLabel + " khong doc duoc: \"" + input + "\"\n\n"
-                       + "Dau . la dau tach nghin (phai du 3 chu so),\n"
-                       + "dau , la dau thap phan (toi da 2 chu so).\n\n"
-                       + "Dung:  500.000   |   1.234,50   |   500000\n"
-                       + "Sai :  500.00    |   1.2.3      |   1,234",
-                    "So tien khong hop le");
+            warn(parent, I18n.msg(
+                         fieldLabel + " không đọc được: \"" + input + "\"\n\n"
+                       + "Dấu . là dấu tách nghìn (phải đủ 3 chữ số),\n"
+                       + "dấu , là dấu thập phân (tối đa 2 chữ số).\n\n"
+                       + "Đúng:  500.000   |   1.234,50   |   500000\n"
+                       + "Sai:   500.00    |   1.2.3      |   1,234",
+                         "Cannot read the " + fieldLabel.toLowerCase() + ": \"" + input + "\"\n\n"
+                       + ". separates thousands (followed by 3 digits),\n"
+                       + ", is the decimal point (up to 2 digits).\n\n"
+                       + "Valid:    500.000   |   1.234,50   |   500000\n"
+                       + "Invalid:  500.00    |   1.2.3      |   1,234"),
+                    I18n.msg("Số tiền không hợp lệ", "Invalid Amount"));
             return null;
         }
         BigDecimal v = new BigDecimal(s.replace(".", "").replace(',', '.'));
         if (allowZero ? v.signum() < 0 : v.signum() <= 0) {
-            warn(parent, fieldLabel + (allowZero ? " khong duoc am." : " phai lon hon 0."),
-                    "So tien khong hop le");
+            warn(parent, allowZero
+                            ? I18n.msg(fieldLabel + " không được âm.", fieldLabel + " mustn't be negative!")
+                            : I18n.msg(fieldLabel + " phải lớn hơn 0.", fieldLabel + " must be greater than 0!"),
+                    I18n.msg("Số tiền không hợp lệ", "Invalid Amount"));
             return null;
         }
         return v.setScale(2, RoundingMode.HALF_UP);           // DECIMAL(12,2)
@@ -284,37 +293,44 @@ public class Ui {
         if (input == null) return null;                       // bấm Cancel
         String s = input.trim().replace(',', '.');
         if (s.isEmpty()) {
-            warn(parent, "Chua nhap so luong.", "So luong khong hop le");
+            warn(parent, I18n.msg("Chưa nhập số lượng.", "Please enter the quantity!"), I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         if (s.indexOf('.') != s.lastIndexOf('.')) {
-            warn(parent, "Chi duoc mot dau thap phan trong so luong: " + input,
-                    "So luong khong hop le");
+            warn(parent, I18n.msg("Chỉ được một dấu thập phân trong số lượng: ",
+                                  "Only one decimal point is allowed in the quantity: ") + input,
+                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         BigDecimal q;
         try {
             q = new BigDecimal(s);
         } catch (NumberFormatException ex) {
-            warn(parent, "So luong khong hop le: " + input
-                       + "\n\nDau , hoac . la dau thap phan, KHONG phai dau tach nghin.\n"
-                       + "Dung:  2   |   1,5   |   1.5   |   0,25",
-                    "So luong khong hop le");
+            warn(parent, I18n.msg(
+                         "Số lượng không hợp lệ: " + input
+                       + "\n\nDấu , hoặc . là dấu thập phân, KHÔNG phải dấu tách nghìn.\n"
+                       + "Đúng:  2   |   1,5   |   1.5   |   0,25",
+                         "Invalid quantity: " + input
+                       + "\n\n, or . is the decimal point, NOT a thousands separator.\n"
+                       + "Valid:  2   |   1,5   |   1.5   |   0,25"),
+                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         if (q.scale() > 3) {
-            warn(parent, "Toi da 3 chu so thap phan (cot DECIMAL(10,3)).\n"
-                       + "Ban go: " + input,
-                    "So luong khong hop le");
+            warn(parent, I18n.msg("Tối đa 3 chữ số thập phân.\nBạn gõ: ",
+                                  "At most 3 decimal places.\nYou typed: ") + input,
+                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         if (q.signum() <= 0) {
-            warn(parent, "So luong phai lon hon 0.", "So luong khong hop le");
+            warn(parent, I18n.msg("Số lượng phải lớn hơn 0.", "Quantity must be greater than 0!"),
+                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         if (max != null && q.compareTo(max) > 0) {
-            warn(parent, "Chi con " + qty(max) + " " + unit + " co the tra.",
-                    "So luong khong hop le");
+            warn(parent, I18n.msg("Chỉ còn " + qty(max) + " " + unit + " có thể trả.",
+                                  "Only " + qty(max) + " " + unit + " can be returned."),
+                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         return q;
@@ -412,19 +428,39 @@ public class Ui {
         }
     }
 
-    /** Hộp thoại báo lỗi, hiện cả thông điệp gốc từ MySQL. */
+    /**
+     * Hộp thoại báo lỗi cho NHÂN VIÊN: không hiện thông điệp gốc của MySQL /
+     * Java (tên bảng, mã lỗi, stack trace) -- chi tiết đó vẫn in ra console.
+     *
+     * <p>Ngoại lệ duy nhất: lỗi nghiệp vụ do thủ tục tự báo
+     * ({@code SIGNAL SQLSTATE '45000'}) -- đó là câu viết cho người đọc
+     * ("Hoa don ... chua thu du tien"), nên hiện nguyên văn.
+     */
     public static void error(Component parent, Throwable e) {
         e.printStackTrace();
-        String msg = e.getMessage();
-        if (msg != null && msg.length() > 1200) msg = msg.substring(0, 1200) + "...";
-        JTextArea ta = new JTextArea(msg);
-        ta.setEditable(false);
-        ta.setFont(MONO);
-        ta.setLineWrap(true);
-        ta.setWrapStyleWord(true);
-        JScrollPane sp = new JScrollPane(ta);
-        sp.setPreferredSize(new Dimension(650, 220));
-        JOptionPane.showMessageDialog(parent, sp, "Co loi xay ra", JOptionPane.ERROR_MESSAGE);
+        String reason = businessReason(e);
+        String msg = reason != null
+                ? I18n.msg("Không thực hiện được thao tác:\n", "The action could not be completed:\n") + reason
+                : I18n.msg("Có lỗi khi làm việc với dữ liệu.\n"
+                           + "Vui lòng thử lại; nếu vẫn lỗi, hãy báo quản lý.",
+                           "Something went wrong while working with the data.\n"
+                           + "Please try again. If it keeps failing, please tell your manager!");
+        JOptionPane.showMessageDialog(parent, msg, I18n.msg("Có lỗi xảy ra", "Error"),
+                JOptionPane.ERROR_MESSAGE);
+    }
+
+    /** Thông điệp của SIGNAL '45000' nằm đâu đó trong chuỗi nguyên nhân, hoặc null. */
+    private static String businessReason(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof java.sql.SQLException
+                    && "45000".equals(((java.sql.SQLException) t).getSQLState())) {
+                return t.getMessage();
+            }
+            if (t instanceof IllegalArgumentException || t instanceof IllegalStateException) {
+                return t.getMessage();
+            }
+        }
+        return null;
     }
 
     public static JPanel titled(String title, JComponent inner) {

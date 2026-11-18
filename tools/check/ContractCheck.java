@@ -1,6 +1,6 @@
 // Package billing.ui, nhung file nay nam o tools/check/ chu khong o src/:
 // no CAN package nay de goi duoc NewInvoicePanel.splitPayment va lop Split
-// (package-private), nhung KHONG duoc nam trong src/ vi run.ps1 / run.sh
+// (package-private), nhung KHONG duoc nam trong src/ vi Setup App
 // bien dich toan bo src/**/*.java vao app -- mot lop kiem thu khong nen di
 // theo ban giao hang.
 //
@@ -53,7 +53,7 @@ import java.util.List;
  *
  *  CO GHI VAO DATABASE: phan e2e() lap 3 hoa don that roi XOA chung o khoi
  *  finally. No khong cham du lieu seed. Neu chuong trinh bi kill giua duong
- *  thi 3 hoa don do con lai -- xoa bang tab 3, hoac chay lai db-setup.
+ *  thi 3 hoa don do con lai -- xoa bang tab 3, hoac bam "Nap lai database".
  *
  *  ---------------------------------------------------------------------
  *  MEO KY THUAT -- doc truoc khi sua file nay:
@@ -167,6 +167,10 @@ public class ContractCheck {
                 .toPlainString(), "0");
 
         System.out.println();
+        System.out.println("=== Tab 1: khach dua du, thoi tien, so luong, chi tiet the (CashRules) ===");
+        cashRules();
+
+        System.out.println();
         System.out.println("=== 7.8  Ma QR (loi #27) ===");
         qr();
 
@@ -175,12 +179,106 @@ public class ContractCheck {
         e2e();
 
         System.out.println();
+        System.out.println("=== TRA HANG -> VOIDED + HOA DON DIEU CHINH (Invoice_Line - Return) ===");
+        returnsFlow();
+
+        System.out.println();
+        System.out.println("=== Bao cao 6: gia 30 ngay, SL 1 (gia doi moi ngay) ===");
+        price30();
+
+        System.out.println();
         System.out.println("=== SEED (khoi 6)  14 bat bien du lieu + hai ban chep ===");
         seed();
 
         System.out.println();
         System.out.printf("TONG: %d dat, %d sai%n", pass, fail);
         if (fail > 0) System.exit(1);
+    }
+
+    // =================================================================
+    //  TRA HANG -- hoa don dieu chinh
+    // =================================================================
+
+    /** Gia tri cot dau tien cua dong dau tien, duoi dang chuoi. */
+    static String one(String sql, Object... params) {
+        return String.valueOf(QueryResult.run(sql, params).rows.get(0)[0]);
+    }
+
+    /**
+     * Hoa don 2 dong, tra MOT PHAN dong 1:
+     *   #r1  tra xong -> hoa don goc VOIDED
+     *   #r2  van tinh vao doanh thu (fn_invoice_in_revenue = 1)
+     *   #r3  tong hoa don dieu chinh = tong goc - tien hoan (header cot 13)
+     *   #r4  sp_get_invoice_adjusted: dong 1 SL_con_lai = mua - tra
+     *   #r5  tra LAN HAI bi tu choi (hoa don khong con PAID)
+     *   #r6  huy tra hang cua dong 1 -> hoa don tro lai PAID
+     *   #r7  sp_check_seed van 0 vi pham sau ca chuoi thao tac
+     */
+    static void returnsFlow() {
+        LookupDao  lk  = new LookupDao();
+        ProductDao pd  = new ProductDao();
+        InvoiceDao dao = new InvoiceDao();
+        LocalDate today = LocalDate.now();
+
+        List<CartLine> lines = new ArrayList<>();
+        BigDecimal due = BigDecimal.ZERO;
+        for (Product p : pd.findAll()) {
+            BigDecimal pr = pd.priceOn(p.barcode, today);
+            if (pr == null || pr.signum() <= 0) continue;
+            BigDecimal q = new BigDecimal("4");
+            lines.add(new CartLine(p, q, pr, BigDecimal.ZERO, ""));
+            due = due.add(pr.multiply(q));
+            if (lines.size() == 2) break;
+        }
+        if (lines.size() < 2) { System.out.println("  (khong du san pham co gia -- bo qua)"); return; }
+        due = due.setScale(2);
+
+        String id = null;
+        try {
+            List<PaymentEntry> pays = new ArrayList<>();
+            pays.add(new PaymentEntry(PayMethod.CASH.code(), due, due, null, null));
+            id = dao.createInvoice(null, today, LocalTime.now().withNano(0),
+                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
+
+            List<InvoiceDao.ReturnItem> items = new ArrayList<>();
+            items.add(new InvoiceDao.ReturnItem(lines.get(0).product.name, 1, new BigDecimal("1")));
+            dao.processReturn(id, items, "E01");
+
+            check("#r1", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "VOIDED");
+            check("#r2", one("SELECT fn_invoice_in_revenue(?)", id), "1");
+
+            BigDecimal refund = lines.get(0).unitPrice.setScale(2);      // 1 / 4 dong 1, khong giam gia
+            QueryResult h = dao.invoiceHeader(id);
+            check("#r3a", Ui.dec(h.rows.get(0)[12]).toPlainString(), refund.toPlainString());
+            check("#r3b", Ui.dec(h.rows.get(0)[13]).setScale(2).toPlainString(),
+                    due.subtract(refund).toPlainString());
+
+            QueryResult adj = dao.invoiceAdjusted(id);
+            check("#r4a", adj.rows.size(), 2);
+            check("#r4b", Ui.dec(adj.rows.get(0)[6]).stripTrailingZeros().toPlainString(), "3");
+            check("#r4c", Ui.dec(adj.rows.get(1)[5]).signum(), 0);         // dong 2 khong tra
+
+            String msg5;
+            try {
+                dao.processReturn(id, items, "E01");
+                msg5 = "tra duoc lan hai";
+            } catch (RuntimeException ex) {
+                msg5 = ex.getMessage().contains("PAID") ? "tu choi" : ex.getMessage();
+            }
+            check("#r5", msg5, "tu choi");
+
+            check("#r6a", dao.deleteLineReturns(id, 1), 1);
+            check("#r6b", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "PAID");
+            check("#r6c", dao.deleteLineReturns(id, 1), 0);               // khong con gi de huy
+
+            check("#r7", checkSeedViolations(false), 0);
+        } catch (Exception e) {
+            check("#r", "loi: " + e.getMessage(), "khong loi");
+        } finally {
+            if (id != null) {
+                try { dao.deleteInvoice(id); } catch (Exception ignore) { }
+            }
+        }
     }
 
     // =================================================================
@@ -421,6 +519,73 @@ public class ContractCheck {
         return String.valueOf(r.rows.get(0)[0]);
     }
 
+    static String tender(String tendered, String remaining) {
+        return billing.util.CashRules.checkTendered(
+                new BigDecimal(tendered), new BigDecimal(remaining)).verdict.name();
+    }
+
+    static String notes(String amount) {
+        StringBuilder sb = new StringBuilder();
+        for (long[] part : billing.util.CashRules.breakdown(new BigDecimal(amount))) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(part[0]).append('x').append(part[1]);
+        }
+        return sb.toString();
+    }
+
+    static void cashRules() {
+        // Cac vi du trong note cua nhom
+        check("#t1", tender("45000", "38000"),   "SUSPICIOUS");   // thua to 5.000
+        check("#t2", tender("480000", "48000"),  "SUSPICIOUS");   // 48k dua 480k
+        check("#t3", tender("500000", "48000"),  "OK");           // mot to 500k
+        check("#t4", tender("600000", "48000"),  "REJECT");       // thoi >= 500k
+        check("#t5", tender("600000", "510000"), "OK");           // 500+100, bo to nao cung thieu
+        check("#t6", tender("99999999999", "48000"), "REJECT");   // "out of range"
+        check("#t7", tender("40000", "38000"),   "OK");           // 20+20
+        check("#t8", tender("38000", "38000"),   "OK");           // dua dung
+        check("#t9", tender("20000", "38000"),   "OK");           // dua mot phan
+        check("#t10", tender("500000", "198000"), "OK");          // kich ban #27
+        check("#t11", tender("38000.50", "38000"), "REJECT");     // tien mat khong co xu
+
+        check("#b1", notes("7000"),   "5000x1 2000x1");
+        check("#b2", notes("302000"), "200000x1 100000x1 2000x1");
+        check("#b3", billing.util.CashRules.breakdownRemainder(new BigDecimal("8480.50"))
+                .toPlainString(), "80.50");
+
+        check("#n1", billing.util.CashRules.quantityProblem(new BigDecimal("1.5"), "KG"), null);
+        check("#n2", billing.util.CashRules.quantityProblem(new BigDecimal("1.5"), "PIECE") != null, true);
+        check("#n3", billing.util.CashRules.quantityProblem(new BigDecimal("10000"), "BOX"), null);
+        check("#n4", billing.util.CashRules.quantityProblem(new BigDecimal("10000.001"), "KG") != null, true);
+        check("#n5", billing.util.CashRules.quantityProblem(new BigDecimal("2.000"), "PACK"), null);
+        check("#n6", billing.util.CashRules.QTY_TYPING.matcher("1,5").matches(), true);
+        check("#n7", billing.util.CashRules.QTY_TYPING.matcher("1.2.3").matches(), false);
+        check("#n8", billing.util.CashRules.QTY_TYPING.matcher("123456").matches(), false);
+
+        check("#c1", billing.util.CashRules.cardDetailProblem("1234", "a1b2c3"), null);
+        check("#c2", billing.util.CashRules.cardDetailProblem("123", "A1B2C3") != null, true);
+        check("#c3", billing.util.CashRules.cardDetailProblem("1234", "AB") != null, true);
+        check("#c4", billing.util.CashRules.maskedCard("1234"), "****-****-****-1234");
+    }
+
+    /**
+     *   #p1  30 dong, 5 cot
+     *   #p2  8934005 (seed cho doi gia moi ngay): KHONG co hai ngay lien nhau
+     *        cung gia -- Chenh_lech khac 0 o ca 29 dong sau dong dau
+     *   #p3  bao cao tang gia > 10% van dung 5 dong (kich ban #92)
+     */
+    static void price30() {
+        QueryResult r = new billing.dao.ReportDao().price30Days("8934005");
+        check("#p1a", r.rows.size(), 30);
+        check("#p1b", r.columns.size(), 5);
+        int same = 0;
+        for (int i = 1; i < r.rows.size(); i++) {
+            Object d = r.rows.get(i)[4];
+            if (d == null || Ui.dec(d).signum() == 0) same++;
+        }
+        check("#p2", same, 0);
+        check("#p3", new billing.dao.ReportDao().priceRise().rows.size(), 5);
+    }
+
     static void qr() {
         // #68: so tai khoan trong payload la so TRUYEN VAO, khong phai hang so
         String mine = billing.util.VietQRHelper.buildEMVCoPayload(
@@ -573,20 +738,43 @@ public class ContractCheck {
             int n2 = Integer.parseInt(ids.rows.get(1)[0].toString().substring(4));
             check("#40b", n2 - n1, 1);
 
-            // --- #33: tra thieu -> OPEN -----------------------------------
+            // --- #33: tra thieu -> TU CHOI + ROLLBACK (da bo trang thai OPEN)
             List<CartLine> l3 = new ArrayList<>();
             l3.add(new CartLine(prod, qty, price, BigDecimal.ZERO, ""));
             BigDecimal part = due2.subtract(new BigDecimal("1000.00"));
             List<PaymentEntry> p3 = new ArrayList<>();
             p3.add(new PaymentEntry(PayMethod.CASH.code(), part, part, null, null));
-            String id3 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                    counterId, cashierId, null, l3, p3);
-            created.add(id3);
-            QueryResult st3 = QueryResult.run("SELECT Status FROM Invoice WHERE Invoice_ID=?", id3);
-            check("#33", st3.rows.get(0)[0], "OPEN");
+            String before33 = String.valueOf(QueryResult.run(
+                    "SELECT COUNT(*) FROM Invoice").rows.get(0)[0]);
+            String msg33;
+            try {
+                String id3 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
+                        counterId, cashierId, null, l3, p3);
+                created.add(id3);
+                msg33 = "da luu " + id3;
+            } catch (RuntimeException ex) {
+                msg33 = ex.getMessage();
+            }
+            check("#33a", msg33.contains("chua thu du tien"), true);
+            check("#33b", String.valueOf(QueryResult.run(
+                    "SELECT COUNT(*) FROM Invoice").rows.get(0)[0]), before33);   // ROLLBACK that
+
+            // #33c: MySQL tu chan gia tri 'OPEN' o cot Status (ENUM 2 gia tri)
+            String msg33c;
+            // (id la hoa don thu nghiem, bi xoa o finally ben duoi)
+            try (java.sql.Connection c = billing.db.Db.getConnection();
+                 java.sql.PreparedStatement ps = c.prepareStatement(
+                         "UPDATE Invoice SET Status = 'OPEN' WHERE Invoice_ID = ?")) {
+                ps.setString(1, id);
+                ps.executeUpdate();
+                msg33c = "chap nhan OPEN";
+            } catch (java.sql.SQLException ex) {
+                msg33c = "tu choi";
+            }
+            check("#33c", msg33c, "tu choi");
 
             // --- #38: hai lan luu lien tiep -> hai ma KHAC NHAU -----------
-            check("#38", id.equals(id2) || id2.equals(id3), false);
+            check("#38", id.equals(id2), false);
 
             // --- bat bien muc 3.1 tren TOAN BO database -------------------
             QueryResult bad = QueryResult.run(

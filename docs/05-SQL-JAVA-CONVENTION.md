@@ -182,6 +182,10 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `fn_next_return_id` | FUNCTION | `p_invoice_id`, `p_line_number` | Số thứ tự lượt trả kế tiếp **trong một dòng** (không phải `AUTO_INCREMENT`) | *(chỉ SQL -- `sp_add_return` gọi)* |
 | `fn_invoice_amount_due` | FUNCTION | `p_invoice_id` | Tổng tiền hoá đơn phải thu. `0.00` nếu chưa có dòng hàng → **người gọi phải tự kiểm có dòng hàng hay không** | `InvoiceDao.amountDue()` |
 | `fn_invoice_amount_paid` | FUNCTION | `p_invoice_id` | Tổng tiền đã ghi nhận (`Payment.Amount`, không phải tiền khách đưa) | `InvoiceDao.amountPaid()` |
+| `fn_line_returned_qty` | FUNCTION | `p_invoice_id`, `p_line_number` | Tổng số lượng đã trả của một dòng | `sp_get_invoice_adjusted`, `03_queries.sql` câu 10 |
+| `fn_line_refund` | FUNCTION | `p_invoice_id`, `p_line_number` | Tổng tiền đã hoàn của một dòng (cộng `fn_return_refund` từng lượt) | báo cáo doanh thu, `sp_get_invoice_adjusted` |
+| `fn_invoice_refund` | FUNCTION | `p_invoice_id` | Tổng tiền đã hoàn của cả hóa đơn | `sp_get_invoice_header` (cột 12, 13) |
+| `fn_invoice_in_revenue` | FUNCTION | `p_invoice_id` | **Bản chép duy nhất** của quy tắc "hóa đơn nào tính vào doanh thu": `PAID`, hoặc `VOIDED` vì trả hàng (có dòng `Return`) mà còn giá trị > 0. `VOIDED` do bấm Hủy thì không | `sp_report_daily_takings`, `sp_report_best_cashier`, `03_queries.sql` |
 | `sp_lookup_counters` | PROCEDURE | *(không)* | Danh sách quầy tính tiền | `LookupDao.counters()` |
 | `sp_lookup_cashiers` | PROCEDURE | *(không)* | Danh sách thu ngân | `LookupDao.cashiers()` |
 | `sp_lookup_customers` | PROCEDURE | *(không)* | Danh sách khách có thẻ | *(không còn chỗ gọi trong Java -- thay bằng `sp_search_customers_by_phone`)* |
@@ -189,27 +193,30 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_get_all_products` | PROCEDURE | *(không)* | Danh mục tất cả sản phẩm | `ProductDao.findAll()` |
 | `sp_get_active_promo` | PROCEDURE | `p_barcode`, `p_date` | Khuyến mãi cao nhất ngày bán | `ProductDao.activePromoOn()` |
 | `sp_get_recent_invoices` | PROCEDURE | `p_days` | Hóa đơn gần đây + tổng tiền. **Tham số `p_days` thêm ở khối 6 — đó là một đổi hợp đồng** (Quy tắc 2): `> 0` lọc theo khoảng ngày, `0`/`NULL` là **tất cả**. Lọc bằng khoảng ngày chứ không `LIMIT n`, để `INV-0001` và `INV-OLD-*` vẫn đến được | `InvoiceDao.recentInvoices(int)` |
-| `sp_get_invoice_header` | PROCEDURE | `p_invoice_id` | Đầu hóa đơn và tổng tiền | `InvoiceDao.invoiceHeader()` |
+| `sp_get_invoice_header` | PROCEDURE | `p_invoice_id` | Đầu hóa đơn và tổng tiền. **14 cột**: thêm ở cuối `Tien_hoan` (12) và `Tong_sau_dieu_chinh` (13) | `InvoiceDao.invoiceHeader()` |
 | `sp_get_invoice_lines` | PROCEDURE | `p_invoice_id` | Các dòng sản phẩm của hóa đơn | `InvoiceDao.invoiceLines()` |
 | `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn. **5 cột, đúng thứ tự** `Ma_TT, So_tien, Phuong_thuc, Chi_tiet, Tien_khach_dua`. `Tien_khach_dua` là cột **số** riêng (`NULL` cho thẻ/ví), không `CONCAT` vào `Chi_tiet` -- định dạng tiền là việc của Java | `InvoiceDao.invoicePayments()` |
-| `sp_get_invoice_returns` | PROCEDURE | `p_invoice_id` | Thông tin trả hàng (7 cột, có `Lan_tra`) | `InvoiceDao.invoiceReturns()` |
+| `sp_get_invoice_adjusted` | PROCEDURE | `p_invoice_id` | **Hóa đơn điều chỉnh = `Invoice_Line − Return`** -- không phải hóa đơn mới trong DB, chỉ là cách hiển thị. 12 cột: `Ma_HD, Dong, San_pham, DVT, SL_mua, SL_tra, SL_con_lai, Don_gia, Thanh_tien_goc, Tien_hoan, Thanh_tien_moi, Ngay_tra`. Thay cho `sp_get_invoice_returns` (đã bỏ; `Return_ID` vẫn là khóa trong DB nhưng không hiện ra nữa) | `InvoiceDao.invoiceAdjusted()` |
 | `sp_get_returnable_lines` | PROCEDURE | `p_invoice_id` | Các dòng của hóa đơn kèm **số lượng còn trả được** | `InvoiceDao.returnableLines()` |
 | `sp_get_invoice_edit_fields` | PROCEDURE | `p_invoice_id` | 7 trường thô của hóa đơn cho hộp thoại sửa (trả **mã**, không join `Invoice_Line`) | `InvoiceDao.invoiceEditFields()` |
 | `sp_get_invoice_line_edit_fields` | PROCEDURE | `p_invoice_id`, `p_line_number` | 4 trường thô của một dòng hàng cho hộp thoại sửa, đúng thứ tự `Barcode, Quantity, Unit_Price, Discount` | `InvoiceDao.invoiceLineEditFields()` |
-| `sp_report_daily_takings` | PROCEDURE | *(không)* | Báo cáo doanh thu 7 ngày | `ReportDao.dailyTakings()` |
+| `sp_report_daily_takings` | PROCEDURE | *(không)* | Báo cáo doanh thu 7 ngày, theo giá trị hóa đơn điều chỉnh (`fn_invoice_in_revenue`, `fn_line_refund`) | `ReportDao.dailyTakings()` |
 | `sp_report_price_rise` | PROCEDURE | *(không)* | Báo cáo sản phẩm tăng giá > 10% | `ReportDao.priceRise()` |
-| `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc | `ReportDao.bestCashier()` |
+| `sp_report_best_cashier` | PROCEDURE | *(không)* | Báo cáo thu ngân xuất sắc, cùng quy tắc doanh thu như trên | `ReportDao.bestCashier()` |
 | `sp_report_big_returns` | PROCEDURE | *(không)* | Báo cáo hóa đơn trả hàng > 50% | `ReportDao.bigReturns()` |
 | `sp_report_old_price_proof`| PROCEDURE | *(không)* | Chứng minh hóa đơn cũ giữ giá. **Đổi ở khối 6 — 6 cột, gộp theo (sản phẩm, đơn giá)**: `San_pham, Gia_ghi_tren_HD, Gia_hom_nay, So_dong_hang, Ban_tu_ngay, Ban_den_ngay`. Bản cũ không có `WHERE` nên với seed 91 ngày nó trả ~1.200 dòng cho một báo cáo mang tên *"chứng minh"* | `ReportDao.oldPriceProof()` |
-| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **luôn là `OPEN`** -- chưa thu đủ tiền thì chưa `PAID` | `InvoiceDao.createInvoice()` |
+| `sp_report_price_30_days` | PROCEDURE | `p_barcode` | Giá của một sản phẩm, **số lượng 1**, từng ngày trong 30 ngày (CTE đệ quy + `LAG`) -- chứng minh giá đổi theo ngày. 5 cột: `Ngay, Don_gia, KM_phan_tram, Thanh_tien_SL1, Chenh_lech`. Seed cho 3 sản phẩm (8934005, 8934009, 8934018) đổi giá mỗi ngày | `ReportDao.price30Days()` |
+| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **thẳng là `PAID`** (trạng thái `OPEN` đã bị bỏ, `Status` chỉ còn `ENUM('PAID','VOIDED')`); `sp_settle_invoice` kiểm lại ở cuối transaction | `InvoiceDao.createInvoice()` |
 | `sp_add_invoice_line` | PROCEDURE | `(6 tham số)` | Ghi dòng chi tiết hóa đơn | `InvoiceDao.createInvoice()` |
 | `sp_add_payment` | PROCEDURE | `(6 tham số)` | Ghi thanh toán & rẽ nhánh bảng con | `InvoiceDao.createInvoice()` |
-| `sp_settle_invoice` | PROCEDURE | `p_invoice_id` | **Chỗ duy nhất đặt `PAID`**: chuyển khi đã thu đủ (`paid >= due` và có dòng hàng). Không trả ResultSet, idempotent | `InvoiceDao.createInvoice()` |
-| `sp_void_invoice` | PROCEDURE | `p_invoice_id` | **Đường duy nhất tới `VOIDED`**. Huỷ ≠ xoá: dữ liệu còn nguyên, chỉ không vào báo cáo | `InvoiceDao.voidInvoice()` |
+| `sp_settle_invoice` | PROCEDURE | `p_invoice_id` | **Chốt hóa đơn**: thiếu dòng hàng hoặc `paid < due` thì `SIGNAL '45000'` và Java `ROLLBACK` -- thu thiếu tiền thì không lưu được. Không trả ResultSet | `InvoiceDao.createInvoice()` |
+| `sp_void_invoice` | PROCEDURE | `p_invoice_id` | **Đường duy nhất tới `VOIDED`**, hai người gọi: nút "Huy hoa don" (không vào báo cáo nữa) và trả hàng (`processReturn`, cùng transaction -- vẫn vào báo cáo theo hóa đơn điều chỉnh). Huỷ ≠ xoá: dữ liệu còn nguyên | `InvoiceDao.voidInvoice()` |
 | `sp_add_return` | PROCEDURE | `(5 tham số)` | Ghi một lượt trả hàng. **Chốt cuối** của các quy tắc nghiệp vụ: `SIGNAL '45000'` khi số lượng sai / hóa đơn không phải `PAID` | `InvoiceDao.processReturn()` |
-| `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `p_return_id` | Hủy một lượt trả hàng đã ghi | `InvoiceDao.deleteReturn()` |
+| `sp_delete_return` | PROCEDURE | `p_invoice_id`, `p_line_number`, `OUT p_deleted` | Hủy **mọi** lượt trả của một dòng. Hóa đơn không còn dòng trả nào thì `VOIDED` → `PAID` (lối ra duy nhất khỏi `VOIDED`, chỉ cho hóa đơn VOIDED vì trả hàng) | `InvoiceDao.deleteLineReturns()` |
 | `sp_update_invoice_header` | PROCEDURE | `(7 tham số)` | Sửa ngày/giờ/quầy/thu ngân/khách. **`p_status` là một phép kiểm, không đổi trạng thái được**: phải bằng trạng thái đang có, khác là `SIGNAL '45000'` | `InvoiceDao.updateInvoiceHeader()` |
 | `sp_check_seed` | PROCEDURE | `OUT p_violations` | 14 bất biến dữ liệu, mỗi quy tắc một dòng kèm số vi phạm; `OUT` là tổng. Nằm ở `sql/05_invariants.sql`, **không** ở `04_routines.sql`: nó là dụng cụ kiểm, app không gọi nó | `ContractCheck`, `check-seed.ps1` / `.sh` |
+| `sp_wipe_transactions` | PROCEDURE | *(không)* | Xoá **dòng** của 7 bảng giao dịch, giữ 9 bảng danh mục, mọi bảng và routine. Gọi hai lần như gọi một lần. **Chỗ duy nhất** giữ thứ tự xoá ngược khoá ngoại (`plan/16` mục 3.2) | *(app không gọi — nút *Xoá dữ liệu* của Setup App, seed tự viết)* |
+| `sp_wipe_all_data` | PROCEDURE | *(không)* | Gọi `sp_wipe_transactions` rồi xoá nốt 9 bảng danh mục, kể cả `Account` → app không đăng nhập được cho tới khi seed thêm tài khoản | *(app không gọi — `02_seed.sql` khối 0, nút *Xoá dữ liệu* của Setup App)* |
 
 ---
 
@@ -326,9 +333,9 @@ vụ mà năm khối trước đã dựng: nó `INSERT` thẳng vào bảng giao
 `INSERT ... VALUES` trực tiếp: không có thủ tục nào ghi chúng, nên không có
 hợp đồng nào để đi qua. Đó cũng là phần người học **đọc**.
 
-Hệ quả: `02_seed.sql` phải nạp **sau** `04_routines.sql`. Hai đường nạp của dự
-án (`db-setup.*` và `sql-create-db.* + sql-seed-data.*`) đều theo thứ tự
-**01 → 04 → 02**.
+Hệ quả: `02_seed.sql` phải nạp **sau** `04_routines.sql`. Setup App nạp theo
+thứ tự **01 → 04 → 02 → 05** (đổi được bằng khoá `db.build.files` trong
+config.properties).
 
 ### 8.2. Bốn con số không ai được gõ tay
 
@@ -377,3 +384,28 @@ trả) và **#77** (`fn_line_discount` khớp `NewInvoicePanel.lineDiscount` t�
 như một bản chép thứ hai: `fn_line_discount` được dùng bởi *cả* seed *và* quy
 tắc R2, nên nếu hàm sai thì R2 vẫn trả `0` -- hai bên sai khớp nhau. **Đừng
 sửa một bên.**
+
+### 8.5. Seed của bạn chạy lại được bằng một dòng
+
+Muốn tập viết seed riêng, đừng chép khối `DELETE` vào file của mình — gọi lại
+chỗ duy nhất giữ thứ tự xoá (`plan/16`):
+
+```sql
+USE retail_billing;
+CALL sp_wipe_transactions();   -- xoá 7 bảng giao dịch, giữ danh mục + tài khoản
+-- hoặc CALL sp_wipe_all_data();  -- xoá cả 16 bảng, seed phải tự INSERT lại danh mục
+```
+
+Trong Setup App, nút **Xoá dữ liệu...** (hàng *Công cụ database*) làm đúng
+việc đó và in bảng số dòng Trước/Sau. Nó **giữ nguyên** 16 bảng, mọi hàm/thủ
+tục, và mọi thứ bạn tự tạo thêm trong database.
+
+Hai điều cần biết trước:
+
+- **R12 khác 0 trên seed tự viết là bình thường.** R12 (*"91 ngày gần nhất
+  đều có hóa đơn"*) là cam kết phủ ngày của **seed chính thức**, không phải
+  quy tắc nghiệp vụ. 13 quy tắc còn lại thì seed nào cũng phải đạt `0`.
+- **MySQL Workbench mặc định bật *Safe Updates***, nên `CALL sp_wipe_*()` ở đó
+  báo `Error 1175` và **không xoá dòng nào**. Chạy `SET SQL_SAFE_UPDATES = 0;`
+  trong phiên đó trước (hoặc tắt trong *Preferences → SQL Editor*). Script và
+  Setup App không bị ảnh hưởng.

@@ -13,7 +13,7 @@
 
    2. requestedExecutionLevel asInvoker
         Launcher chỉ mở GUI nên KHÔNG xin quyền Administrator. Khi cần
-        quyền cao (lúc cài JDK), winget tự hiện cửa sổ UAC của nó.
+        quyền cao: JDK portable được tải về thư mục của người dùng.
 
    3. dpiAware / dpiAwareness PerMonitorV2
         Thiếu hai mục này, trên màn hình scale 125 đến 150% Windows sẽ

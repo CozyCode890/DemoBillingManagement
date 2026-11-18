@@ -104,19 +104,21 @@ BEGIN
         'muc 3.4 (G3)');
 
     -- -----------------------------------------------------------------
-    -- R4 -- mat con lai cua G3: 'OPEN' co dong hang va da thu du tien
-    --       nghia la sp_settle_invoice dang ra DA phai chuyen no sang
-    --       'PAID'. Quy tac nay bat loi "quen goi sp_settle_invoice".
+    -- R4 -- mat con lai cua G3, sau khi BO trang thai 'OPEN': hoa don
+    --       'VOIDED' cung da tung thu du tien (huy / tra hang khong xoa
+    --       dong Payment nao). Truoc day R4 kiem "OPEN thi chua thu du";
+    --       nay khong con OPEN, nen moi hoa don co dong hang -- bat ke
+    --       trang thai -- deu phai co paid >= due.
     -- -----------------------------------------------------------------
     INSERT INTO tmp_check_seed VALUES (4, 'R4',
-        'OPEN thi chua thu du tien (neu khong sp_settle_invoice da chuyen)',
+        'VOIDED cung da thu du tien luc lap (khong con OPEN)',
         (SELECT COUNT(*)
          FROM   Invoice i
-         WHERE  i.Status = 'OPEN'
+         WHERE  i.Status = 'VOIDED'
            AND  EXISTS (SELECT 1 FROM Invoice_Line l
                         WHERE l.Invoice_ID = i.Invoice_ID)
            AND  fn_invoice_amount_paid(i.Invoice_ID)
-             >= fn_invoice_amount_due(i.Invoice_ID)),
+              < fn_invoice_amount_due(i.Invoice_ID)),
         'muc 3.4 (G3)');
 
     -- -----------------------------------------------------------------
@@ -180,16 +182,18 @@ BEGIN
         'muc 3.4 (G6)');
 
     -- -----------------------------------------------------------------
-    -- R9 -- bat bien G6: chi hoa don 'PAID' moi co luot tra. Day chinh la
-    --       phep kiem ma sp_add_return SIGNAL o :931 -- quy tac nay bat
-    --       truong hop du lieu di vao bang `Return` KHONG qua thu tuc do.
+    -- R9 -- bat bien G6, DOI NGHIA khi co hoa don dieu chinh: tra hang
+    --       xong thi hoa don goc thanh 'VOIDED' (cung transaction voi
+    --       sp_add_return). Nen hoa don CO luot tra ma con 'PAID' nghia la
+    --       quen goi sp_void_invoice -- va hoa don do se bi tra hang LAN HAI,
+    --       dieu ma quy trinh tra hang khong cho phep.
     -- -----------------------------------------------------------------
     INSERT INTO tmp_check_seed VALUES (9, 'R9',
-        'Chi hoa don PAID moi co luot tra hang',
-        (SELECT COUNT(*)
+        'Hoa don co luot tra hang thi phai VOIDED',
+        (SELECT COUNT(DISTINCT r.Invoice_ID)
          FROM   `Return` r
          JOIN   Invoice  i ON i.Invoice_ID = r.Invoice_ID
-         WHERE  i.Status <> 'PAID'),
+         WHERE  i.Status <> 'VOIDED'),
         'muc 3.4 (G6)');
 
     -- -----------------------------------------------------------------

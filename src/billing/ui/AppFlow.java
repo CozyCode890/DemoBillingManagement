@@ -102,8 +102,8 @@ public final class AppFlow {
 
         if (!QuickLogin.isEnabled()) {
             if (fromArgs != null) {
-                System.out.println("[AUTO-LOGIN] Bo qua tham so --login=" + fromArgs
-                    + " vi quick.login.enabled=false trong config.properties.");
+                System.out.println("[AUTO-LOGIN] Ignored --login=" + fromArgs
+                    + " because quick.login.enabled=false in config.properties.");
             }
             return AutoLoginResult.none();
         }
@@ -120,22 +120,20 @@ public final class AppFlow {
                 // khi nhóm đã tự thêm tài khoản vào DB.
                 username = fromArgs.substring(0, colon).trim();
                 password = fromArgs.substring(colon + 1);   // KHÔNG trim mật khẩu
-                source = "tham so --login=<user>:<pass>";
+                source = "argument --login=<user>:<pass>";
                 if (username.isEmpty() || password.isEmpty()) {
-                    return AutoLoginResult.failed(username,
-                        "Tham so --login=" + fromArgs + " thieu ten dang nhap hoac mat khau"
-                      + " -- hay dang nhap bang tay.");
+                    return failed(username,
+                        "Argument --login=" + fromArgs + " is missing the username or password");
                 }
             } else {
                 QuickAccount q = QuickLogin.find(fromArgs);
                 if (q == null) {
-                    return AutoLoginResult.failed(fromArgs,
-                        "Khong tim thay tai khoan '" + fromArgs + "' trong quick.login.accounts"
-                      + " -- hay dang nhap bang tay.");
+                    return failed(fromArgs,
+                        "Cannot find account '" + fromArgs + "' in quick.login.accounts");
                 }
                 username = q.getUsername();
                 password = q.getPassword();
-                source = "tham so --login";
+                source = "argument --login";
             }
         } else {
             String auto = QuickLogin.autoUsername();
@@ -144,9 +142,8 @@ public final class AppFlow {
             }
             QuickAccount q = QuickLogin.find(auto);
             if (q == null) {
-                return AutoLoginResult.failed(auto,
-                    "Khong tim thay tai khoan '" + auto + "' trong quick.login.accounts"
-                  + " (khoa quick.login.auto) -- hay dang nhap bang tay.");
+                return failed(auto,
+                    "Cannot find account '" + auto + "' in quick.login.accounts (key quick.login.auto)");
             }
             username = q.getUsername();
             password = q.getPassword();
@@ -156,16 +153,24 @@ public final class AppFlow {
         try {
             Account acc = new AccountDao().authenticate(username, password);
             if (acc == null) {
-                return AutoLoginResult.failed(username,
-                    "Tai khoan '" + username + "' sai mat khau -- hay dang nhap bang tay.");
+                return failed(username, "Incorrect password for account '" + username + "'");
             }
             LoginPrefs.saveLastUsername(acc.getUsername());
             return AutoLoginResult.success(acc, source);
         } catch (Exception ex) {
-            return AutoLoginResult.failed(username,
-                "Khong xac thuc duoc '" + username + "': " + ex.getMessage()
-              + " -- hay dang nhap bang tay.");
+            return failed(username, "Cannot authenticate '" + username + "': " + ex.getMessage());
         }
+    }
+
+    /**
+     * Auto-login hong: chi tiet ky thuat (tham so, khoa config, loi MySQL) in ra
+     * CONSOLE bang tieng Anh; nhan vien chi thay mot cau ngan tren man hinh dang nhap.
+     */
+    private static AutoLoginResult failed(String username, String technicalReason) {
+        System.out.println("[AUTO-LOGIN] " + technicalReason + " -- please login manually.");
+        return AutoLoginResult.failed(username, I18n.msg(
+                "Không tự đăng nhập được bằng tài khoản '" + username + "'. Vui lòng đăng nhập bằng tay.",
+                "Cannot auto login with account '" + username + "'. Please login manually!"));
     }
 
     /**
@@ -189,8 +194,8 @@ public final class AppFlow {
             if (a.startsWith(ARG_PREFIX)) {
                 value = a.substring(ARG_PREFIX.length()).trim();
             } else {
-                System.out.println("[LOI THAM SO] Khong hieu tham so '" + a
-                    + "'. Chi ho tro --login=<username>[:<password>].");
+                System.out.println("[ARGUMENT ERROR] Unknown argument '" + a
+                    + "'. Only --login=<username>[:<password>] is supported.");
             }
         }
         return (value == null || value.isEmpty()) ? null : value;
@@ -205,9 +210,9 @@ public final class AppFlow {
      * {@code MainWindow} (mục 3.3).
      */
     public static void announceAutoLogin(AutoLoginResult r) {
-        System.out.println("[AUTO-LOGIN] Da dang nhap san bang '" + r.username()
-            + "' (nguon: " + r.source() + ")."
-            + " Dat quick.login.auto= trong config.properties de tat.");
+        System.out.println("[AUTO-LOGIN] Logged in automatically as '" + r.username()
+            + "' (source: " + r.source() + ")."
+            + " Set quick.login.auto= in config.properties to turn it off.");
     }
 
     // ------------------------------------------------------------------

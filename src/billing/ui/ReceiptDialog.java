@@ -6,6 +6,8 @@ import billing.model.InvoiceStatus;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.math.BigDecimal;
 
 /**
@@ -88,7 +90,7 @@ public class ReceiptDialog {
 
     private static void display(Component parent, String invoiceId, Data d) {
         Window owner = (parent == null) ? null : SwingUtilities.getWindowAncestor(parent);
-        JDialog dialog = new JDialog(owner, "HOA DON BAN LE -- " + invoiceId,
+        JDialog dialog = new JDialog(owner, I18n.translate("HOA DON BAN LE -- ") + invoiceId,
                                      Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.getContentPane().setLayout(new BorderLayout());
@@ -99,6 +101,15 @@ public class ReceiptDialog {
         pane.setEditable(false);
         pane.setBackground(Color.WHITE);
         pane.setCaretPosition(0);
+        I18n.onLanguageChange(pane, () -> {
+            pane.setText(buildHtml(d));
+            pane.setCaretPosition(0);
+        });
+        dialog.addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent event) {
+                I18n.removeLanguageChangeListener(pane);
+            }
+        });
 
         JScrollPane scroll = new JScrollPane(pane);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -153,6 +164,7 @@ public class ReceiptDialog {
         // sp_get_invoice_header: 0 Ma_HD | 1 Ngay | 2 Gio | 3 Trang_thai | 4 Quay
         //   5 Shop | 6 Dia_chi | 7 Thu_ngan | 8 Khach_hang
         //   9 Tong_truoc_giam | 10 Tong_giam | 11 Tong_phai_tra
+        //   12 Tien_hoan | 13 Tong_sau_dieu_chinh   (hoa don dieu chinh)
         Object[] h = d.header.rows.get(0);
         String     invoiceId = str(h[0]);
         String     date      = str(h[1]);
@@ -166,6 +178,10 @@ public class ReceiptDialog {
         BigDecimal beforeDisc = Ui.dec(h[9]);
         BigDecimal totalDisc  = Ui.dec(h[10]);
         BigDecimal due        = Ui.dec(h[11]);
+        // Hai cot cuoi them khi co hoa don dieu chinh; doc phong thu theo
+        // do dai de phieu van in duoc neu database chua nap routine moi.
+        BigDecimal refund     = h.length > 13 ? Ui.dec(h[12]) : BigDecimal.ZERO;
+        BigDecimal adjusted   = h.length > 13 ? Ui.dec(h[13]) : due;
 
         BigDecimal recorded = BigDecimal.ZERO;
         BigDecimal tendered = BigDecimal.ZERO;
@@ -189,20 +205,21 @@ public class ReceiptDialog {
         if (!address.isEmpty()) {
             s.append("<font size=\"-1\" color=\"#555555\">").append(esc(address)).append("</font><br/>");
         }
-        s.append("<font size=\"+1\"><b>HOA DON BAN LE</b></font>");
+        s.append("<font size=\"+1\"><b>").append(I18n.translate("HOA DON BAN LE"))
+         .append("</b></font>");
         s.append("</div>");
         s.append(dash());
 
-        // --- Dòng trạng thái, chữ to (khối 4 làm OPEN thành trạng thái thật) ---
-        s.append(statusBlock(statusRaw, missing));
+        // --- Dòng trạng thái, chữ to ---
+        s.append(statusBlock(statusRaw, missing, refund));
         s.append(dash());
 
         // --- Thông tin giao dịch ---------------------------------------
-        s.append(kv("Ma HD",      esc(invoiceId)));
-        s.append(kv("Thoi gian",  esc(date) + " " + esc(time)));
-        s.append(kv("Quay",       esc(counter)));
-        s.append(kv("Thu ngan",   esc(cashier)));
-        s.append(kv("Khach hang", esc(customer)));
+        s.append(kv(I18n.msg("Mã HĐ", "Invoice ID"), esc(invoiceId)));
+        s.append(kv(I18n.msg("Thời gian", "Time"), esc(date) + " " + esc(time)));
+        s.append(kv(I18n.msg("Quầy", "Counter"), esc(counter)));
+        s.append(kv(I18n.msg("Thu ngân", "Cashier"), esc(cashier)));
+        s.append(kv(I18n.msg("Khách hàng", "Customer"), esc(customer)));
         s.append(dash());
 
         // --- Các dòng hàng: SL qua Ui.qty (lỗi #4), VAT qua Ui.percent ---
@@ -211,13 +228,13 @@ public class ReceiptDialog {
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:12px;\">");
         s.append("<tr style=\"color:#666666;\">")
-         .append("<th align=\"left\">Ten hang</th>")
-         .append("<th align=\"right\" nowrap>SL</th>")
-         .append("<th align=\"left\">DVT</th>")
-         .append("<th align=\"right\" nowrap>Don gia</th>")
-         .append("<th align=\"right\" nowrap>Giam gia</th>")
-         .append("<th align=\"right\" nowrap>Thanh tien</th>")
-         .append("<th align=\"right\" nowrap>VAT %</th>")
+         .append("<th align=\"left\">").append(I18n.translate("Ten hang")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("SL")).append("</th>")
+         .append("<th align=\"left\">").append(I18n.translate("DVT")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Don gia")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Giam gia")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Thanh tien")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("VAT %")).append("</th>")
          .append("</tr>");
         for (Object[] l : d.lines.rows) {
             s.append("<tr>")
@@ -233,16 +250,22 @@ public class ReceiptDialog {
         }
         s.append("</table>");
         s.append("<div align=\"right\"><font size=\"-2\" color=\"#888888\">")
-         .append("don gia da gom VAT -- thue suat chi la thong tin")
+         .append(I18n.translate("don gia da gom VAT -- thue suat chi la thong tin"))
          .append("</font></div>");
         s.append(dash());
 
         // --- Tổng tiền: ba con số của sp_get_invoice_header -------------
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:13px;\">");
-        s.append(row2("Tong tien hang", Ui.money(beforeDisc), false));
-        s.append(row2("Giam gia / Khuyen mai", Ui.money(totalDisc), false));
-        s.append(row2("TONG CONG", Ui.money(due), true));
+        s.append(row2(I18n.msg("Tổng tiền hàng", "Subtotal"), Ui.money(beforeDisc), false));
+        s.append(row2(I18n.msg("Giảm giá / Khuyến mãi", "Discount / Promotion"), Ui.money(totalDisc), false));
+        s.append(row2(I18n.msg("TỔNG CỘNG", "TOTAL"), Ui.money(due), true));
+        if (refund.signum() > 0) {
+            // Hoa don dieu chinh = Invoice_Line - Return: hoa don goc da
+            // VOIDED vi tra hang, con lai la gia tri sau khi tru phan tra.
+            s.append(row2(I18n.msg("Trả hàng (đã hoàn)", "Returned (refunded)"), "-" + Ui.money(refund), false));
+            s.append(row2(I18n.msg("TỔNG SAU ĐIỀU CHỈNH", "TOTAL AFTER RETURNS"), Ui.money(adjusted), true));
+        }
         s.append("</table>");
         s.append(dash());
 
@@ -252,15 +275,15 @@ public class ReceiptDialog {
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:12px;\">");
         s.append("<tr style=\"color:#666666;\">")
-         .append("<th align=\"left\">Phuong thuc</th>")
-         .append("<th align=\"right\" nowrap>So tien</th>")
-         .append("<th align=\"right\" nowrap>Khach dua</th>")
-         .append("<th align=\"right\" nowrap>Tien thoi</th>")
-         .append("<th align=\"left\">Chi tiet</th>")
+         .append("<th align=\"left\">").append(I18n.translate("Phuong thuc")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("So tien")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Khach dua")).append("</th>")
+         .append("<th align=\"right\" nowrap>").append(I18n.translate("Tien thoi")).append("</th>")
+         .append("<th align=\"left\">").append(I18n.translate("Chi tiet")).append("</th>")
          .append("</tr>");
         if (d.payments.rows.isEmpty()) {
             s.append("<tr><td colspan=\"5\" style=\"color:#999999;\">")
-             .append("(chua co dong thanh toan nao)</td></tr>");
+             .append(I18n.translate("(chua co dong thanh toan nao)")).append("</td></tr>");
         }
         for (Object[] p : d.payments.rows) {
             BigDecimal amt  = Ui.dec(p[1]);
@@ -281,15 +304,15 @@ public class ReceiptDialog {
 
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:13px;\">");
-        s.append(row2("Tien khach dua", Ui.money(tendered), false));
-        s.append(row2("Da ghi nhan", Ui.money(recorded), false));
-        s.append(row2("Tien thoi lai", Ui.money(change), true));
+        s.append(row2(I18n.msg("Tiền khách đưa", "Cash tendered"), Ui.money(tendered), false));
+        s.append(row2(I18n.msg("Đã ghi nhận", "Recorded"), Ui.money(recorded), false));
+        s.append(row2(I18n.msg("Tiền thối lại", "Change"), Ui.money(change), true));
         s.append("</table>");
 
         // --- Chân hoá đơn ----------------------------------------------
         s.append(dash());
         s.append("<div align=\"center\"><font size=\"-1\" color=\"#777777\">")
-         .append("Cam on Quy khach &amp; Hen gap lai!")
+         .append(I18n.translate("Cam on Quy khach &amp; Hen gap lai!"))
          .append("</font></div>");
 
         s.append("</body></html>");
@@ -299,26 +322,32 @@ public class ReceiptDialog {
     /**
      * Dòng trạng thái.
      *
-     * <p>Khối 4 làm {@code OPEN} thành trạng thái thật và tab 1 đã cảnh báo
-     * trước khi lưu; <b>một tờ hoá đơn in ra trông như đã thu đủ tiền sẽ phá
-     * hết công đó</b> (plan/14 mục 5.7, rủi ro #10 của plan/13).
+     * <p>Trạng thái {@code OPEN} đã bị bỏ, nên một hóa đơn lưu được thì đã
+     * thu đủ tiền lúc lập. {@code missing} vẫn được hiện cho hóa đơn PAID nếu
+     * sau đó quản lý sửa dòng hàng làm tổng tăng (EditInvoiceDialog cảnh báo
+     * cùng tình huống này) -- một tờ in ra trông như đã thu đủ trong khi
+     * thiếu tiền là sai (plan/14 mục 5.7).
      */
-    private static String statusBlock(String statusRaw, BigDecimal missing) {
+    private static String statusBlock(String statusRaw, BigDecimal missing, BigDecimal refund) {
         InvoiceStatus st = InvoiceStatus.of(statusRaw);
         String text;
         String color;
         if (st == InvoiceStatus.PAID) {
-            text  = st.display().toUpperCase();
+            text  = I18n.msg("ĐÃ THANH TOÁN", "PAID");
             color = "#1b7f1b";
-        } else if (st == InvoiceStatus.VOIDED) {
-            text  = st.display().toUpperCase();
-            color = "#c0392b";
-        } else if (st == InvoiceStatus.OPEN) {
-            text  = st.display().toUpperCase();
             if (missing.signum() > 0) {
-                text += " -- con thieu " + Ui.money(missing);
+                text += I18n.msg(" -- còn thiếu ", " -- remaining ") + Ui.money(missing);
+                color = "#d35400";
             }
+        } else if (st == InvoiceStatus.VOIDED && refund.signum() > 0) {
+            // VOIDED vi TRA HANG, khong phai bi huy: in "Da huy" o day la noi
+            // sai -- doanh thu cua hoa don nay van duoc tinh (phan con lai).
+            text  = I18n.msg("ĐÃ TRẢ HÀNG -- XEM TỔNG SAU ĐIỀU CHỈNH",
+                             "ITEMS RETURNED -- SEE TOTAL AFTER RETURNS");
             color = "#d35400";
+        } else if (st == InvoiceStatus.VOIDED) {
+            text  = I18n.msg("ĐÃ HỦY", "VOIDED");
+            color = "#c0392b";
         } else {
             text  = statusRaw;                  // gia tri la trong cot Status
             color = "#555555";
@@ -332,13 +361,13 @@ public class ReceiptDialog {
     }
 
     private static String kv(String key, String value) {
-        return "<div><span style=\"color:#555555;\"><b>" + key + ":</b> </span>" + value + "</div>";
+        return "<div><span style=\"color:#555555;\"><b>" + I18n.translate(key) + ":</b> </span>" + value + "</div>";
     }
 
     private static String row2(String label, String value, boolean strong) {
         String open  = strong ? "<b>" : "";
         String close = strong ? "</b>" : "";
-        return "<tr><td align=\"left\"><span style=\"color:#555555;\">" + open + label + close
+        return "<tr><td align=\"left\"><span style=\"color:#555555;\">" + open + I18n.translate(label) + close
              + "</span></td><td align=\"right\" nowrap>" + open + value + close + "</td></tr>";
     }
 

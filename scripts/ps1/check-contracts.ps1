@@ -17,20 +17,29 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $projectRoot
+# Pipe sang mysql: UTF-8 KHONG BOM (powershell.exe 5.1 mac dinh ASCII hoac chen BOM).
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
+
+# Cong cu ma Setup App tu tai ve (MySQL rieng, JDK portable) nam ngoai repo, trong
+# ~\.retail-billing. Them vao CUOI PATH: may co san MySQL / JDK thi van dung ban do.
+$rbHome = if ($env:RETAIL_BILLING_HOME) { $env:RETAIL_BILLING_HOME } else { Join-Path $env:USERPROFILE '.retail-billing' }
+@("$rbHome\mysql-*\bin", "$rbHome\jdk\bin", "$env:ProgramData\RetailBilling\mysql-*\bin", "$env:ProgramData\RetailBilling\jdk\bin") |
+    ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } |
+    ForEach-Object { $env:PATH = "$env:PATH;$($_.Path)" }
 
 # --- 0. Kiem tra dieu kien tien quyet --------------------------------
 if (-not (Get-Command javac -ErrorAction SilentlyContinue)) {
-    Write-Host "Chua co JDK. Chay:  winget install EclipseAdoptium.Temurin.21.JDK" -ForegroundColor Red
+    Write-Host "Chua co JDK. Mo Setup.exe mot lan (no tu tai JDK portable)" -ForegroundColor Red
     exit 1
 }
 $jar = Get-ChildItem (Join-Path $projectRoot 'lib\mysql-connector-j-*.jar') -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $jar) {
-    Write-Host "Thieu driver MySQL trong lib\. Chay:  .\scripts\ps1\setup.ps1" -ForegroundColor Red
+    Write-Host "Thieu driver MySQL trong lib\. Mo Setup.exe va bam CHAY UNG DUNG." -ForegroundColor Red
     exit 1
 }
 if (-not (Get-Process mysqld -ErrorAction SilentlyContinue)) {
-    Write-Host "MySQL chua chay. Mo mot cua so PowerShell khac va chay:" -ForegroundColor Red
-    Write-Host "    .\scripts\ps1\mysql-start.ps1" -ForegroundColor Yellow
+    Write-Host "MySQL chua chay." -ForegroundColor Red
+    Write-Host "    Mo Setup.exe va bam CHAY UNG DUNG (tu bat MySQL)." -ForegroundColor Yellow
     exit 1
 }
 
