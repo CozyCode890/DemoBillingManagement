@@ -9,6 +9,7 @@ import billing.model.IdName;
 import billing.model.PayMethod;
 import billing.model.PaymentEntry;
 import billing.model.Product;
+import billing.util.CashRules;
 
 import javax.swing.*;
 import javax.swing.border.Border;
@@ -21,7 +22,6 @@ import java.awt.event.ActionListener;
 import javax.swing.SwingUtilities;
 import java.awt.Dialog;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -51,7 +51,9 @@ import java.util.List;
  *         recorded = Payment.Amount                 tiền GHI NHẬN  (APP TÍNH)
  *         change   = tendered - recorded            tiền THỐI      (không lưu)
  *     Tiền mặt:  recorded = min(tendered, còn thiếu)  -> paid > due KHÔNG BAO GIỜ
- *                xảy ra từ tab 1, nên nút "Thối tiền" hết lý do tồn tại.
+ *                xảy ra từ tab 1. Nút "Thoi tien" hiện nay CHỈ tách tiền thối
+ *                thành các tờ VND để thu ngân đưa đúng -- không ghi gì.
+ *                Khách đưa dư phải hợp lý: CashRules.checkTendered.
  *     Thẻ / ví:  recorded <= còn thiếu, vượt thì TỪ CHỐI (không có đường trả lại).
  *
  *  2. GIẢM GIÁ (mục 3.2) -- discount là hàm của (sản phẩm, ngày, SỐ LƯỢNG):
@@ -101,6 +103,8 @@ public class NewInvoicePanel extends JPanel {
     private final JButton    btQr      = new JButton("Tao ma QR");
     private final JButton    btDelPay  = new JButton("Xoa dong dang chon");
     private final JButton    btClrPay  = new JButton("Xoa het");
+    /** Tách tiền thối thành các tờ VND (note: "nút thối tiền"). */
+    private final JButton    btChange  = new JButton("Thoi tien");
 
     // --- Hàng tổng + nút lưu ----------------------------------------
     private final JLabel  lbTotal  = new JLabel();
@@ -108,15 +112,14 @@ public class NewInvoicePanel extends JPanel {
     private final JLabel  lbLeft   = new JLabel();
     private final JLabel  lbChange = new JLabel();
     private final JButton btSave   = new JButton("XUAT HOA DON");
+    /** Xóa trắng cả tab để lập hóa đơn khác (note: "nút reset tab"). */
+    private final JButton btReset  = new JButton("Lam moi tab");
 
     private final List<CartLine>     cart     = new ArrayList<>();
     private final List<PaymentEntry> payments = new ArrayList<>();
 
     /** Ngăn vòng lặp khi setText() tự động cập nhật tfAmount trong onMethodChanged/refreshTotals. */
     private boolean autoUpdatingAmount = false;
-
-    /** Giới hạn tối đa số lượng mỗi dòng hóa đơn (quy tắc nghiệp vụ bán lẻ: 10.000 sản phẩm/dòng). */
-    private static final int MAX_LINE_QUANTITY = 10_000;
 
     /** Viền mặc định của ô Số lượng, dùng để khôi phục khi hợp lệ. */
     private Border defaultQtyBorder;
@@ -139,7 +142,9 @@ public class NewInvoicePanel extends JPanel {
 
         // Lưu viền mặc định của ô Số lượng
         defaultQtyBorder = tfQty.getBorder();
-        // Cài đặt DocumentFilter: chỉ cho phép số, tối đa 5 chữ số
+        // DocumentFilter: chữ số + MỘT dấu , hoặc . (tối đa 5 số nguyên, 3 số lẻ).
+        // Bản trước chỉ nhận số nguyên nên KHÔNG bán được 1,5 kg thịt -- trong
+        // khi tooltip, seed và cột DECIMAL(10,3) đều dùng số thập phân.
         ((AbstractDocument) tfQty.getDocument()).setDocumentFilter(new QuantityDocumentFilter());
 
         // Thiết lập nhãn cảnh báo
@@ -250,6 +255,8 @@ public class NewInvoicePanel extends JPanel {
         cbProduct.setPreferredSize(new Dimension(360, 26));
         tfQty.setToolTipText("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN"
                 + " (toi da 3 chu so) -- KHONG phai dau tach nghin.<br>"
+                + "So thap phan CHI cho san pham ban theo KG / LITER;"
+                + " cai / goi / hop chi so nguyen. Toi da 10.000 moi dong.<br>"
                 + "Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br>"
                 + "<i>Khac hẳn o tien ben duoi, noi dau <b>.</b> la dau tach nghin.</i><br>"
                 + "Enter = Them vao hoa don.</html>");
@@ -320,6 +327,7 @@ public class NewInvoicePanel extends JPanel {
         buttons.add(btQr);
         buttons.add(btDelPay);
         buttons.add(btClrPay);
+        buttons.add(btChange);
         g.gridy = 1; g.gridx = 0; g.gridwidth = 5; g.fill = GridBagConstraints.HORIZONTAL;
         pay.add(buttons, g);
         g.gridwidth = 1; g.fill = GridBagConstraints.NONE;
@@ -346,6 +354,7 @@ public class NewInvoicePanel extends JPanel {
         btSave.setForeground(Color.WHITE);
         btSave.setOpaque(true);
         btSave.setBorderPainted(false);
+        totals.add(btReset);
         totals.add(btSave);
 
         JPanel south = new JPanel(new BorderLayout());
@@ -358,7 +367,8 @@ public class NewInvoicePanel extends JPanel {
     private void wireUp() {
         btReloadLookups.addActionListener(e -> loadLookups());
 
-        // DocumentListener cho ô Số lượng: kiểm tra real-time vượt giới hạn INT MySQL
+        // DocumentListener cho ô Số lượng: kiểm tra ngay khi gõ (trần 10.000,
+        // số nguyên / thập phân theo đơn vị của sản phẩm đang chọn)
         tfQty.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             @Override
             public void insertUpdate(javax.swing.event.DocumentEvent e) { validateQtyField(); }
@@ -368,6 +378,7 @@ public class NewInvoicePanel extends JPanel {
             public void changedUpdate(javax.swing.event.DocumentEvent e) { validateQtyField(); }
         });
 
+        cbProduct.addActionListener(e -> validateQtyField());   // doi san pham = doi don vi
         btAdd.addActionListener(e -> addToCart());
         tfQty.addActionListener(e -> addToCart());          // Enter = them (muc 5.6a)
         btEditQty.addActionListener(e -> editQuantity());
@@ -388,6 +399,9 @@ public class NewInvoicePanel extends JPanel {
         btQr.addActionListener(e -> showQr());
         btDelPay.addActionListener(e -> removeSelectedPayment());
         btClrPay.addActionListener(e -> { payments.clear(); refreshPayTable(); });
+        btChange.addActionListener(e -> showChangeBreakdown());
+        btChange.setEnabled(false);
+        btReset.addActionListener(e -> onResetTab());
         btDelPay.setEnabled(false);
         tbPay.getSelectionModel().addListSelectionListener((ListSelectionEvent e) -> {
             if (e.getValueIsAdjusting()) return;
@@ -403,8 +417,27 @@ public class NewInvoicePanel extends JPanel {
     }
 
     // =================================================================
-    //  KIỂM TRA GIỚI HẠN SỐ LƯỢNG (Nghiệp vụ bán lẻ: 10.000/dòng)
+    //  KIỂM TRA SỐ LƯỢNG -- luật nằm ở CashRules.quantityProblem
     // =================================================================
+    //  Trần 10.000 mỗi dòng (note: "hàng vô hạn / mua số lượng vượt loài
+    //  người"), số thập phân CHỈ cho KG / LITER. Bản trước đổi ô này sang số
+    //  nguyên cho mọi sản phẩm, nên 1,5 kg thịt không bán được nữa.
+
+    private String selectedUnit() {
+        Product p = (Product) cbProduct.getSelectedItem();
+        return p == null ? null : p.unit;
+    }
+
+    /** Đọc im lặng (không hộp thoại) để tô viền ô khi đang gõ. */
+    private static BigDecimal parseQtySilently(String text) {
+        String t = text.trim().replace(',', '.');
+        if (t.isEmpty() || t.equals(".")) return null;
+        try {
+            return new BigDecimal(t);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
 
     /**
      * Kiểm tra giá trị ô Số lượng real-time (từ DocumentListener).
@@ -413,35 +446,17 @@ public class NewInvoicePanel extends JPanel {
     private void validateQtyField() {
         String text = tfQty.getText().trim();
         if (text.isEmpty()) {
-            // Để trống -> hợp lệ (sẽ kiểm tra khi bấm nút)
+            restoreQtyBorder();          // de trong -> kiem khi bam nut
+            return;
+        }
+        BigDecimal q = parseQtySilently(text);
+        String problem = (q == null) ? "So luong khong doc duoc."
+                                     : CashRules.quantityProblem(q, selectedUnit());
+        if (problem != null) {
+            showQtyError(problem);
+        } else {
             restoreQtyBorder();
-            return;
         }
-
-        // Dùng BigInteger để parse an toàn các số rất lớn
-        BigInteger qty;
-        try {
-            qty = new BigInteger(text);
-        } catch (NumberFormatException ex) {
-            // Không phải số -> hiển thị lỗi
-            showQtyError("Số lượng không hợp lệ (tối đa 10.000 sản phẩm/dòng).");
-            return;
-        }
-
-        // Kiểm tra <= 0
-        if (qty.signum() <= 0) {
-            showQtyError("Số lượng không hợp lệ (tối đa 10.000 sản phẩm/dòng).");
-            return;
-        }
-
-        // Kiểm tra vượt MAX_LINE_QUANTITY (10.000)
-        if (qty.compareTo(BigInteger.valueOf(MAX_LINE_QUANTITY)) > 0) {
-            showQtyError("Số lượng không hợp lệ (tối đa 10.000 sản phẩm/dòng).");
-            return;
-        }
-
-        // Hợp lệ
-        restoreQtyBorder();
     }
 
     /**
@@ -468,67 +483,58 @@ public class NewInvoicePanel extends JPanel {
 
     /**
      * Kiểm tra số lượng khi bấm "Thêm vào hóa đơn" hoặc "Sửa số lượng".
-     * Trả về BigDecimal nếu hợp lệ, null nếu không hợp lệ (đã hiển thị cảnh báo).
+     * Trả về số lượng nếu hợp lệ, null nếu không (đã hiển thị cảnh báo).
      *
-     * @param qtyText       chuỗi nhập từ ô Số lượng (hoặc hộp thoại sửa)
-     * @param existingQty   số lượng đã có trong giỏ (cho cùng sản phẩm), null nếu thêm mới
-     * @param productUnit   đơn vị sản phẩm (dùng cho thông báo)
-     * @param isEdit        true nếu là sửa, false nếu là thêm mới
+     * @param qtyText     chuỗi nhập từ ô Số lượng (hoặc hộp thoại sửa)
+     * @param existingQty số lượng đã có trong giỏ (cho cùng sản phẩm), null nếu không có
+     * @param productUnit đơn vị sản phẩm -- quyết định có nhận số thập phân không
+     * @param isEdit      true nếu là sửa (số mới THAY số cũ, không cộng dồn)
      */
-    private BigDecimal validateQuantityForAction(String qtyText, BigDecimal existingQty, String productUnit, boolean isEdit) {
-        String text = qtyText.trim();
-        if (text.isEmpty()) {
-            Ui.warn(this, "Vui long nhap so luong.", "Thieu so luong");
+    private BigDecimal validateQuantityForAction(String qtyText, BigDecimal existingQty,
+                                                 String productUnit, boolean isEdit) {
+        // Ui.readQuantity lo định dạng (dấu , / ., <= 3 số lẻ, > 0) và tự báo lỗi.
+        BigDecimal q = Ui.readQuantity(this, qtyText, null, productUnit);
+        if (q == null) {
             tfQty.requestFocusInWindow();
             return null;
         }
-
-        // Dùng BigInteger để parse an toàn
-        BigInteger qtyBI;
-        try {
-            qtyBI = new BigInteger(text);
-        } catch (NumberFormatException ex) {
-            Ui.warn(this, "So luong khong hop le. Vui long nhap so nguyen duong.", "So luong khong hop le");
+        String problem = CashRules.quantityProblem(q, productUnit);
+        if (problem != null) {
+            if (!isEdit) showQtyError(problem);
+            Ui.warn(this, problem, "So luong khong hop le");
             tfQty.requestFocusInWindow();
             return null;
         }
-
-        // Kiểm tra <= 0
-        if (qtyBI.signum() <= 0) {
-            Ui.warn(this, "So luong phai lon hon 0.", "So luong khong hop le");
+        // Cộng dồn với dòng đã có trong giỏ (chỉ khi thêm mới)
+        if (existingQty != null && !isEdit
+                && existingQty.add(q).compareTo(CashRules.MAX_LINE_QTY) > 0) {
+            String msg = "Tong so luong (da co trong gio " + Ui.qty(existingQty)
+                       + " + nhap moi " + Ui.qty(q) + ") vuot qua 10.000 moi dong.";
+            showQtyError(msg);
+            Ui.warn(this, msg, "So luong khong hop le");
             tfQty.requestFocusInWindow();
             return null;
         }
-
-        // Kiểm tra vượt MAX_LINE_QUANTITY (10.000)
-        if (qtyBI.compareTo(BigInteger.valueOf(MAX_LINE_QUANTITY)) > 0) {
-            showQtyError("Số lượng không hợp lệ (tối đa 10.000 sản phẩm/dòng).");
-            tfQty.requestFocusInWindow();
-            Ui.warn(this,
-                    "Số lượng mỗi dòng sản phẩm phải từ 1 đến 10.000.",
-                    "Số lượng không hợp lệ");
-            return null;
-        }
-
-        // Kiểm tra cộng dồn với số lượng đã có trong giỏ (chỉ khi thêm mới, không phải sửa)
-        if (existingQty != null && !isEdit) {
-            BigInteger existingBI = existingQty.toBigInteger();
-            BigInteger sum = existingBI.add(qtyBI);
-            if (sum.compareTo(BigInteger.valueOf(MAX_LINE_QUANTITY)) > 0) {
-                showQtyError("Số lượng không hợp lệ (tối đa 10.000 sản phẩm/dòng).");
-                tfQty.requestFocusInWindow();
-                Ui.warn(this,
-                        "Tổng số lượng (đã có trong giỏ + nhập mới) vượt quá 10.000 sản phẩm/dòng.",
-                        "Số lượng không hợp lệ");
-                return null;
-            }
-        }
-
-        // Hợp lệ -> khôi phục viền
         restoreQtyBorder();
+        return q;
+    }
 
-        // Chuyển sang BigDecimal (an toàn vì đã kiểm tra <= MAX_LINE_QUANTITY)
-        return new BigDecimal(qtyBI);
+    /**
+     * Tổng hóa đơn sau khi THAY dòng thứ {@code replaceIndex} (hoặc thêm mới
+     * nếu {@code -1}) bằng {@code line} có vượt cột DECIMAL(12,2) không.
+     * Trần số lượng 10.000 chưa đủ: 20 dòng x 10.000 x 390.000 đã vượt.
+     */
+    private boolean exceedsMoneyCap(CartLine line, int replaceIndex) {
+        BigDecimal t = BigDecimal.ZERO;
+        for (int i = 0; i < cart.size(); i++) {
+            if (i != replaceIndex) t = t.add(cart.get(i).lineTotal());
+        }
+        t = t.add(line.lineTotal());
+        if (t.compareTo(CashRules.MAX_MONEY) <= 0) return false;
+        Ui.warn(this, "Tong hoa don se la " + Ui.money(t) + ", vuot gioi han cot tien\n"
+                    + "cua database (" + Ui.money(CashRules.MAX_MONEY) + "). Hay tach thanh nhieu hoa don.",
+                "Tong tien qua lon");
+        return true;
     }
 
     // =================================================================
@@ -723,15 +729,21 @@ public class NewInvoicePanel extends JPanel {
                 if (existing != null && pr.price.compareTo(existing.unitPrice) == 0) {
                     // Gop: tinh lai giam gia theo TONG so luong (kich ban #21)
                     int i = cart.indexOf(existing);
-                    cart.set(i, priceLine(p, existing.quantity.add(qty), pr));
+                    CartLine merged = priceLine(p, existing.quantity.add(qty), pr);
+                    if (exceedsMoneyCap(merged, i)) return;
+                    cart.set(i, merged);
                     hint(date, pr, "");
                 } else if (existing != null) {
-                    cart.add(priceLine(p, qty, pr));
+                    CartLine added = priceLine(p, qty, pr);
+                    if (exceedsMoneyCap(added, -1)) return;
+                    cart.add(added);
                     hint(date, pr, "  Gia ngay " + date + " (" + Ui.money(pr.price)
                             + ") khac don gia cua dong da co (" + Ui.money(existing.unitPrice)
                             + ") -> them dong moi.");
                 } else {
-                    cart.add(priceLine(p, qty, pr));
+                    CartLine added = priceLine(p, qty, pr);
+                    if (exceedsMoneyCap(added, -1)) return;
+                    cart.add(added);
                     hint(date, pr, "");
                 }
                 refreshCartTable();
@@ -768,7 +780,7 @@ public class NewInvoicePanel extends JPanel {
         }
         final CartLine line = cart.get(row);
 
-        // Tạo JTextField tùy chỉnh với DocumentFilter (tối đa 5 chữ số, chỉ số)
+        // Cùng bộ lọc với ô Số lượng: chữ số + một dấu thập phân
         final JTextField editQtyField = new JTextField(Ui.qtyInput(line.quantity), 6);
         ((AbstractDocument) editQtyField.getDocument()).setDocumentFilter(new QuantityDocumentFilter());
 
@@ -778,7 +790,11 @@ public class NewInvoicePanel extends JPanel {
         dialog.setLayout(new BorderLayout(8, 8));
         ((JComponent) dialog.getContentPane()).setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        JLabel msgLabel = new JLabel("So luong moi cho \"" + line.product.name + "\" (" + line.product.unit + "):\n\nDau , hoac . la dau thap phan, toi da 3 chu so.");
+        JLabel msgLabel = new JLabel("<html>So luong moi cho \"" + line.product.name + "\" (" + line.product.unit + "):<br>"
+                + (CashRules.allowsDecimal(line.product.unit)
+                        ? "Dau , hoac . la dau thap phan, toi da 3 chu so."
+                        : "Chi so nguyen (san pham khong ban le theo can / dong).")
+                + " Toi da 10.000.</html>");
         msgLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -842,7 +858,9 @@ public class NewInvoicePanel extends JPanel {
                 }
                 int i = cart.indexOf(line);
                 if (i < 0) return;               // dong da bi xoa trong luc cho
-                cart.set(i, priceLine(p, newQty, pr));
+                CartLine edited = priceLine(p, newQty, pr);
+                if (exceedsMoneyCap(edited, i)) return;
+                cart.set(i, edited);
                 hint(date, pr, "");
                 refreshCartTable();
                 tbCart.setRowSelectionInterval(i, i);
@@ -1005,11 +1023,10 @@ public class NewInvoicePanel extends JPanel {
      * khối này).
      *
      * <p>Nhờ {@code recorded = min(...)}, {@code paid > due} không bao giờ xảy
-     * ra từ tab 1 -- nên nút <i>Thối tiền</i> của bản cũ hết lý do tồn tại, và
-     * cùng với nó là lỗi #8 (thối được xuống dưới mức phải trả, làm hoá đơn
-     * thành {@code OPEN} và bị loại khỏi báo cáo doanh thu). Phép kiểm
-     * {@code >=} trong {@code sp_settle_invoice} GIỮ NGUYÊN -- nó thuộc khối 4
-     * và vẫn đúng; chỉ là tab 1 không còn sinh ra trường hợp {@code >}.
+     * ra từ tab 1 -- nên nút <i>Thối tiền</i> của bản cũ (sửa số ghi nhận, gây
+     * lỗi #8: thối xuống dưới mức phải trả) không quay lại. Nút "Thoi tien"
+     * mới chỉ ĐỌC tổng tiền thối và tách thành các tờ ({@link #showChangeBreakdown}).
+     * Phép kiểm {@code >=} trong {@code sp_settle_invoice} GIỮ NGUYÊN.
      *
      * @return {@code true} nếu đã thêm được dòng
      */
@@ -1041,12 +1058,37 @@ public class NewInvoicePanel extends JPanel {
             return false;
         }
 
+        // KHÁCH ĐƯA DƯ CÓ HỢP LÝ KHÔNG (note: "38k đưa 45k", "48k đưa 480k").
+        // Luật ở CashRules.checkTendered: hợp lý khi khách không đưa thừa tờ
+        // nào. Sai hẳn (thối >= 500.000, có xu, vượt DECIMAL(12,2)) -> chặn;
+        // có tờ thừa -> HỎI LẠI, vì "đưa lẻ để nhận chẵn" là có thật.
+        if (m.hasChange()) {
+            CashRules.TenderCheck tc = CashRules.checkTendered(typed, left);
+            if (tc.verdict == CashRules.Verdict.REJECT) {
+                Ui.warn(this, tc.message, "So tien khach dua khong hop ly");
+                return false;
+            }
+            if (tc.verdict == CashRules.Verdict.SUSPICIOUS) {
+                Object[] opts = {"Go lai so tien", "Van ghi"};
+                int c = JOptionPane.showOptionDialog(this,
+                        tc.message + "\nCo phai thu ngan go nham khong?",
+                        "Khach dua thua to tien?", JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE, null, opts, opts[0]);
+                if (c != 1) return false;
+            }
+        }
+
         String d1 = detail1;
         String d2 = detail2;
         if (d1 == null && d2 == null) {
             if (m == PayMethod.CARD) {
-                d1 = "4111-****-****-" + (1000 + (int) (Math.random() * 9000));
-                d2 = "AUTH" + (10000 + (int) (Math.random() * 89999));
+                // Chi tiết thẻ THẬT, đọc từ phiếu máy POS -- bản trước sinh số
+                // thẻ và mã chuẩn chi NGẪU NHIÊN, nên cột "Chi tiet" không nói
+                // gì về giao dịch thật (note: "phần chi tiết là gì").
+                String[] card = askCardDetails(split.recorded);
+                if (card == null) return false;              // nguoi dung huy
+                d1 = card[0];
+                d2 = card[1];
             } else if (m == PayMethod.EWALLET) {
                 d1 = "MoMo";
                 d2 = "TXN-" + System.currentTimeMillis();
@@ -1059,6 +1101,36 @@ public class NewInvoicePanel extends JPanel {
                 d1, d2));
         refreshPayTable();
         return true;
+    }
+
+    /**
+     * Hỏi 4 số cuối thẻ + mã chuẩn chi in trên phiếu máy POS.
+     * App chỉ lưu 4 số cuối ({@code ****-****-****-1234}), không bao giờ số
+     * thẻ đầy đủ.
+     *
+     * @return {Card_number, Auth_code}, hoặc null nếu người dùng hủy
+     */
+    private String[] askCardDetails(BigDecimal amount) {
+        JTextField tfLast4 = new JTextField(6);
+        JTextField tfAuth  = new JTextField(8);
+        JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
+        form.add(new JLabel("Quet the " + Ui.money(amount) + " tren may POS, roi nhap theo phieu in ra:"));
+        form.add(new JLabel("4 so cuoi cua the:"));
+        form.add(tfLast4);
+        form.add(new JLabel("Ma chuan chi (6 ky tu, 'APPR CODE' tren phieu):"));
+        form.add(tfAuth);
+        while (true) {
+            int c = JOptionPane.showConfirmDialog(this, form, "Chi tiet thanh toan the ngan hang",
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+            if (c != JOptionPane.OK_OPTION) return null;
+            String last4 = tfLast4.getText().trim();
+            String auth  = tfAuth.getText().trim().toUpperCase();
+            String problem = CashRules.cardDetailProblem(last4, auth);
+            if (problem == null) {
+                return new String[]{CashRules.maskedCard(last4), auth};
+            }
+            Ui.warn(this, problem, "Chi tiet the chua dung");
+        }
     }
 
     /** Một dòng tiền mặt đúng số còn thiếu -> {@code Tien thoi = 0}. */
@@ -1093,10 +1165,18 @@ public class NewInvoicePanel extends JPanel {
             return;
         }
 
+        // Ô trống thì KHÔNG tự lấy số còn thiếu nữa (note: "chưa nhập số tiền
+        // mà vẫn tạo được mã QR"). Chọn "Vi dien tu" là ô đã tự điền số còn
+        // thiếu rồi, nên ô trống nghĩa là người dùng đã cố ý xóa nó.
         BigDecimal amount;
         String typed = tfAmount.getText().trim();
         if (typed.isEmpty()) {
-            amount = left;
+            Ui.warn(this, "Chua nhap so tien can thu bang ma QR.\n"
+                        + "Chon phuong thuc \"" + PayMethod.EWALLET.label()
+                        + "\" de o So tien tu dien so con thieu.",
+                    "Chua nhap so tien");
+            tfAmount.requestFocusInWindow();
+            return;
         } else {
             amount = Ui.readMoney(this, typed, "So tien");
             if (amount == null) return;
@@ -1114,6 +1194,47 @@ public class NewInvoicePanel extends JPanel {
         if (addPayment(PayMethod.EWALLET, r.amount, "VietQR", r.transactionRef)) {
             tfAmount.setText("");
         }
+    }
+
+    /**
+     * Nút "Thoi tien": tách tổng tiền thối thành các tờ VND, tờ lớn trước.
+     * Chỉ là gợi ý cho thu ngân -- không đổi dữ liệu nào (tiền thối không
+     * lưu ở cột nào: thối = khách đưa − ghi nhận, plan/14 mục 3.1).
+     */
+    private void showChangeBreakdown() {
+        BigDecimal change = totalChange();
+        if (change.signum() <= 0) {
+            Ui.warn(this, "Khong co tien thoi.", "Tien thoi");
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Tien thoi cho khach: ").append(Ui.money(change)).append("\n\n");
+        for (long[] part : CashRules.breakdown(change)) {
+            sb.append(String.format("  %10s  x %d%n", Ui.money(BigDecimal.valueOf(part[0])), part[1]));
+        }
+        BigDecimal rest = CashRules.breakdownRemainder(change);
+        if (rest.signum() > 0) {
+            sb.append("\n  Le ").append(Ui.money(rest))
+              .append(" duoi to nho nhat (100d) -- lam tron voi khach.");
+        }
+        JTextArea ta = new JTextArea(sb.toString());
+        ta.setEditable(false);
+        ta.setFont(Ui.MONO);
+        JOptionPane.showMessageDialog(this, ta, "Thoi tien", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Nút "Lam moi tab": hỏi trước nếu đang có dữ liệu chưa lưu. */
+    private void onResetTab() {
+        if (hasPendingWork()) {
+            int c = JOptionPane.showConfirmDialog(this,
+                    "Xoa trang tab Lap hoa don?\nSe mat " + pendingWorkSummary() + " chua luu.",
+                    "Lam moi tab", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (c != JOptionPane.YES_OPTION) return;
+        }
+        resetForm();
+        spDate.setValue(new Date());
+        cbMethod.setSelectedItem(PayMethod.CASH);
+        restoreQtyBorder();
     }
 
     private void removeSelectedPayment() {
@@ -1436,6 +1557,7 @@ public class NewInvoicePanel extends JPanel {
         lbLeft.setText("Con thieu: " + Ui.money(left));
         lbChange.setText("Tien thoi: " + Ui.money(change));
         lbLeft.setForeground(left.signum() > 0 ? Color.RED.darker() : new Color(0, 110, 0));
+        btChange.setEnabled(change.signum() > 0);
 
         // Tự động cập nhật ô Số tiền khi còn thiếu thay đổi (chỉ cho Thẻ / Ví)
         PayMethod m = method();
@@ -1453,42 +1575,30 @@ public class NewInvoicePanel extends JPanel {
         }
     }
     // =================================================================
-    //  DOCUMENT FILTER: Chỉ cho phép số, tối đa 5 chữ số
+    //  DOCUMENT FILTER: chữ số + MỘT dấu , hoặc . (CashRules.QTY_TYPING)
     // =================================================================
 
     /**
-     * DocumentFilter cho ô Số lượng: chỉ cho phép ký tự số (0-9), tối đa 5 chữ số.
-     * Chặn ngay tại tầng Document: gõ, dán, kéo-thả đều bị lọc.
+     * Lọc ô số lượng ngay tại tầng Document (gõ, dán, kéo-thả đều qua đây):
+     * tối đa 5 chữ số phần nguyên và 3 chữ số phần lẻ. Có cho dấu thập phân
+     * ngay cả với sản phẩm tính theo cái -- lúc gõ chưa chắc đã chọn xong
+     * sản phẩm; luật "cái thì số nguyên" kiểm ở validateQtyField / khi bấm nút.
      */
     private static final class QuantityDocumentFilter extends DocumentFilter {
-        private static final int MAX_DIGITS = 5;
-
         @Override
         public void insertString(FilterBypass fb, int offset, String text, javax.swing.text.AttributeSet attr)
                 throws javax.swing.text.BadLocationException {
-            if (text == null || !text.matches("\\d*")) {
-                Toolkit.getDefaultToolkit().beep();
-                return;
-            }
-            int currentLength = fb.getDocument().getLength();
-            int newLength = currentLength + text.length();
-            if (newLength <= MAX_DIGITS) {
-                super.insertString(fb, offset, text, attr);
-            } else {
-                Toolkit.getDefaultToolkit().beep();
-            }
+            replace(fb, offset, 0, text, attr);
         }
 
         @Override
         public void replace(FilterBypass fb, int offset, int length, String text, javax.swing.text.AttributeSet attrs)
                 throws javax.swing.text.BadLocationException {
-            if (text != null && !text.matches("\\d*")) {
-                Toolkit.getDefaultToolkit().beep();
-                return;
-            }
-            int currentLength = fb.getDocument().getLength();
-            int newLength = currentLength - length + (text != null ? text.length() : 0);
-            if (newLength <= MAX_DIGITS) {
+            javax.swing.text.Document d = fb.getDocument();
+            String cur  = d.getText(0, d.getLength());
+            String next = cur.substring(0, offset) + (text == null ? "" : text)
+                        + cur.substring(offset + length);
+            if (CashRules.QTY_TYPING.matcher(next).matches()) {
                 super.replace(fb, offset, length, text, attrs);
             } else {
                 Toolkit.getDefaultToolkit().beep();

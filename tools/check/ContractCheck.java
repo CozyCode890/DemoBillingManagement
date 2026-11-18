@@ -167,6 +167,10 @@ public class ContractCheck {
                 .toPlainString(), "0");
 
         System.out.println();
+        System.out.println("=== Tab 1: khach dua du, thoi tien, so luong, chi tiet the (CashRules) ===");
+        cashRules();
+
+        System.out.println();
         System.out.println("=== 7.8  Ma QR (loi #27) ===");
         qr();
 
@@ -509,6 +513,54 @@ public class ContractCheck {
         QueryResult r = QueryResult.run("SELECT fn_active_promo_pct(?, ?)",
                 barcode, java.sql.Date.valueOf(LocalDate.now().plusDays(offsetDays)));
         return String.valueOf(r.rows.get(0)[0]);
+    }
+
+    static String tender(String tendered, String remaining) {
+        return billing.util.CashRules.checkTendered(
+                new BigDecimal(tendered), new BigDecimal(remaining)).verdict.name();
+    }
+
+    static String notes(String amount) {
+        StringBuilder sb = new StringBuilder();
+        for (long[] part : billing.util.CashRules.breakdown(new BigDecimal(amount))) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(part[0]).append('x').append(part[1]);
+        }
+        return sb.toString();
+    }
+
+    static void cashRules() {
+        // Cac vi du trong note cua nhom
+        check("#t1", tender("45000", "38000"),   "SUSPICIOUS");   // thua to 5.000
+        check("#t2", tender("480000", "48000"),  "SUSPICIOUS");   // 48k dua 480k
+        check("#t3", tender("500000", "48000"),  "OK");           // mot to 500k
+        check("#t4", tender("600000", "48000"),  "REJECT");       // thoi >= 500k
+        check("#t5", tender("600000", "510000"), "OK");           // 500+100, bo to nao cung thieu
+        check("#t6", tender("99999999999", "48000"), "REJECT");   // "out of range"
+        check("#t7", tender("40000", "38000"),   "OK");           // 20+20
+        check("#t8", tender("38000", "38000"),   "OK");           // dua dung
+        check("#t9", tender("20000", "38000"),   "OK");           // dua mot phan
+        check("#t10", tender("500000", "198000"), "OK");          // kich ban #27
+        check("#t11", tender("38000.50", "38000"), "REJECT");     // tien mat khong co xu
+
+        check("#b1", notes("7000"),   "5000x1 2000x1");
+        check("#b2", notes("302000"), "200000x1 100000x1 2000x1");
+        check("#b3", billing.util.CashRules.breakdownRemainder(new BigDecimal("8480.50"))
+                .toPlainString(), "80.50");
+
+        check("#n1", billing.util.CashRules.quantityProblem(new BigDecimal("1.5"), "KG"), null);
+        check("#n2", billing.util.CashRules.quantityProblem(new BigDecimal("1.5"), "PIECE") != null, true);
+        check("#n3", billing.util.CashRules.quantityProblem(new BigDecimal("10000"), "BOX"), null);
+        check("#n4", billing.util.CashRules.quantityProblem(new BigDecimal("10000.001"), "KG") != null, true);
+        check("#n5", billing.util.CashRules.quantityProblem(new BigDecimal("2.000"), "PACK"), null);
+        check("#n6", billing.util.CashRules.QTY_TYPING.matcher("1,5").matches(), true);
+        check("#n7", billing.util.CashRules.QTY_TYPING.matcher("1.2.3").matches(), false);
+        check("#n8", billing.util.CashRules.QTY_TYPING.matcher("123456").matches(), false);
+
+        check("#c1", billing.util.CashRules.cardDetailProblem("1234", "a1b2c3"), null);
+        check("#c2", billing.util.CashRules.cardDetailProblem("123", "A1B2C3") != null, true);
+        check("#c3", billing.util.CashRules.cardDetailProblem("1234", "AB") != null, true);
+        check("#c4", billing.util.CashRules.maskedCard("1234"), "****-****-****-1234");
     }
 
     static void qr() {
