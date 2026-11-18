@@ -212,7 +212,7 @@ public class InvoiceDao {
             }
 
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
-            SqlLog.add("COMMIT;  -- luu thanh cong hoa don " + invoiceId,
+            SqlLog.add("COMMIT;  -- save invoice successfully " + invoiceId,
                        null, System.currentTimeMillis() - t0, 0);
             return invoiceId;
 
@@ -220,10 +220,10 @@ public class InvoiceDao {
             if (conn != null) {
                 try {
                     conn.rollback();
-                    SqlLog.add("ROLLBACK;  -- da huy toan bo vi co loi", null, 0, 0);
+                    SqlLog.add("ROLLBACK;  -- rolled back everything due to an error", null, 0, 0);
                 } catch (SQLException ignore) { }
             }
-            throw new RuntimeException("Luu hoa don that bai: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to save invoice: " + e.getMessage(), e);
 
         } finally {
             if (conn != null) {
@@ -251,7 +251,7 @@ public class InvoiceDao {
             SqlLog.add(sql, null, System.currentTimeMillis() - t0, 1);
             return nextId;
         } catch (SQLException e) {
-            throw new RuntimeException("Khong sinh duoc ma hoa don: " + e.getMessage(), e);
+            throw new RuntimeException("Cannot generate invoice id: " + e.getMessage(), e);
         }
     }
 
@@ -381,7 +381,7 @@ public class InvoiceDao {
             return refund == null ? BigDecimal.ZERO : refund;
 
         } catch (SQLException e) {
-            throw new RuntimeException("Khong tinh duoc tien hoan cho dong "
+            throw new RuntimeException("Cannot calculate refund amount for line "
                                        + lineNumber + ": " + e.getMessage(), e);
         }
     }
@@ -396,7 +396,7 @@ public class InvoiceDao {
      */
     public BigDecimal amountDue(String invoiceId) {
         return scalarMoney("{? = call fn_invoice_amount_due(?)}", invoiceId,
-                           "Khong doc duoc tong phai tra cua hoa don ");
+                           "Cannot read total amount due for invoice ");
     }
 
     /**
@@ -406,7 +406,7 @@ public class InvoiceDao {
      */
     public BigDecimal amountPaid(String invoiceId) {
         return scalarMoney("{? = call fn_invoice_amount_paid(?)}", invoiceId,
-                           "Khong doc duoc tong da thu cua hoa don ");
+                           "Cannot read total amount paid for invoice ");
     }
 
     /** Khuôn chung của hai hàm tiền ở trên -- cùng một câu gọi, khác tên hàm. */
@@ -452,7 +452,7 @@ public class InvoiceDao {
             SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 1);
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi xoa hoa don " + invoiceId + ": " + e.getMessage(), e);
+            throw new RuntimeException("Failed to delete invoice " + invoiceId + ": " + e.getMessage(), e);
         }
     }
 
@@ -487,7 +487,7 @@ public class InvoiceDao {
             // thấy được câu gọi vừa bị từ chối, với 0 dòng ảnh hưởng.
             SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 0);
             // Giữ nguyên exception gốc làm cause -- UI đọc getSQLState() của nó.
-            throw new RuntimeException("Khong huy duoc hoa don " + invoiceId
+            throw new RuntimeException("Cannot void invoice " + invoiceId
                                        + ": " + e.getMessage(), e);
         }
     }
@@ -527,7 +527,7 @@ public class InvoiceDao {
                        System.currentTimeMillis() - t0, 1);
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi cap nhat hoa don " + invoiceId + ": " + e.getMessage(), e);
+            throw new RuntimeException("Failed to update invoice " + invoiceId + ": " + e.getMessage(), e);
         }
     }
 
@@ -555,7 +555,7 @@ public class InvoiceDao {
                        System.currentTimeMillis() - t0, 1);
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi cap nhat dong hang " + lineNumber + ": " + e.getMessage(), e);
+            throw new RuntimeException("Failed to update line " + lineNumber + ": " + e.getMessage(), e);
         }
     }
 
@@ -577,7 +577,7 @@ public class InvoiceDao {
             SqlLog.add(sql, new Object[]{invoiceId, lineNumber}, System.currentTimeMillis() - t0, 1);
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi xoa dong hang " + lineNumber + ": " + e.getMessage(), e);
+            throw new RuntimeException("Failed to delete line " + lineNumber + ": " + e.getMessage(), e);
         }
     }
 
@@ -604,7 +604,7 @@ public class InvoiceDao {
      */
     public void processReturn(String invoiceId, List<ReturnItem> items, String approvedByCashierId) {
         if (items == null || items.isEmpty()) {
-            throw new IllegalArgumentException("Khong co dong hang nao de tra");
+            throw new IllegalArgumentException("There are no lines to return");
         }
 
         String spReturn = "{call sp_add_return(?, ?, ?, ?, ?)}";
@@ -656,7 +656,7 @@ public class InvoiceDao {
             }
 
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
-            SqlLog.add("COMMIT;  -- luu thanh cong tra hang hoa don " + invoiceId,
+            SqlLog.add("COMMIT;  -- save return successfully for invoice " + invoiceId,
                        null, System.currentTimeMillis() - t0, 0);
 
         } catch (SQLException e) {
@@ -669,12 +669,12 @@ public class InvoiceDao {
             if (conn != null) {
                 try {
                     conn.rollback();
-                    SqlLog.add("ROLLBACK;  -- da huy toan bo vi co loi", null, 0, 0);
+                    SqlLog.add("ROLLBACK;  -- rolled back everything due to an error", null, 0, 0);
                 } catch (SQLException ignore) { }
             }
             // Giữ nguyên exception gốc làm cause: UI đọc getSQLState() của nó
             // để biết đây là SIGNAL '45000' (lỗi nghiệp vụ) hay lỗi thật.
-            throw new RuntimeException("Xu ly tra hang that bai: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to process return: " + e.getMessage(), e);
 
         } finally {
             if (conn != null) {
@@ -722,7 +722,7 @@ public class InvoiceDao {
             if (c != null) {
                 try { c.rollback(); } catch (SQLException ignore) { }
             }
-            throw new RuntimeException("Loi khi huy tra hang cua dong " + lineNumber
+            throw new RuntimeException("Failed to cancel the return of line " + lineNumber
                                        + ": " + e.getMessage(), e);
         } finally {
             if (c != null) {

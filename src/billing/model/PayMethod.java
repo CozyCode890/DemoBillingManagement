@@ -38,6 +38,18 @@ public enum PayMethod {
     public String label() { return label; }
 
     /**
+     * Nhan theo ngon ngu dang chon (co dau / tieng Anh) -- CHI de hien thi.
+     * {@link #label()} giu nguyen vi {@link #of} doc nguoc chuoi cua SQL.
+     */
+    public String displayLabel() {
+        switch (this) {
+            case CASH: return billing.util.Lang.pick("Tiền mặt", "Cash");
+            case CARD: return billing.util.Lang.pick("Thẻ ngân hàng", "Bank card");
+            default:   return billing.util.Lang.pick("Ví điện tử", "E-wallet");
+        }
+    }
+
+    /**
      * Phuong thuc nay co "tien khach dua" va do do co "tien thoi" hay khong.
      *
      * CHO DUY NHAT tra loi cau hoi do -- thay cho phep so sanh
@@ -53,7 +65,8 @@ public enum PayMethod {
      * tai lieu moi biet.
      */
     public String amountFieldLabel() {
-        return hasChange ? "Khach dua" : "So tien";
+        return hasChange ? billing.util.Lang.pick("Khách đưa", "Tendered")
+                         : billing.util.Lang.pick("Số tiền", "Amount");
     }
 
     /**

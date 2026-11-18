@@ -80,10 +80,15 @@ public class CustomerPicker extends JPanel {
         setLayout(new FlowLayout(FlowLayout.LEFT, 6, 0));
         setOpaque(false);
 
-        tfPhone.setToolTipText("<html>Go SO DIEN THOAI cua khach (tu 3 chu so tro len)"
-                + " roi chon tu danh sach goi y.<br>"
-                + "Chi khach <b>duoc chon tu danh sach</b> moi duoc gan vao hoa don"
-                + " -- go du so ma khong chon van la khach vang lai.</html>");
+        tfPhone.setToolTipText(I18n.text(
+                "<html>Gõ SỐ ĐIỆN THOẠI của khách (từ 3 chữ số trở lên)"
+                + " rồi chọn từ danh sách gợi ý.<br>"
+                + "Chỉ khách <b>được chọn từ danh sách</b> mới được gắn vào hóa đơn"
+                + " -- gõ đủ số mà không chọn vẫn là khách vãng lai.</html>",
+                "<html>Type the customer's PHONE NUMBER (3 digits or more)"
+                + " and pick from the suggestions.<br>"
+                + "Only a customer <b>picked from the list</b> is added to the bill"
+                + " -- typing the full number without picking keeps it a walk-in customer.</html>"));
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setFixedCellHeight(22);
@@ -219,7 +224,7 @@ public class CustomerPicker extends JPanel {
                 } catch (Exception ex) {
                     // Tim khach hang that bai KHONG duoc chan viec lap hoa don:
                     // khach vang lai van ban duoc. Mot dong ra console la du.
-                    System.out.println("[CustomerPicker] Khong tim duoc khach hang: " + ex.getMessage());
+                    System.out.println("[CustomerPicker] Cannot find customer: " + ex.getMessage());
                     hidePopup();
                     return;
                 }
@@ -334,7 +339,7 @@ public class CustomerPicker extends JPanel {
     private void updateStatus() {
         CustomerRef c = getSelected();
         if (c == null) {
-            lbStatus.setText("(khach vang lai)");
+            lbStatus.setText(I18n.text("(khách vãng lai)", "(walk-in customer)"));
             lbStatus.setForeground(Color.GRAY);
             lbStatus.setFont(new Font("Segoe UI", Font.ITALIC, 12));
         } else {

@@ -39,9 +39,11 @@ public class MainWindow extends JFrame {
     /** Giữ làm field để {@link #refreshUserInfo()} vẽ lại được khi đổi vai trò. */
     private final JLabel lbInfo = new JLabel();
 
-    private final JButton btSwitchRole = new JButton("Doi vai tro ▾");
-    private final JButton btLogout     = new JButton("Dang xuat");
+    private final JButton btSwitchRole = new JButton(I18n.text("Đổi vai trò", "Switch Role"));
+    private final JButton btLanguage = new JButton();
+    private final JButton btLogout     = new JButton(I18n.text("Đăng xuất", "Log out"));
     private final JPopupMenu switchRoleMenu = new JPopupMenu();
+    private final JMenuItem miLanguage = new JMenuItem();
 
     /** Hàm dựng cũ -- giữ lại để không phá chỗ gọi nào khác. */
     public MainWindow() {
@@ -54,7 +56,7 @@ public class MainWindow extends JFrame {
      *                  {@code (DANG NHAP TU DONG)} màu cam
      */
     public MainWindow(boolean autoLogin) {
-        super("Demo Retail Invoicing  --  Java Swing + JDBC + MySQL 8");
+        super("Retail Invoicing");
         this.autoLogin = autoLogin;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1280, 820);
@@ -66,10 +68,10 @@ public class MainWindow extends JFrame {
         // Lưu hóa đơn xong thì danh sách bên tab 2 tự tải lại.
         newInvoice = new NewInvoicePanel(viewPanel::reload);
 
-        tabs.addTab("1. Lap hoa don",  newInvoice);
-        tabs.addTab("2. Tra cứu dữ liệu",  searchPanel);
-        tabs.addTab("3. Xem hoa don (Database)",  viewPanel);
-        tabs.addTab("4. Bao cao",      new ReportPanel());
+        tabs.addTab(I18n.text("1. Lập hóa đơn", "1. Create Billing"),  newInvoice);
+        tabs.addTab(I18n.text("2. Tra cứu", "2. Search"),              searchPanel);
+        tabs.addTab(I18n.text("3. Xem hóa đơn", "3. Invoices"),        viewPanel);
+        tabs.addTab(I18n.text("4. Báo cáo", "4. Reports"),             new ReportPanel());
 
         // Mỗi lần chuyển sang tab xem hoa đơn thì cập nhật quyền.
         tabs.addChangeListener(e -> {
@@ -81,8 +83,20 @@ public class MainWindow extends JFrame {
         add(tabs, BorderLayout.CENTER);
         add(statusBar(), BorderLayout.SOUTH);
 
+        JMenu languageMenu = new JMenu(I18n.text("Ngôn ngữ", "Language"));
+        miLanguage.addActionListener(e -> toggleLanguage());
+        I18n.markDynamicText(miLanguage);
+        languageMenu.add(miLanguage);
+        JMenuBar menuBar = new JMenuBar();
+        menuBar.add(languageMenu);
+        setJMenuBar(menuBar);
+        btLanguage.addActionListener(e -> toggleLanguage());
+        I18n.markDynamicText(btLanguage);
+        refreshLanguageControls();
+
         // Áp dụng quyền người dùng cho tab xem hóa đơn
         viewPanel.applyRolePermissions();
+        I18n.install(this);
     }
 
     // ------------------------------------------------------------------
@@ -112,20 +126,24 @@ public class MainWindow extends JFrame {
         // luận "app này không có đăng nhập". Dấu hiệu còn lại là dòng
         // [AUTO-LOGIN] in ra console lúc khởi động.
         if (autoLogin) {
-            JLabel lbAuto = new JLabel("(DANG NHAP TU DONG)");
+            JLabel lbAuto = new JLabel(I18n.text("(ĐĂNG NHẬP TỰ ĐỘNG)", "(AUTO LOGIN)"));
             lbAuto.setFont(new Font("Consolas", Font.BOLD, 12));
             lbAuto.setForeground(COLOR_AUTO_LOGIN);
             lbAuto.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
-            lbAuto.setToolTipText("App da dang nhap san, khong qua man hinh dang nhap."
-                + " Dat quick.login.auto= (de trong) trong config.properties de tat.");
+            lbAuto.setToolTipText(I18n.text("Ứng dụng đã tự đăng nhập, không qua màn hình đăng nhập.",
+                                            "The app logged in automatically, without the login screen."));
             left.add(lbAuto);
         }
         left.add(Box.createHorizontalGlue());
 
         btSwitchRole.setFont(new Font("Segoe UI", Font.BOLD, 11));
         btSwitchRole.setForeground(new Color(40, 90, 160));
+        btSwitchRole.setIcon(DROPDOWN_CARET);
+        btSwitchRole.setHorizontalTextPosition(SwingConstants.LEFT);
+        btSwitchRole.setIconTextGap(6);
         btSwitchRole.setFocusPainted(false);
-        btSwitchRole.setToolTipText("Doi sang tai khoan khac ma KHONG mat du lieu dang nhap o tab 1");
+        btSwitchRole.setToolTipText(I18n.text("Đổi sang tài khoản khác mà KHÔNG mất hóa đơn đang lập ở tab 1",
+                                              "Switch to another account WITHOUT losing the bill in tab 1"));
         btSwitchRole.addActionListener(e -> {
             Dimension d = switchRoleMenu.getPreferredSize();
             // Hiện lên PHÍA TRÊN nút: thanh trạng thái nằm sát đáy cửa sổ.
@@ -140,6 +158,7 @@ public class MainWindow extends JFrame {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         right.setOpaque(false);
         right.add(btSwitchRole);
+        right.add(btLanguage);
         right.add(btLogout);
 
         // Nhan nguoi dung o CENTER chu khong phai WEST: BorderLayout cap cho WEST
@@ -153,15 +172,34 @@ public class MainWindow extends JFrame {
         return bar;
     }
 
+    private void toggleLanguage() {
+        I18n.toggle();
+        refreshLanguageControls();
+    }
+
+    private void refreshLanguageControls() {
+        btLanguage.setText(I18n.languageSwitchLabel());
+        miLanguage.setText(I18n.languageSwitchLabel());
+        String nextLanguage = I18n.isEnglish() ? "Tiếng Việt" : "English";
+        String tip = I18n.isEnglish()
+                ? "Switch the interface to " + nextLanguage
+                : "Chuyển giao diện sang " + nextLanguage;
+        btLanguage.setToolTipText(tip);
+        miLanguage.setToolTipText(tip);
+        rebuildSwitchRoleMenu();
+        refreshUserInfo();
+    }
+
     /** Vẽ lại nhãn người dùng ở thanh trạng thái theo {@link UserSession} hiện tại. */
     private void refreshUserInfo() {
         Account user = UserSession.getCurrentUser();
         String userInfo = (user != null)
-                ? user.getFullName() + "  [Vai tro: " + user.getRole().toUpperCase() + "]"
-                : "(Chua dang nhap)";
-        lbInfo.setText("  Nguoi dung: " + userInfo);
+                ? user.getFullName() + I18n.msg("  [Vai trò: ", "  [Role: ")
+                  + user.getRole().toUpperCase() + "]"
+                : I18n.msg("(Chưa đăng nhập)", "(Not logged in)");
+        lbInfo.setText(I18n.msg("  Người dùng: ", "  User: ") + userInfo);
         // Tooltip de doc du khi cua so hep lam chu bi cat.
-        lbInfo.setToolTipText("Nguoi dung: " + userInfo);
+        lbInfo.setToolTipText(I18n.msg("Người dùng: ", "User: ") + userInfo);
     }
 
     /**
@@ -186,7 +224,9 @@ public class MainWindow extends JFrame {
             if (acc.getUsername().equalsIgnoreCase(currentUsername)) {
                 continue;
             }
-            JMenuItem item = new JMenuItem(acc.getButtonLabel());
+            JMenuItem item = new JMenuItem(I18n.quickAccountLabel(acc.getLabel())
+                    + " (" + acc.getUsername() + ")");
+            I18n.markDynamicText(item);
             item.addActionListener(e -> switchRole(acc));
             switchRoleMenu.add(item);
         }
@@ -249,10 +289,13 @@ public class MainWindow extends JFrame {
                 if (acc == null) {
                     // Phiên hiện tại giữ nguyên -- không rơi về trạng thái chưa đăng nhập.
                     JOptionPane.showMessageDialog(MainWindow.this,
-                        "Tai khoan '" + target.getUsername() + "' trong config.properties khong dang nhap duoc.\n"
-                      + "Co the mat khau trong bang Account da bi doi.\n\n"
-                      + "Phien hien tai van duoc giu nguyen.",
-                        "Doi vai tro that bai", JOptionPane.WARNING_MESSAGE);
+                        I18n.msg("Không đăng nhập được bằng tài khoản '" + target.getUsername() + "'.\n"
+                               + "Có thể mật khẩu đã bị đổi.\n\n"
+                               + "Bạn vẫn đang đăng nhập bằng tài khoản hiện tại.",
+                                 "Cannot log in with account '" + target.getUsername() + "'.\n"
+                               + "The password may have been changed.\n\n"
+                               + "You are still logged in with the current account."),
+                        I18n.msg("Đổi vai trò thất bại", "Switch Role Failed"), JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 UserSession.setCurrentUser(acc);     // 1. đổi phiên
@@ -272,7 +315,8 @@ public class MainWindow extends JFrame {
 
     /** Xử lý hành động Đăng xuất: đóng MainWindow và quay lại LoginDialog */
     private void doLogout() {
-        String question = "Ban co chac chan muon dang xuat khoi he thong?";
+        String question = I18n.msg("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?",
+                                   "Are you sure to log out the system?");
         String pending = newInvoice.pendingWorkSummary();
 
         if (!pending.isEmpty()) {
@@ -280,15 +324,19 @@ public class MainWindow extends JFrame {
             // hàng đang nhập mà không hề nói. Dòng gợi ý phía dưới quan trọng hơn
             // vẻ ngoài của nó: nó dạy người dùng rằng đã có đường không mất dữ
             // liệu, đúng lúc họ đang định đi đường mất dữ liệu.
-            question =
-                "Tab \"Lap hoa don\" dang co " + pending + " chua luu.\n"
-              + "Dang xuat se mat toan bo. Van dang xuat?\n\n"
-              + "Goi y: muon xem giao dien cua vai tro khac ma khong mat gio hang\n"
-              + "thi dung nut \"Doi vai tro\" ben canh.";
+            question = I18n.msg(
+                "Tab \"Lập hóa đơn\" đang có " + pending + " chưa lưu.\n"
+              + "Đăng xuất sẽ mất toàn bộ. Vẫn đăng xuất?\n\n"
+              + "Gợi ý: muốn xem giao diện của vai trò khác mà không mất giỏ hàng\n"
+              + "thì dùng nút \"Đổi vai trò\" bên cạnh.",
+                "Tab \"Create Billing\" has " + pending + " unsaved.\n"
+              + "Logging out will discard everything. Log out anyway?\n\n"
+              + "Tip: to see another role without losing the cart,\n"
+              + "use the \"Switch Role\" button next to it.");
         }
 
         int choice = JOptionPane.showConfirmDialog(this, question,
-                "Xac nhan dang xuat", JOptionPane.YES_NO_OPTION);
+                I18n.msg("Xác nhận đăng xuất", "Confirm Logout"), JOptionPane.YES_NO_OPTION);
 
         if (choice == JOptionPane.YES_OPTION) {
             this.dispose();           // Đóng cửa sổ chính hiện tại
@@ -298,4 +346,25 @@ public class MainWindow extends JFrame {
             AppFlow.showLogin(null);
         }
     }
+
+    /** Draw the dropdown caret so it does not depend on font glyph coverage. */
+    private static final Icon DROPDOWN_CARET = new Icon() {
+        @Override public int getIconWidth() { return 8; }
+
+        @Override public int getIconHeight() { return 6; }
+
+        @Override
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            Color color = component.isEnabled()
+                    ? component.getForeground()
+                    : UIManager.getColor("Button.disabledText");
+            g2.setColor(color == null ? Color.GRAY : color);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.fillPolygon(new int[] {x, x + 7, x + 3},
+                    new int[] {y, y, y + 5}, 3);
+            g2.dispose();
+        }
+    };
 }

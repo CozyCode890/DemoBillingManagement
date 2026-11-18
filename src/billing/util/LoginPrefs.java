@@ -86,7 +86,7 @@ public final class LoginPrefs {
             try (OutputStream out = Files.newOutputStream(FILE,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE)) {
-                p.store(out, "Ten dang nhap gan nhat. KHONG chua mat khau -- xem billing.util.LoginPrefs.");
+                p.store(out, "Last username. Does NOT contain the password -- see billing.util.LoginPrefs.");
             }
         } catch (Exception e) {
             fail("ghi", e);
@@ -95,8 +95,8 @@ public final class LoginPrefs {
 
     private static void fail(String what, Exception e) {
         disabled = true;
-        System.err.println("[LoginPrefs] Khong " + what + " duoc " + FILE.toAbsolutePath()
-            + " -- tat viec nho ten dang nhap cho phien nay. Ly do: " + e.getMessage());
+        System.err.println("[LoginPrefs] Cannot " + what + " " + FILE.toAbsolutePath()
+            + " -- remembering the username is turned off for this session. Reason: " + e.getMessage());
     }
 
     private LoginPrefs() { }

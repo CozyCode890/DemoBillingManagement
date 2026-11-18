@@ -45,7 +45,8 @@ public class EditLineDialog extends JDialog {
     public EditLineDialog(Window owner, InvoiceDao dao, String invoiceId, int lineNumber,
                           String barcode, BigDecimal quantity,
                           BigDecimal unitPrice, BigDecimal discount) {
-        super(owner, "Chinh sua Dong hang: " + lineNumber + " (HD: " + invoiceId + ")", ModalityType.APPLICATION_MODAL);
+        super(owner, I18n.msg("Sửa dòng hàng: ", "Edit Line: ") + lineNumber
+                + I18n.msg(" (hóa đơn ", " (invoice ") + invoiceId + ")", ModalityType.APPLICATION_MODAL);
         this.dao = dao;
         this.invoiceId = invoiceId;
         this.lineNumber = lineNumber;
@@ -61,11 +62,16 @@ public class EditLineDialog extends JDialog {
         tfUnitPrice.setText(unitPrice == null ? "0" : Ui.moneyInput(unitPrice));
         tfDiscount.setText(discount == null ? "0" : Ui.moneyInput(discount));
 
-        tfQuantity.setToolTipText("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN,"
-                + " toi da 3 chu so (cot DECIMAL(10,3)).<br>"
-                + "Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>");
-        String moneyTip = "<html>Dau <b>.</b> la dau TACH NGHIN: <code>158.000</code>"
-                + " = 158 nghin.<br>Dau <b>,</b> la dau thap phan (toi da 2 chu so).</html>";
+        tfQuantity.setToolTipText(I18n.msg(
+                "<html>Dấu <b>,</b> hoặc <b>.</b> là dấu THẬP PHÂN, tối đa 3 chữ số.<br>"
+                + "Đúng: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>",
+                "<html><b>,</b> or <b>.</b> is the DECIMAL point, up to 3 digits.<br>"
+                + "Valid: <code>2</code> | <code>1,5</code> | <code>1.5</code></html>"));
+        String moneyTip = I18n.msg(
+                "<html>Dấu <b>.</b> là dấu TÁCH NGHÌN: <code>158.000</code> = 158 nghìn.<br>"
+                + "Dấu <b>,</b> là dấu thập phân (tối đa 2 chữ số).</html>",
+                "<html><b>.</b> separates THOUSANDS: <code>158.000</code> = 158 thousand.<br>"
+                + "<b>,</b> is the decimal point (up to 2 digits).</html>");
         tfUnitPrice.setToolTipText(moneyTip);
         tfDiscount.setToolTipText(moneyTip);
 
@@ -79,23 +85,25 @@ public class EditLineDialog extends JDialog {
         int row = 0;
 
         // Mã vạch
-        addFormRow(form, gbc, row++, "Ma vach (Barcode) *:", tfBarcode, () -> trySetNull("Ma vach (Barcode)", tfBarcode));
+        addFormRow(form, gbc, row++, I18n.msg("Mã vạch", "Barcode") + " *:", tfBarcode);
         // Số lượng
-        addFormRow(form, gbc, row++, "So luong (Quantity) *:", tfQuantity, () -> trySetNull("So luong (Quantity)", tfQuantity));
+        addFormRow(form, gbc, row++, I18n.msg("Số lượng", "Quantity") + " *:", tfQuantity);
         // Đơn giá
-        addFormRow(form, gbc, row++, "Don gia (Unit_Price) *:", tfUnitPrice, () -> trySetNull("Don gia (Unit_Price)", tfUnitPrice));
+        addFormRow(form, gbc, row++, I18n.msg("Đơn giá", "Unit price") + " *:", tfUnitPrice);
         // Giảm giá
-        addFormRow(form, gbc, row++, "Giam gia (Discount) *:", tfDiscount, () -> trySetNull("Giam gia (Discount)", tfDiscount));
+        addFormRow(form, gbc, row++, I18n.msg("Giảm giá", "Discount") + " *:", tfDiscount);
 
         // Dòng chú thích
         gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 3;
-        JLabel lbNote = new JLabel("<html><i style='color:#c0392b;'>* Toan bo cac cot trong Invoice_Line deu co rang buoc NOT NULL.<br>Nut 'Thu xoa (Set NULL)' se minh hoa co che canh bao cua Database.</i></html>");
+        JLabel lbNote = new JLabel(I18n.msg(
+                "<html><i style='color:#c0392b;'>* Các ô đánh dấu (*) bắt buộc phải có giá trị.</i></html>",
+                "<html><i style='color:#c0392b;'>* Fields marked (*) are required.</i></html>"));
         form.add(lbNote, gbc);
 
         // Nút Lưu / Hủy
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
-        JButton btSave = new JButton("Luu vao Database");
-        JButton btCancel = new JButton("Huy bo");
+        JButton btSave = new JButton(I18n.msg("Lưu", "Save"));
+        JButton btCancel = new JButton(I18n.msg("Hủy bỏ", "Cancel"));
 
         btSave.setFont(Ui.BOLD);
         btSave.addActionListener(e -> doSave());
@@ -111,51 +119,41 @@ public class EditLineDialog extends JDialog {
         setLocationRelativeTo(owner);
     }
 
+    // Nút "Thu xoa (Set NULL)" đã bỏ (note của nhóm): nó chỉ minh họa ràng
+    // buộc NOT NULL của database, nhân viên không cần.
     private void addFormRow(JPanel form, GridBagConstraints gbc, int row,
-                            String label, JTextField field, Runnable onTrySetNull) {
+                            String label, JTextField field) {
         gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 1;
         form.add(new JLabel(label), gbc);
         gbc.gridx = 1;
         form.add(field, gbc);
-
-        JButton btTryNull = new JButton("Thu xoa (Set NULL)");
-        btTryNull.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        btTryNull.addActionListener(e -> onTrySetNull.run());
-        gbc.gridx = 2;
-        form.add(btTryNull, gbc);
-    }
-
-    /** Minh họa hành động cố ý xóa trường NOT NULL về rỗng/NULL */
-    private void trySetNull(String fieldName, JTextField targetField) {
-        targetField.setText("");
-        showNotNullWarning(fieldName);
     }
 
     private void doSave() {
         String barcode = tfBarcode.getText().trim();
         if (barcode.isEmpty()) {
-            showNotNullWarning("Ma vach (Barcode)");
+            showNotNullWarning(I18n.msg("Mã vạch", "Barcode"));
             tfBarcode.requestFocus();
             return;
         }
 
         String qtyStr = tfQuantity.getText().trim();
         if (qtyStr.isEmpty()) {
-            showNotNullWarning("So luong (Quantity)");
+            showNotNullWarning(I18n.msg("Số lượng", "Quantity"));
             tfQuantity.requestFocus();
             return;
         }
 
         String priceStr = tfUnitPrice.getText().trim();
         if (priceStr.isEmpty()) {
-            showNotNullWarning("Don gia (Unit_Price)");
+            showNotNullWarning(I18n.msg("Đơn giá", "Unit price"));
             tfUnitPrice.requestFocus();
             return;
         }
 
         String discStr = tfDiscount.getText().trim();
         if (discStr.isEmpty()) {
-            showNotNullWarning("Giam gia (Discount)");
+            showNotNullWarning(I18n.msg("Giảm giá", "Discount"));
             tfDiscount.requestFocus();
             return;
         }
@@ -171,17 +169,18 @@ public class EditLineDialog extends JDialog {
 
         // Đơn giá và giảm giá NHẬN số 0: Discount = 0.00 là giá trị bình thường
         // nhất của cột đó.
-        BigDecimal unitPrice = Ui.readMoneyAllowZero(this, priceStr, "Don gia (Unit_Price)");
+        BigDecimal unitPrice = Ui.readMoneyAllowZero(this, priceStr, I18n.msg("Đơn giá", "Unit price"));
         if (unitPrice == null) return;
 
-        BigDecimal discount = Ui.readMoneyAllowZero(this, discStr, "Giam gia (Discount)");
+        BigDecimal discount = Ui.readMoneyAllowZero(this, discStr, I18n.msg("Giảm giá", "Discount"));
         if (discount == null) return;
 
         try {
             dao.updateInvoiceLine(invoiceId, lineNumber, barcode, quantity, unitPrice, discount);
             JOptionPane.showMessageDialog(this,
-                    "Cap nhat dong hang " + lineNumber + " thanh cong trong Database!",
-                    "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                    I18n.msg("Cập nhật dòng hàng " + lineNumber + " thành công!",
+                             "Line " + lineNumber + " updated successfully!"),
+                    I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
             saved = true;
             dispose();
         } catch (Exception ex) {
@@ -191,9 +190,9 @@ public class EditLineDialog extends JDialog {
 
     private void showNotNullWarning(String fieldName) {
         JOptionPane.showMessageDialog(this,
-                "CANH BAO DATABASE: Cot '" + fieldName + "' co rang buoc NOT NULL trong Database!\n"
-              + "Ban khong duoc phep xoa gia tri nay ve NULL hoac de trong.",
-                "Canh bao rang buoc NOT NULL", JOptionPane.WARNING_MESSAGE);
+                I18n.msg("Ô '" + fieldName + "' bắt buộc phải có giá trị, không được để trống!",
+                         "Please fill in '" + fieldName + "', it cannot be empty!"),
+                I18n.msg("Thiếu thông tin", "Missing Information"), JOptionPane.WARNING_MESSAGE);
     }
 
     public boolean isSaved() {

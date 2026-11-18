@@ -53,7 +53,7 @@ public class AccountDao {
             return null;
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi xac thuc tai khoan: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to authenticate account: " + e.getMessage(), e);
         }
     }
 

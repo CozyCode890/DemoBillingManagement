@@ -52,10 +52,10 @@ public class InvoiceViewPanel extends JPanel {
     private final JTable tbPayments = Ui.readOnlyTable();
     /** Hóa đơn điều chỉnh = Invoice_Line − Return (sp_get_invoice_adjusted). */
     private final JTable tbAdjusted = Ui.readOnlyTable();
-    private static final String ADJ_TITLE_NONE =
-            "Hoa don dieu chinh -- (hoa don nay chua tra hang)";
     private final javax.swing.border.TitledBorder adjustedBorder =
-            BorderFactory.createTitledBorder(ADJ_TITLE_NONE);
+            BorderFactory.createTitledBorder(adjustedTitleNone());
+    /** Tong moi / tien hoan cua hoa don dang xem (null = chua tra hang) -- de ve lai tieu de. */
+    private BigDecimal adjNewTotal, adjRefund;
     private final JPanel pnlAdjustedContainer = new JPanel(new BorderLayout(2, 2));
     private final JTextArea taHeader = new JTextArea(8, 40);
 
@@ -74,7 +74,7 @@ public class InvoiceViewPanel extends JPanel {
     // Button thao tác trên bảng "Hoa don dieu chinh": hủy phần trả của MỘT
     // dòng. Return_ID vẫn là khóa trong DB nhưng không hiện ra nữa, nên thao
     // tác đi theo dòng hóa đơn (sp_delete_return).
-    private final JButton btDeleteReturn   = new JButton("Huy tra hang dong nay");
+    private final JButton btDeleteReturn   = new JButton(I18n.text("Hủy trả hàng dòng này", "Cancel return of this line"));
 
     // =================================================================
     //  Ô CHỌN KHOẢNG NGÀY + NHÃN SỐ DÒNG (khối 6)
@@ -173,6 +173,8 @@ public class InvoiceViewPanel extends JPanel {
 
         taHeader.setEditable(false);
         taHeader.setFont(Ui.MONO);
+        I18n.markKeyValueText(taHeader);
+        I18n.onLanguageChange(this, this::updateAdjustedTitle);
 
         // --- Cột trái: Danh sách hóa đơn và nút thao tác ---
         JButton btReload = new JButton("Tai lai danh sach");
@@ -182,8 +184,8 @@ public class InvoiceViewPanel extends JPanel {
         // hàng, mà không nạp cả 548 dòng ngay khi mở tab.
         cbDays.setSelectedIndex(1);
         cbDays.addActionListener(e -> reload());
-        cbDays.setToolTipText("Loc theo ngay ban. 'Tat ca' nap moi hoa don, "
-                + "ke ca hai hoa don INV-OLD-* tu nam truoc.");
+        cbDays.setToolTipText(I18n.text("Lọc theo ngày bán. 'Tất cả' hiện mọi hóa đơn, kể cả năm trước.",
+                                        "Filter by sale date. 'All' shows every invoice, including last year's."));
 
         JPanel pnlFilter = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         pnlFilter.add(new JLabel("Khoang ngay:"));
@@ -252,15 +254,15 @@ public class InvoiceViewPanel extends JPanel {
         pnlAdjustedContainer.setBorder(adjustedBorder);
 
         JSplitPane linesSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                Ui.titled("Hoa don goc (Invoice_Line)", pnlLinesContainer),
+                Ui.titled(I18n.text("Hóa đơn gốc", "Original invoice"), pnlLinesContainer),
                 pnlAdjustedContainer);
         linesSplit.setResizeWeight(0.5);
         linesSplit.setBorder(null);
 
         JPanel right = new JPanel(new GridLayout(3, 1, 6, 6));
-        right.add(Ui.titled("Thong tin chung + tong tien", new JScrollPane(taHeader)));
+        right.add(Ui.titled(I18n.text("Thông tin chung + tổng tiền", "Summary + totals"), new JScrollPane(taHeader)));
         right.add(linesSplit);
-        right.add(Ui.titled("Thanh toan (Payment + bang con)", new JScrollPane(tbPayments)));
+        right.add(Ui.titled(I18n.text("Thanh toán", "Payments"), new JScrollPane(tbPayments)));
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
         split.setResizeWeight(0.42);
@@ -346,7 +348,8 @@ public class InvoiceViewPanel extends JPanel {
         btDeleteReturn.setEnabled(isManager);
 
         if (!isManager) {
-            String lockHint = "Chuc nang nay bi khoa voi Thu ngan (Cashier). Chi Quan ly (Manager) moi co quyen.";
+            String lockHint = I18n.text("Chức năng này bị khóa với Thu ngân. Chỉ Quản lý mới có quyền.",
+                                        "This function is locked for Cashiers. Only Managers have permission.");
             btEditInvoice.setToolTipText(lockHint);
             btVoidInvoice.setToolTipText(lockHint);
             btDeleteInvoice.setToolTipText(lockHint);
@@ -355,13 +358,17 @@ public class InvoiceViewPanel extends JPanel {
             btReturnLine.setToolTipText(lockHint);
             btDeleteReturn.setToolTipText(lockHint);
         } else {
-            btEditInvoice.setToolTipText("Chinh sua thong tin hoa don truc tiep trong DB");
-            btVoidInvoice.setToolTipText("Huy hoa don: du lieu van con, chi khong tinh vao bao cao");
-            btDeleteInvoice.setToolTipText("Xoa hoa don va toan bo du lieu lien quan khoi DB");
-            btEditLine.setToolTipText("Chinh sua so luong, don gia dong hang trong DB");
-            btDeleteLine.setToolTipText("Xoa dong hang khoi DB");
-            btReturnLine.setToolTipText("Ghi mot luot tra hang cho cac dong cua hoa don dang chon");
-            btDeleteReturn.setToolTipText("Huy phan tra hang cua dong dang chon trong bang Hoa don dieu chinh");
+            btEditInvoice.setToolTipText(I18n.text("Sửa thông tin hóa đơn", "Edit the invoice details"));
+            btVoidInvoice.setToolTipText(I18n.text("Hủy hóa đơn: hóa đơn vẫn còn nhưng không tính vào doanh thu",
+                                                   "Void the invoice: it is kept but no longer counted in revenue"));
+            btDeleteInvoice.setToolTipText(I18n.text("Xóa hẳn hóa đơn cùng hàng, thanh toán và trả hàng của nó",
+                                                     "Delete the invoice with all its items, payments and returns"));
+            btEditLine.setToolTipText(I18n.text("Sửa số lượng, đơn giá của dòng hàng", "Edit the quantity or unit price of the line"));
+            btDeleteLine.setToolTipText(I18n.text("Xóa dòng hàng", "Delete the line"));
+            btReturnLine.setToolTipText(I18n.text("Trả hàng cho các dòng của hóa đơn đang chọn",
+                                                  "Return items from the selected invoice"));
+            btDeleteReturn.setToolTipText(I18n.text("Hủy phần trả hàng của dòng đang chọn trong bảng Hóa đơn điều chỉnh",
+                                                    "Cancel the return of the selected line in the Adjusted invoice table"));
         }
     }
 
@@ -454,9 +461,9 @@ public class InvoiceViewPanel extends JPanel {
                 QueryResult adjusted = dao.invoiceAdjusted(invoiceId);
                 fillFormatted(tbAdjusted, adjusted, new int[]{7, 8, 9, 10}, null,
                               new int[]{4, 5, 6}, null);
-                BigDecimal newTotal = Ui.dec(h.rows.get(0)[13]);
-                adjustedBorder.setTitle("Hoa don dieu chinh (= Invoice_Line - Return) -- tong moi "
-                        + Ui.money(newTotal) + ", da hoan " + Ui.money(refund));
+                adjNewTotal = Ui.dec(h.rows.get(0)[13]);
+                adjRefund = refund;
+                updateAdjustedTitle();
             } else {
                 clearAdjusted();
             }
@@ -472,7 +479,22 @@ public class InvoiceViewPanel extends JPanel {
         DefaultTableModel m = (DefaultTableModel) tbAdjusted.getModel();
         m.setRowCount(0);
         m.setColumnCount(0);
-        adjustedBorder.setTitle(ADJ_TITLE_NONE);
+        adjNewTotal = null;
+        adjRefund = null;
+        updateAdjustedTitle();
+    }
+
+    private static String adjustedTitleNone() {
+        return I18n.msg("Hóa đơn điều chỉnh -- (hóa đơn này chưa trả hàng)",
+                        "Adjusted invoice -- (no returns on this invoice)");
+    }
+
+    /** Tieu de khung hoa don dieu chinh theo ngon ngu hien tai. */
+    private void updateAdjustedTitle() {
+        adjustedBorder.setTitle(adjNewTotal == null ? adjustedTitleNone()
+                : I18n.msg("Hóa đơn điều chỉnh (sau trả hàng) -- tổng mới ",
+                           "Adjusted invoice (after returns) -- new total ")
+                  + Ui.money(adjNewTotal) + I18n.msg(", đã hoàn ", ", refunded ") + Ui.money(adjRefund));
         pnlAdjustedContainer.repaint();
     }
 
@@ -555,14 +577,22 @@ public class InvoiceViewPanel extends JPanel {
         }
 
         int choice = JOptionPane.showConfirmDialog(this,
-                "Huy hoa don " + invoiceId + "?\n\n"
-              + "Huy KHAC Xoa:\n"
-              + "  - Du lieu van con nguyen: dong hang, thanh toan, tra hang\n"
-              + "  - Hoa don khong con duoc tinh vao bao cao doanh thu\n"
-              + "  - Khong tra hang duoc nua\n"
-              + "  - KHONG mo lai duoc: VOIDED la trang thai cuoi\n\n"
-              + "Muon xoa sach khoi database thi dung nut \"Xoa hoa don\".",
-                "Xac nhan huy hoa don",
+                I18n.msg(
+                "Hủy hóa đơn " + invoiceId + "?\n\n"
+              + "Hủy KHÁC Xóa:\n"
+              + "  - Hóa đơn vẫn còn nguyên: hàng, thanh toán, trả hàng\n"
+              + "  - Hóa đơn không còn được tính vào doanh thu\n"
+              + "  - Không trả hàng được nữa\n"
+              + "  - KHÔNG mở lại được\n\n"
+              + "Muốn xóa hẳn hóa đơn thì dùng nút \"Xóa hóa đơn\".",
+                "Void invoice " + invoiceId + "?\n\n"
+              + "Void is NOT Delete:\n"
+              + "  - The invoice is kept: items, payments, returns\n"
+              + "  - It is no longer counted in revenue\n"
+              + "  - No more returns are possible\n"
+              + "  - It CANNOT be reopened\n\n"
+              + "To remove the invoice completely, use \"Delete invoice\"."),
+                I18n.msg("Xác nhận hủy hóa đơn", "Confirm Void Invoice"),
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
 
@@ -580,14 +610,16 @@ public class InvoiceViewPanel extends JPanel {
                 try {
                     get();
                 } catch (Exception ex) {
-                    showSqlFailure(InvoiceViewPanel.this, ex, "Khong huy duoc hoa don");
+                    showSqlFailure(InvoiceViewPanel.this, ex, I18n.msg("Không hủy được hóa đơn", "Cannot Void Invoice"));
                     return;
                 }
 
                 JOptionPane.showMessageDialog(InvoiceViewPanel.this,
-                        "Da huy hoa don " + invoiceId + ".\n"
-                      + "Du lieu van con trong database, chi khong tinh vao bao cao nua.",
-                        "Da huy hoa don", JOptionPane.INFORMATION_MESSAGE);
+                        I18n.msg("Đã hủy hóa đơn " + invoiceId + ".\n"
+                               + "Hóa đơn vẫn còn, chỉ không tính vào doanh thu nữa.",
+                                 "Invoice " + invoiceId + " has been voided.\n"
+                               + "It is kept, but no longer counted in revenue."),
+                        I18n.msg("Đã hủy hóa đơn", "Invoice Voided"), JOptionPane.INFORMATION_MESSAGE);
 
                 // PHẢI THẤY KẾT QUẢ: reload() xóa selection nên chọn lại đúng
                 // hàng rồi vẽ lại chi tiết (plan/12 lỗi #12).
@@ -607,22 +639,32 @@ public class InvoiceViewPanel extends JPanel {
         }
 
         int choice = JOptionPane.showConfirmDialog(this,
-                "Ban co chac chan muon XOA VINH VIEN hoa don " + invoiceId + " khoi Database?\n\n"
-              + "Thao tac nay se xoa sach:\n"
-              + "  1. Cac luot tra hang lien quan (Return)\n"
-              + "  2. Cac chi tiet thanh toan (Cash/Card/EWallet_Payment)\n"
-              + "  3. Cac luot thanh toan (Payment)\n"
-              + "  4. Toan bo dong hang (Invoice_Line)\n"
-              + "  5. Phan dau hoa don (Invoice)\n\n"
-              + "Hanh dong khong the hoan tac!",
-                "Xac nhan xoa hoa don khoi Database",
+                I18n.msg(
+                "Bạn có chắc chắn muốn XÓA VĨNH VIỄN hóa đơn " + invoiceId + "?\n\n"
+              + "Thao tác này sẽ xóa sạch:\n"
+              + "  1. Các lượt trả hàng\n"
+              + "  2. Các lượt thanh toán và chi tiết thanh toán\n"
+              + "  3. Toàn bộ dòng hàng\n"
+              + "  4. Hóa đơn\n\n"
+              + "Hành động không thể hoàn tác!",
+                "Are you sure to PERMANENTLY DELETE invoice " + invoiceId + "?\n\n"
+              + "This will delete:\n"
+              + "  1. All returns\n"
+              + "  2. All payments and payment details\n"
+              + "  3. All items\n"
+              + "  4. The invoice itself\n\n"
+              + "This cannot be undone!"),
+                I18n.msg("Xác nhận xóa hóa đơn", "Confirm Delete Invoice"),
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
 
         if (choice == JOptionPane.YES_OPTION) {
             try {
                 dao.deleteInvoice(invoiceId);
-                JOptionPane.showMessageDialog(this, "Da xoa thanh cong hoa don " + invoiceId + " khoi Database!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this,
+                        I18n.msg("Đã xóa thành công hóa đơn " + invoiceId + "!",
+                                 "Invoice " + invoiceId + " deleted successfully!"),
+                        I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
 
                 // Xóa trắng khung chi tiết.
                 // Bản cũ chạy ba câu QueryResult.run("SELECT '' WHERE 1=0") chỉ
@@ -953,11 +995,13 @@ public class InvoiceViewPanel extends JPanel {
         Account user = UserSession.getCurrentUser();
         if (user == null || user.getCashierId() == null || user.getCashierId().isBlank()) {
             JOptionPane.showMessageDialog(this,
-                "Tai khoan '" + (user == null ? "?" : user.getUsername()) + "' chua duoc gan voi nhan vien\n"
-              + "nao trong bang Cashier, nen khong the dung lam nguoi duyet tra hang.\n\n"
-              + "Cach sua: bam \"Nap lai database\" trong Setup App (xoa sach du lieu),\n"
-              + "hoac chay doan ALTER/UPDATE o plan/12 muc 4.1 de giu du lieu dang co.",
-                "Chua xac dinh duoc nguoi duyet", JOptionPane.WARNING_MESSAGE);
+                I18n.msg("Tài khoản '" + (user == null ? "?" : user.getUsername())
+                       + "' chưa được gắn với nhân viên nào,\n"
+                       + "nên không thể duyệt trả hàng. Vui lòng báo quản lý.",
+                         "Account '" + (user == null ? "?" : user.getUsername())
+                       + "' is not linked to any employee,\n"
+                       + "so it cannot approve returns. Please tell your manager!"),
+                I18n.msg("Chưa xác định được người duyệt", "Missing Approver"), JOptionPane.WARNING_MESSAGE);
             return;
         }
         final String approverId = user.getCashierId();
@@ -981,10 +1025,11 @@ public class InvoiceViewPanel extends JPanel {
             InvoiceStatus st = InvoiceStatus.of(status);
             if (st != InvoiceStatus.PAID) {
                 JOptionPane.showMessageDialog(this,
-                        "Hoa don " + invoiceId + " dang o trang thai "
-                      + (st == null ? status : st.display())
-                      + ".\nChi hoa don da thanh toan (PAID) moi tra hang duoc.",
-                        "Khong tra hang duoc", JOptionPane.WARNING_MESSAGE);
+                        I18n.msg("Hóa đơn " + invoiceId + " " + statusText(st, status)
+                               + ".\nChỉ hóa đơn đã thanh toán và chưa trả hàng mới trả hàng được.",
+                                 "Invoice " + invoiceId + " " + statusText(st, status)
+                               + ".\nOnly paid invoices without returns can be returned."),
+                        I18n.msg("Không trả hàng được", "Cannot Return"), JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
@@ -1007,8 +1052,9 @@ public class InvoiceViewPanel extends JPanel {
             returnDialog.setLayout(new BorderLayout(10, 10));
             ((JPanel) returnDialog.getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            JLabel headerLabel = new JLabel("Hoa don: " + invoiceId
-                    + "  |  Ngay: " + invoiceDate + "  |  Trang thai: " + status);
+            JLabel headerLabel = new JLabel(I18n.msg("Hóa đơn: ", "Invoice: ") + invoiceId
+                    + I18n.msg("  |  Ngày: ", "  |  Date: ") + invoiceDate
+                    + I18n.msg("  |  Trạng thái: ", "  |  Status: ") + statusText(st, status));
             headerLabel.setFont(Ui.BOLD);
             JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
             headerPanel.add(headerLabel);
@@ -1036,7 +1082,7 @@ public class InvoiceViewPanel extends JPanel {
             sizeColumns(returnTable, new int[]{50, 175, 80, 55, 105}, 430, 8);
 
             JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
-            rightPanel.setBorder(BorderFactory.createTitledBorder("Se tra lai"));
+            rightPanel.setBorder(BorderFactory.createTitledBorder(I18n.msg("Sẽ trả lại", "To be returned")));
             rightPanel.add(new JScrollPane(returnTable), BorderLayout.CENTER);
 
             final JButton btnAdd     = new JButton("Them >>");
@@ -1105,9 +1151,12 @@ public class InvoiceViewPanel extends JPanel {
                 // được phép có cùng một sản phẩm ở hai dòng (plan/12 lỗi #9).
                 if (rowsModel.indexOfLine(line.lineNumber) >= 0) {
                     JOptionPane.showMessageDialog(returnDialog,
-                            "Dong " + line.lineNumber + " (" + line.productName + ") da co trong danh sach se tra.\n\n"
-                          + "Muon doi so luong: chon muc do o bang ben phai, bam '<< Xoa',\n"
-                          + "roi 'Them >>' lai voi so luong khac.",
+                            I18n.msg("Dòng " + line.lineNumber + " (" + line.productName + ") đã có trong danh sách sẽ trả.\n\n"
+                                   + "Muốn đổi số lượng: chọn mục đó ở bảng bên phải, bấm '<< Xóa',\n"
+                                   + "rồi 'Thêm >>' lại với số lượng khác.",
+                                     "Line " + line.lineNumber + " (" + line.productName + ") is already in the return list.\n\n"
+                                   + "To change the quantity, select it on the right, click '<< Remove',\n"
+                                   + "then 'Add >>' again with the new quantity."),
                             "Dong nay da duoc chon", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
@@ -1115,9 +1164,12 @@ public class InvoiceViewPanel extends JPanel {
                 BigDecimal remaining = line.remaining.subtract(rowsModel.selectedFor(line.lineNumber));
                 if (remaining.signum() <= 0) {
                     JOptionPane.showMessageDialog(returnDialog,
-                            "Dong " + line.lineNumber + " (" + line.productName + ") da tra het "
-                          + Ui.qty(line.bought) + " " + line.unit + " da mua,\n"
-                          + "khong con gi de tra.",
+                            I18n.msg("Dòng " + line.lineNumber + " (" + line.productName + ") đã trả hết "
+                                   + Ui.qty(line.bought) + " " + line.unit + " đã mua,\n"
+                                   + "không còn gì để trả.",
+                                     "Line " + line.lineNumber + " (" + line.productName + ") has already returned all "
+                                   + Ui.qty(line.bought) + " " + line.unit + ",\n"
+                                   + "there is nothing left to return."),
                             "Da tra het", JOptionPane.WARNING_MESSAGE);
                     return;
                 }
@@ -1125,12 +1177,13 @@ public class InvoiceViewPanel extends JPanel {
                 // Điền sẵn số còn lại -> trường hợp phổ biến nhất (trả hết phần
                 // còn lại) chỉ còn một lần Enter.
                 Object answer = JOptionPane.showInputDialog(returnDialog,
-                        "San pham: " + line.productName + "\n"
-                      + "Da mua: " + Ui.qty(line.bought) + " " + line.unit
-                      + "   |   Da tra: " + Ui.qty(line.returned)
-                      + "   |   Con lai: " + Ui.qty(remaining) + "\n\n"
-                      + "Nhap so luong tra (toi da 3 chu so thap phan, dung ',' hoac '.'):",
-                        "Nhap so luong tra cho dong " + line.lineNumber,
+                        I18n.msg("Sản phẩm: ", "Product: ") + line.productName + "\n"
+                      + I18n.msg("Đã mua: ", "Bought: ") + Ui.qty(line.bought) + " " + line.unit
+                      + I18n.msg("   |   Đã trả: ", "   |   Returned: ") + Ui.qty(line.returned)
+                      + I18n.msg("   |   Còn lại: ", "   |   Remaining: ") + Ui.qty(remaining) + "\n\n"
+                      + I18n.msg("Nhập số lượng trả (tối đa 3 chữ số thập phân, dùng ',' hoặc '.'):",
+                                 "Enter the return quantity (up to 3 decimal places, use ',' or '.'):"),
+                        I18n.msg("Nhập số lượng trả cho dòng ", "Return quantity for line ") + line.lineNumber,
                         JOptionPane.QUESTION_MESSAGE, null, null,
                         Ui.qtyInput(remaining));
                 if (answer == null) return;           // bấm Cancel / đóng hộp thoại
@@ -1176,12 +1229,18 @@ public class InvoiceViewPanel extends JPanel {
                 final List<ReturnItem> items = rowsModel.toReturnItems();
 
                 int choice = JOptionPane.showConfirmDialog(returnDialog,
-                        "Ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + "?\n\n"
-                      + "Tong tien phai tra lai: " + Ui.money(total) + "\n"
-                      + "Nguoi duyet: " + approverLabel + "\n\n"
-                      + "Sau khi tra, hoa don " + invoiceId + " chuyen sang VOIDED va KHONG tra\n"
-                      + "hang them duoc nua. Doanh thu tinh theo hoa don dieu chinh.",
-                        "Xac nhan xu ly tra hang",
+                        I18n.msg(
+                        "Trả " + items.size() + " dòng hàng của hóa đơn " + invoiceId + "?\n\n"
+                      + "Tổng tiền phải trả lại: " + Ui.money(total) + "\n"
+                      + "Người duyệt: " + approverLabel + "\n\n"
+                      + "Sau khi trả, hóa đơn " + invoiceId + " KHÔNG trả hàng thêm được nữa.\n"
+                      + "Doanh thu tính theo hóa đơn điều chỉnh.",
+                        "Return " + items.size() + " line(s) of invoice " + invoiceId + "?\n\n"
+                      + "Total refund: " + Ui.money(total) + "\n"
+                      + "Approver: " + approverLabel + "\n\n"
+                      + "After this, invoice " + invoiceId + " CANNOT take more returns.\n"
+                      + "Revenue follows the adjusted invoice."),
+                        I18n.msg("Xác nhận trả hàng", "Confirm Return"),
                         JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
                 if (choice != JOptionPane.YES_OPTION) return;
 
@@ -1232,10 +1291,10 @@ public class InvoiceViewPanel extends JPanel {
             returnDialog.setSize(w, h);
             returnDialog.setMinimumSize(new Dimension(Math.min(720, w), Math.min(420, h)));
             if (w < pref.width || h < pref.height) {
-                System.out.println("[InvoiceViewPanel] Hop thoai tra hang bi thu nho: " + w + "x" + h
-                        + " < can " + pref.width + "x" + pref.height
-                        + " (vung lam viec " + work.width + "x" + work.height
-                        + ") -- hai bang deu co thanh cuon nen khong mat noi dung.");
+                System.out.println("[InvoiceViewPanel] Return dialog shrunk: " + w + "x" + h
+                        + " < needed " + pref.width + "x" + pref.height
+                        + " (work area " + work.width + "x" + work.height
+                        + ") -- both tables scroll, so nothing is lost.");
             }
             returnDialog.setLocationRelativeTo(this);
             returnDialog.setVisible(true);
@@ -1301,13 +1360,21 @@ public class InvoiceViewPanel extends JPanel {
      * <p>Đọc cột theo chỉ số của sp_get_invoice_adjusted: 1 Dong, 2 San_pham,
      * 5 SL_tra, 9 Tien_hoan.
      */
+    /** "đã thanh toán" / "đã hủy hoặc đã trả hàng" -- câu cho nhân viên, không có mã PAID/VOIDED. */
+    private static String statusText(InvoiceStatus st, String raw) {
+        if (st == InvoiceStatus.PAID) return I18n.msg("đã thanh toán", "is paid");
+        if (st == InvoiceStatus.VOIDED) return I18n.msg("đã hủy hoặc đã trả hàng", "is voided or already has returns");
+        return raw;
+    }
+
     private void onDeleteReturn() {
         String invoiceId = getSelectedInvoiceId();
         int row = tbAdjusted.getSelectedRow();
         if (invoiceId == null || row < 0 || tbAdjusted.getColumnCount() < 10) {
             JOptionPane.showMessageDialog(this,
-                    "Vui long chon mot dong trong bang 'Hoa don dieu chinh' de huy tra hang!",
-                    "Chua chon dong", JOptionPane.WARNING_MESSAGE);
+                    I18n.msg("Vui lòng chọn một dòng trong bảng 'Hóa đơn điều chỉnh' để hủy trả hàng!",
+                             "Please select a line in the 'Adjusted invoice' table to cancel its return!"),
+                    I18n.msg("Chưa chọn dòng", "No Line Selected"), JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -1316,8 +1383,8 @@ public class InvoiceViewPanel extends JPanel {
             lineNo = intOf(tbAdjusted.getValueAt(row, 1));
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this,
-                    "Khong doc duoc so dong cua hang dang chon.",
-                    "Loi", JOptionPane.ERROR_MESSAGE);
+                    I18n.msg("Không đọc được số dòng của hàng đang chọn.", "Cannot read the selected line number!"),
+                    I18n.msg("Lỗi", "Error"), JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -1326,14 +1393,22 @@ public class InvoiceViewPanel extends JPanel {
         String refund   = String.valueOf(tbAdjusted.getValueAt(row, 9));
 
         int choice = JOptionPane.showConfirmDialog(this,
-                "Huy tra hang cua dong nay?\n\n"
-              + "  Hoa don : " + invoiceId + "\n"
-              + "  Dong    : " + lineNo + " (" + product + ")\n"
-              + "  SL tra  : " + quantity + "\n"
-              + "  Tien hoan da ghi nhan: " + refund + "\n\n"
-              + "Neu day la dong tra hang cuoi cung, hoa don tro lai PAID\n"
-              + "(coi nhu chua tung tra hang). Hanh dong khong the hoan tac!",
-                "Xac nhan huy tra hang",
+                I18n.msg(
+                "Hủy trả hàng của dòng này?\n\n"
+              + "  Hóa đơn : " + invoiceId + "\n"
+              + "  Dòng    : " + lineNo + " (" + product + ")\n"
+              + "  SL trả  : " + quantity + "\n"
+              + "  Tiền hoàn đã ghi nhận: " + refund + "\n\n"
+              + "Nếu đây là dòng trả hàng cuối cùng, hóa đơn trở lại \"Đã thanh toán\"\n"
+              + "(coi như chưa từng trả hàng). Hành động không thể hoàn tác!",
+                "Cancel the return of this line?\n\n"
+              + "  Invoice : " + invoiceId + "\n"
+              + "  Line    : " + lineNo + " (" + product + ")\n"
+              + "  Qty     : " + quantity + "\n"
+              + "  Refund recorded: " + refund + "\n\n"
+              + "If this is the last returned line, the invoice goes back to \"Paid\"\n"
+              + "(as if nothing was returned). This cannot be undone!"),
+                I18n.msg("Xác nhận hủy trả hàng", "Confirm Cancel Return"),
                 JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice != JOptionPane.YES_OPTION) return;
 
@@ -1341,13 +1416,14 @@ public class InvoiceViewPanel extends JPanel {
             int deleted = dao.deleteLineReturns(invoiceId, lineNo);
             if (deleted == 0) {
                 JOptionPane.showMessageDialog(this,
-                        "Dong " + lineNo + " khong co luot tra hang nao"
-                      + " (co the ai khac da huy truoc).",
-                        "Khong co gi bi huy", JOptionPane.WARNING_MESSAGE);
+                        I18n.msg("Dòng " + lineNo + " không có lượt trả hàng nào (có thể ai khác đã hủy trước).",
+                                 "Line " + lineNo + " has no returns (someone may have cancelled them already)."),
+                        I18n.msg("Không có gì bị hủy", "Nothing Cancelled"), JOptionPane.WARNING_MESSAGE);
             } else {
                 JOptionPane.showMessageDialog(this,
-                        "Da huy " + deleted + " luot tra cua dong " + lineNo + ".",
-                        "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                        I18n.msg("Đã hủy " + deleted + " lượt trả của dòng " + lineNo + ".",
+                                 "Cancelled " + deleted + " return(s) of line " + lineNo + "."),
+                        I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
             }
             // Trạng thái có thể vừa đổi VOIDED -> PAID: nạp lại cả danh sách.
             reload();
