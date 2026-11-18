@@ -51,7 +51,15 @@ GROUP BY i.Invoice_ID, i.`Date`, i.`Time`, s.Shop_ID, c.Name, cu.Name;
 -- ---------------------------------------------------------------------
 -- Đường đi: Invoice -> Counter -> Shop  (hóa đơn không trỏ thẳng tới Shop!)
 -- GROUP BY 2 cột (shop, ngày) => mỗi ô là doanh thu 1 shop trong 1 ngày.
--- Lọc Status = 'PAID' để bỏ hóa đơn bị hủy.
+--
+-- DOANH THU = HÓA ĐƠN ĐIỀU CHỈNH (Invoice_Line − Return), áp dụng cho MỌI câu
+-- tính doanh thu trong file này (câu 2, 4, 6, 7, 8, 10):
+--   * Hóa đơn được tính khi fn_invoice_in_revenue(...) = 1: PAID, hoặc VOIDED
+--     VÌ TRẢ HÀNG (trả hàng xong hóa đơn gốc thành VOIDED). VOIDED do bấm
+--     "Huy hoa don" thì không có dòng Return nào -> bị loại.
+--   * Tiền của một dòng = thành tiền − fn_line_refund(dòng đó).
+-- Hai hàm nằm ở 04_routines.sql (mục 1.10–1.13) -- bản chép DUY NHẤT của quy
+-- tắc, để các câu ở đây và báo cáo trong app luôn ra cùng một con số.
 -- =====================================================================
 SELECT '=== CAU 2: Doanh thu 7 ngay gan nhat theo cua hang ===' AS ' ';
 
@@ -59,12 +67,13 @@ SELECT  s.Shop_ID                                     AS Cua_hang,
         s.Address                                     AS Dia_chi,
         i.`Date`                                      AS Ngay,
         COUNT(DISTINCT i.Invoice_ID)                  AS So_hoa_don,
-        SUM(l.Quantity * l.Unit_Price - l.Discount)   AS Doanh_thu
+        ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount
+                  - fn_line_refund(l.Invoice_ID, l.Line_Number)), 2) AS Doanh_thu
 FROM    Invoice      i
 JOIN    Counter      ct ON ct.Counter_ID = i.Counter_ID
 JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
 JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
-WHERE   i.Status = 'PAID'
+WHERE   fn_invoice_in_revenue(i.Invoice_ID) = 1
   AND   i.`Date` >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
 GROUP BY s.Shop_ID, s.Address, i.`Date`
 ORDER BY i.`Date` DESC, s.Shop_ID;
@@ -117,9 +126,11 @@ SELECT  c.Cashier_ID                      AS Ma_TN,
         ROUND(SUM(t.Tong), 2)             AS Tong_doanh_thu,
         ROUND(AVG(t.Tong), 2)             AS Gio_hang_TB
 FROM    Cashier c
-JOIN    Invoice i ON i.Cashier_ID = c.Cashier_ID AND i.Status = 'PAID'
+JOIN    Invoice i ON i.Cashier_ID = c.Cashier_ID
+                 AND fn_invoice_in_revenue(i.Invoice_ID) = 1
 JOIN   (SELECT Invoice_ID,
-               SUM(Quantity * Unit_Price - Discount) AS Tong
+               SUM(Quantity * Unit_Price - Discount
+                   - fn_line_refund(Invoice_ID, Line_Number)) AS Tong
         FROM   Invoice_Line
         GROUP BY Invoice_ID) t  ON t.Invoice_ID = i.Invoice_ID
 GROUP BY c.Cashier_ID, c.Name
@@ -217,9 +228,9 @@ SELECT cu.Customer_ID AS Ma_KH,
        cu.Name AS Ten_Khach_Hang,  
        cu.Phone AS So_Dien_Thoai,  
        COUNT(DISTINCT i.Invoice_ID) AS So_Luong_Hoa_Don,  
-       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Tien_Chi_Tieu  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount - fn_line_refund(l.Invoice_ID, l.Line_Number)), 2) AS Tong_Tien_Chi_Tieu  
 FROM Customer cu  
-JOIN Invoice i ON i.Customer_ID = cu.Customer_ID AND i.Status = 'PAID'  
+JOIN Invoice i ON i.Customer_ID = cu.Customer_ID AND fn_invoice_in_revenue(i.Invoice_ID) = 1  
 JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
 GROUP BY cu.Customer_ID, cu.Name, cu.Phone  
 ORDER BY Tong_Tien_Chi_Tieu DESC  
@@ -238,10 +249,10 @@ SELECT s.Shop_ID AS Ma_Cua_Hang,
        ct.Counter_ID AS Ma_Quay,  
        s.Address AS Dia_Chi_Shop,  
        COUNT(i.Invoice_ID) AS Tong_So_Hoa_Don,  
-       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Doanh_Thu_Quay  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount - fn_line_refund(l.Invoice_ID, l.Line_Number)), 2) AS Tong_Doanh_Thu_Quay  
 FROM Shop s  
 JOIN Counter ct ON ct.Shop_ID = s.Shop_ID  
-JOIN Invoice i ON i.Counter_ID = ct.Counter_ID AND i.Status = 'PAID'  
+JOIN Invoice i ON i.Counter_ID = ct.Counter_ID AND fn_invoice_in_revenue(i.Invoice_ID) = 1  
 JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
 GROUP BY s.Shop_ID, ct.Counter_ID, s.Address  
 ORDER BY Tong_Doanh_Thu_Quay DESC;
@@ -250,7 +261,7 @@ ORDER BY Tong_Doanh_Thu_Quay DESC;
 -- =====================================================================  
 -- CÂU 8: Hiệu suất làm việc của Thu ngân (Số hóa đơn xử lý & Tổng doanh thu)  
 -- ---------------------------------------------------------------------  
--- Ý tưởng: Cashier JOIN Invoice (Status = 'PAID') JOIN Invoice_Line.  
+-- Ý tưởng: Cashier JOIN Invoice (tính vào doanh thu) JOIN Invoice_Line.  
 -- Khác với Câu 4 là tính trung bình giỏ hàng, câu này xếp hạng theo tổng lượng việc xử lý.  
 -- =====================================================================  
 SELECT '=== CAU 8: Hieu suat xu ly hoa don cua tung thu ngan ===' AS ' ';  
@@ -258,9 +269,9 @@ SELECT '=== CAU 8: Hieu suat xu ly hoa don cua tung thu ngan ===' AS ' ';
 SELECT c.Cashier_ID AS Ma_Thu_Ngan,  
        c.Name AS Ten_Thu_Ngan,  
        COUNT(i.Invoice_ID) AS Tong_So_Hoa_Don_Xu_Ly,  
-       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Doanh_Thu_Thu_Ngan  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount - fn_line_refund(l.Invoice_ID, l.Line_Number)), 2) AS Tong_Doanh_Thu_Thu_Ngan  
 FROM Cashier c  
-JOIN Invoice i ON i.Cashier_ID = c.Cashier_ID AND i.Status = 'PAID'  
+JOIN Invoice i ON i.Cashier_ID = c.Cashier_ID AND fn_invoice_in_revenue(i.Invoice_ID) = 1  
 JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
 GROUP BY c.Cashier_ID, c.Name  
 ORDER BY Tong_So_Hoa_Don_Xu_Ly DESC;
@@ -294,7 +305,8 @@ ORDER BY Tong_Tien_Thanh_Toan DESC;
 -- =====================================================================  
 -- CÂU 10: Top sản phẩm bán chạy nhất theo tổng số lượng tiêu thụ  
 -- ---------------------------------------------------------------------  
--- Ý tưởng: Product JOIN Invoice_Line JOIN Invoice (chỉ tính hóa đơn PAID).  
+-- Ý tưởng: Product JOIN Invoice_Line JOIN Invoice (hóa đơn tính vào doanh thu).
+-- Số lượng bán = số lượng mua − số lượng đã trả (fn_line_returned_qty).  
 -- Gom nhóm theo sản phẩm để tìm ra mặt hàng tiêu thụ mạnh nhất.  
 -- =====================================================================  
 SELECT '=== CAU 10: Top san pham ban chay nhat theo so luong ===' AS ' ';  
@@ -302,11 +314,11 @@ SELECT '=== CAU 10: Top san pham ban chay nhat theo so luong ===' AS ' ';
 SELECT p.Barcode AS Ma_Vach,  
        p.Name AS Ten_SanPham,  
        p.Unit AS Don_Vi,  
-       SUM(l.Quantity) AS Tong_So_Luong_Ban,  
-       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount), 2) AS Tong_Doanh_Thu_SanPham  
+       SUM(l.Quantity - fn_line_returned_qty(l.Invoice_ID, l.Line_Number)) AS Tong_So_Luong_Ban,  
+       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount - fn_line_refund(l.Invoice_ID, l.Line_Number)), 2) AS Tong_Doanh_Thu_SanPham  
 FROM Product p  
 JOIN Invoice_Line l ON l.Barcode = p.Barcode  
-JOIN Invoice i ON i.Invoice_ID = l.Invoice_ID AND i.Status = 'PAID'  
+JOIN Invoice i ON i.Invoice_ID = l.Invoice_ID AND fn_invoice_in_revenue(i.Invoice_ID) = 1  
 GROUP BY p.Barcode, p.Name, p.Unit  
 ORDER BY Tong_So_Luong_Ban DESC  
 LIMIT 5;

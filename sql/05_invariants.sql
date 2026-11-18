@@ -182,16 +182,18 @@ BEGIN
         'muc 3.4 (G6)');
 
     -- -----------------------------------------------------------------
-    -- R9 -- bat bien G6: chi hoa don 'PAID' moi co luot tra. Day chinh la
-    --       phep kiem ma sp_add_return SIGNAL o :931 -- quy tac nay bat
-    --       truong hop du lieu di vao bang `Return` KHONG qua thu tuc do.
+    -- R9 -- bat bien G6, DOI NGHIA khi co hoa don dieu chinh: tra hang
+    --       xong thi hoa don goc thanh 'VOIDED' (cung transaction voi
+    --       sp_add_return). Nen hoa don CO luot tra ma con 'PAID' nghia la
+    --       quen goi sp_void_invoice -- va hoa don do se bi tra hang LAN HAI,
+    --       dieu ma quy trinh tra hang khong cho phep.
     -- -----------------------------------------------------------------
     INSERT INTO tmp_check_seed VALUES (9, 'R9',
-        'Chi hoa don PAID moi co luot tra hang',
-        (SELECT COUNT(*)
+        'Hoa don co luot tra hang thi phai VOIDED',
+        (SELECT COUNT(DISTINCT r.Invoice_ID)
          FROM   `Return` r
          JOIN   Invoice  i ON i.Invoice_ID = r.Invoice_ID
-         WHERE  i.Status <> 'PAID'),
+         WHERE  i.Status <> 'VOIDED'),
         'muc 3.4 (G6)');
 
     -- -----------------------------------------------------------------

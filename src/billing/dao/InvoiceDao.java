@@ -337,9 +337,13 @@ public class InvoiceDao {
         return QueryResult.call("{call sp_get_invoice_payments(?)}", invoiceId);
     }
 
-    /** Các lần trả hàng của hóa đơn: sp_get_invoice_returns(p_invoice_id) */
-    public QueryResult invoiceReturns(String invoiceId) {
-        return QueryResult.call("{call sp_get_invoice_returns(?)}", invoiceId);
+    /**
+     * Hóa đơn điều chỉnh = Invoice_Line − Return: sp_get_invoice_adjusted(p_invoice_id).
+     * Không có hóa đơn mới nào trong database -- đây chỉ là cách hiển thị
+     * (mỗi dòng hóa đơn gốc kèm số lượng / thành tiền sau khi trừ phần trả).
+     */
+    public QueryResult invoiceAdjusted(String invoiceId) {
+        return QueryResult.call("{call sp_get_invoice_adjusted(?)}", invoiceId);
     }
 
     /**
@@ -639,13 +643,16 @@ public class InvoiceDao {
                 }
             }
 
-            // Cập nhật trạng thái hóa đơn sang VOIDED sau khi trả hàng thành công
-            // (chỉ khi hóa đơn đang ở trạng thái PAID)
-            try (CallableStatement cs = conn.prepareCall(
-                    "{call sp_void_invoice(?)}")) {
+            // Trả hàng xong -> hóa đơn gốc thành VOIDED, CÙNG transaction.
+            // Không cần kiểm "đang PAID": sp_add_return ở trên đã SIGNAL nếu
+            // hóa đơn không phải PAID. Từ đây hóa đơn không trả thêm được nữa;
+            // doanh thu của nó tính theo hóa đơn điều chỉnh (Invoice_Line −
+            // Return), xem fn_invoice_in_revenue ở 04_routines.sql.
+            String spVoid = "{call sp_void_invoice(?)}";
+            try (CallableStatement cs = conn.prepareCall(spVoid)) {
                 cs.setString(1, invoiceId);
                 cs.executeUpdate();
-                SqlLog.add("sp_void_invoice", new Object[]{invoiceId}, 0, 1);
+                SqlLog.add(spVoid, new Object[]{invoiceId}, 0, 1);
             }
 
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
@@ -678,29 +685,50 @@ public class InvoiceDao {
     }
 
     /**
-     * Hủy một lượt trả hàng đã ghi: sp_delete_return(...).
+     * Hủy MỌI lượt trả hàng của một dòng: sp_delete_return(p_invoice_id,
+     * p_line_number, OUT p_deleted).
      *
-     * @return số dòng đã xóa (0 nghĩa là không tìm thấy lượt trả đó)
+     * <p>Theo DÒNG chứ không theo Return_ID: Return_ID vẫn là khóa trong DB
+     * nhưng đã ẩn khỏi giao diện (hóa đơn điều chỉnh hiện theo dòng). Thủ tục
+     * có hai câu ghi -- DELETE, và UPDATE trả hóa đơn về PAID khi không còn
+     * dòng nào bị trả -- nên chạy trong MỘT transaction: chết giữa chừng thì
+     * hóa đơn không bị kẹt ở VOIDED mà không có dòng Return (lúc đó nó sẽ bị
+     * coi là hóa đơn bị hủy và rơi khỏi doanh thu).
+     *
+     * @return số lượt trả đã xóa (0 = dòng này không có lượt trả nào)
      */
-    public int deleteReturn(String invoiceId, int lineNumber, int returnId) {
+    public int deleteLineReturns(String invoiceId, int lineNumber) {
         String sql = "{call sp_delete_return(?, ?, ?)}";
         long t0 = System.currentTimeMillis();
+        Connection c = null;
 
-        try (Connection c = Db.getConnection();
-             CallableStatement cs = c.prepareCall(sql)) {
-
-            cs.setString(1, invoiceId);
-            cs.setInt(2, lineNumber);
-            cs.setInt(3, returnId);
-
-            int affected = cs.executeUpdate();
-            SqlLog.add(sql, new Object[]{invoiceId, lineNumber, returnId},
-                       System.currentTimeMillis() - t0, affected);
-            return affected;
+        try {
+            c = Db.getConnection();
+            c.setAutoCommit(false);
+            int deleted;
+            try (CallableStatement cs = c.prepareCall(sql)) {
+                cs.setString(1, invoiceId);
+                cs.setInt(2, lineNumber);
+                cs.registerOutParameter(3, Types.INTEGER);
+                cs.execute();
+                deleted = cs.getInt(3);
+            }
+            c.commit();
+            SqlLog.add(sql, new Object[]{invoiceId, lineNumber},
+                       System.currentTimeMillis() - t0, deleted);
+            return deleted;
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi khi huy luot tra lan " + returnId
-                                       + " cua dong " + lineNumber + ": " + e.getMessage(), e);
+            if (c != null) {
+                try { c.rollback(); } catch (SQLException ignore) { }
+            }
+            throw new RuntimeException("Loi khi huy tra hang cua dong " + lineNumber
+                                       + ": " + e.getMessage(), e);
+        } finally {
+            if (c != null) {
+                try { c.setAutoCommit(true); } catch (SQLException ignore) { }
+                try { c.close(); }            catch (SQLException ignore) { }
+            }
         }
     }
 }

@@ -175,12 +175,102 @@ public class ContractCheck {
         e2e();
 
         System.out.println();
+        System.out.println("=== TRA HANG -> VOIDED + HOA DON DIEU CHINH (Invoice_Line - Return) ===");
+        returnsFlow();
+
+        System.out.println();
         System.out.println("=== SEED (khoi 6)  14 bat bien du lieu + hai ban chep ===");
         seed();
 
         System.out.println();
         System.out.printf("TONG: %d dat, %d sai%n", pass, fail);
         if (fail > 0) System.exit(1);
+    }
+
+    // =================================================================
+    //  TRA HANG -- hoa don dieu chinh
+    // =================================================================
+
+    /** Gia tri cot dau tien cua dong dau tien, duoi dang chuoi. */
+    static String one(String sql, Object... params) {
+        return String.valueOf(QueryResult.run(sql, params).rows.get(0)[0]);
+    }
+
+    /**
+     * Hoa don 2 dong, tra MOT PHAN dong 1:
+     *   #r1  tra xong -> hoa don goc VOIDED
+     *   #r2  van tinh vao doanh thu (fn_invoice_in_revenue = 1)
+     *   #r3  tong hoa don dieu chinh = tong goc - tien hoan (header cot 13)
+     *   #r4  sp_get_invoice_adjusted: dong 1 SL_con_lai = mua - tra
+     *   #r5  tra LAN HAI bi tu choi (hoa don khong con PAID)
+     *   #r6  huy tra hang cua dong 1 -> hoa don tro lai PAID
+     *   #r7  sp_check_seed van 0 vi pham sau ca chuoi thao tac
+     */
+    static void returnsFlow() {
+        LookupDao  lk  = new LookupDao();
+        ProductDao pd  = new ProductDao();
+        InvoiceDao dao = new InvoiceDao();
+        LocalDate today = LocalDate.now();
+
+        List<CartLine> lines = new ArrayList<>();
+        BigDecimal due = BigDecimal.ZERO;
+        for (Product p : pd.findAll()) {
+            BigDecimal pr = pd.priceOn(p.barcode, today);
+            if (pr == null || pr.signum() <= 0) continue;
+            BigDecimal q = new BigDecimal("4");
+            lines.add(new CartLine(p, q, pr, BigDecimal.ZERO, ""));
+            due = due.add(pr.multiply(q));
+            if (lines.size() == 2) break;
+        }
+        if (lines.size() < 2) { System.out.println("  (khong du san pham co gia -- bo qua)"); return; }
+        due = due.setScale(2);
+
+        String id = null;
+        try {
+            List<PaymentEntry> pays = new ArrayList<>();
+            pays.add(new PaymentEntry(PayMethod.CASH.code(), due, due, null, null));
+            id = dao.createInvoice(null, today, LocalTime.now().withNano(0),
+                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
+
+            List<InvoiceDao.ReturnItem> items = new ArrayList<>();
+            items.add(new InvoiceDao.ReturnItem(lines.get(0).product.name, 1, new BigDecimal("1")));
+            dao.processReturn(id, items, "E01");
+
+            check("#r1", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "VOIDED");
+            check("#r2", one("SELECT fn_invoice_in_revenue(?)", id), "1");
+
+            BigDecimal refund = lines.get(0).unitPrice.setScale(2);      // 1 / 4 dong 1, khong giam gia
+            QueryResult h = dao.invoiceHeader(id);
+            check("#r3a", Ui.dec(h.rows.get(0)[12]).toPlainString(), refund.toPlainString());
+            check("#r3b", Ui.dec(h.rows.get(0)[13]).setScale(2).toPlainString(),
+                    due.subtract(refund).toPlainString());
+
+            QueryResult adj = dao.invoiceAdjusted(id);
+            check("#r4a", adj.rows.size(), 2);
+            check("#r4b", Ui.dec(adj.rows.get(0)[6]).stripTrailingZeros().toPlainString(), "3");
+            check("#r4c", Ui.dec(adj.rows.get(1)[5]).signum(), 0);         // dong 2 khong tra
+
+            String msg5;
+            try {
+                dao.processReturn(id, items, "E01");
+                msg5 = "tra duoc lan hai";
+            } catch (RuntimeException ex) {
+                msg5 = ex.getMessage().contains("PAID") ? "tu choi" : ex.getMessage();
+            }
+            check("#r5", msg5, "tu choi");
+
+            check("#r6a", dao.deleteLineReturns(id, 1), 1);
+            check("#r6b", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "PAID");
+            check("#r6c", dao.deleteLineReturns(id, 1), 0);               // khong con gi de huy
+
+            check("#r7", checkSeedViolations(false), 0);
+        } catch (Exception e) {
+            check("#r", "loi: " + e.getMessage(), "khong loi");
+        } finally {
+            if (id != null) {
+                try { dao.deleteInvoice(id); } catch (Exception ignore) { }
+            }
+        }
     }
 
     // =================================================================

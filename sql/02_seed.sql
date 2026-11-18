@@ -728,6 +728,11 @@ BEGIN
                                            ROUND(v_line1_qty / 4, 3), 'E01');
                     END IF;
                 END IF;
+
+                -- TRA HANG XONG -> HOA DON GOC THANH 'VOIDED', dung nhu
+                -- InvoiceDao.processReturn lam trong app. Doanh thu cua no
+                -- van duoc tinh theo hoa don dieu chinh (fn_invoice_in_revenue).
+                CALL sp_void_invoice(v_id);
             END IF;
 
             SET v_k = v_k + 1;

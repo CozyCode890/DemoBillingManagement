@@ -153,6 +153,7 @@ public class ReceiptDialog {
         // sp_get_invoice_header: 0 Ma_HD | 1 Ngay | 2 Gio | 3 Trang_thai | 4 Quay
         //   5 Shop | 6 Dia_chi | 7 Thu_ngan | 8 Khach_hang
         //   9 Tong_truoc_giam | 10 Tong_giam | 11 Tong_phai_tra
+        //   12 Tien_hoan | 13 Tong_sau_dieu_chinh   (hoa don dieu chinh)
         Object[] h = d.header.rows.get(0);
         String     invoiceId = str(h[0]);
         String     date      = str(h[1]);
@@ -166,6 +167,10 @@ public class ReceiptDialog {
         BigDecimal beforeDisc = Ui.dec(h[9]);
         BigDecimal totalDisc  = Ui.dec(h[10]);
         BigDecimal due        = Ui.dec(h[11]);
+        // Hai cot cuoi them khi co hoa don dieu chinh; doc phong thu theo
+        // do dai de phieu van in duoc neu database chua nap routine moi.
+        BigDecimal refund     = h.length > 13 ? Ui.dec(h[12]) : BigDecimal.ZERO;
+        BigDecimal adjusted   = h.length > 13 ? Ui.dec(h[13]) : due;
 
         BigDecimal recorded = BigDecimal.ZERO;
         BigDecimal tendered = BigDecimal.ZERO;
@@ -194,7 +199,7 @@ public class ReceiptDialog {
         s.append(dash());
 
         // --- Dòng trạng thái, chữ to ---
-        s.append(statusBlock(statusRaw, missing));
+        s.append(statusBlock(statusRaw, missing, refund));
         s.append(dash());
 
         // --- Thông tin giao dịch ---------------------------------------
@@ -243,6 +248,12 @@ public class ReceiptDialog {
         s.append(row2("Tong tien hang", Ui.money(beforeDisc), false));
         s.append(row2("Giam gia / Khuyen mai", Ui.money(totalDisc), false));
         s.append(row2("TONG CONG", Ui.money(due), true));
+        if (refund.signum() > 0) {
+            // Hoa don dieu chinh = Invoice_Line - Return: hoa don goc da
+            // VOIDED vi tra hang, con lai la gia tri sau khi tru phan tra.
+            s.append(row2("Tra hang (da hoan)", "-" + Ui.money(refund), false));
+            s.append(row2("TONG SAU DIEU CHINH", Ui.money(adjusted), true));
+        }
         s.append("</table>");
         s.append(dash());
 
@@ -305,7 +316,7 @@ public class ReceiptDialog {
      * cùng tình huống này) -- một tờ in ra trông như đã thu đủ trong khi
      * thiếu tiền là sai (plan/14 mục 5.7).
      */
-    private static String statusBlock(String statusRaw, BigDecimal missing) {
+    private static String statusBlock(String statusRaw, BigDecimal missing, BigDecimal refund) {
         InvoiceStatus st = InvoiceStatus.of(statusRaw);
         String text;
         String color;
@@ -316,6 +327,11 @@ public class ReceiptDialog {
                 text += " -- con thieu " + Ui.money(missing);
                 color = "#d35400";
             }
+        } else if (st == InvoiceStatus.VOIDED && refund.signum() > 0) {
+            // VOIDED vi TRA HANG, khong phai bi huy: in "Da huy" o day la noi
+            // sai -- doanh thu cua hoa don nay van duoc tinh (phan con lai).
+            text  = "DA TRA HANG -- XEM HOA DON DIEU CHINH (VOIDED)";
+            color = "#d35400";
         } else if (st == InvoiceStatus.VOIDED) {
             text  = st.display().toUpperCase();
             color = "#c0392b";

@@ -50,7 +50,13 @@ public class InvoiceViewPanel extends JPanel {
     private final JTable tbInvoices = Ui.readOnlyTable();
     private final JTable tbLines    = Ui.readOnlyTable();
     private final JTable tbPayments = Ui.readOnlyTable();
-    private final JTable tbReturns  = Ui.readOnlyTable();
+    /** Hóa đơn điều chỉnh = Invoice_Line − Return (sp_get_invoice_adjusted). */
+    private final JTable tbAdjusted = Ui.readOnlyTable();
+    private static final String ADJ_TITLE_NONE =
+            "Hoa don dieu chinh -- (hoa don nay chua tra hang)";
+    private final javax.swing.border.TitledBorder adjustedBorder =
+            BorderFactory.createTitledBorder(ADJ_TITLE_NONE);
+    private final JPanel pnlAdjustedContainer = new JPanel(new BorderLayout(2, 2));
     private final JTextArea taHeader = new JTextArea(8, 40);
 
     // Các button thao tác hóa đơn (bên trái)
@@ -65,12 +71,10 @@ public class InvoiceViewPanel extends JPanel {
     private final JButton btDeleteLine = new JButton("Xoa dong hang");
     private final JButton btReturnLine = new JButton("Tra hang");
 
-    // Button thao tác trên bảng "Tra hang (Return)"
-    private final JButton btDeleteReturn   = new JButton("Huy luot tra");
-
-    /** Lưu Return_ID (Lan_tra) tương ứng với từng dòng của tbReturns,
-     *  vì cột hiển thị là InvoiceID thay vì Return_ID. */
-    private final List<Integer> returnIds = new ArrayList<>();
+    // Button thao tác trên bảng "Hoa don dieu chinh": hủy phần trả của MỘT
+    // dòng. Return_ID vẫn là khóa trong DB nhưng không hiện ra nữa, nên thao
+    // tác đi theo dòng hóa đơn (sp_delete_return).
+    private final JButton btDeleteReturn   = new JButton("Huy tra hang dong nay");
 
     // =================================================================
     //  Ô CHỌN KHOẢNG NGÀY + NHÃN SỐ DÒNG (khối 6)
@@ -235,21 +239,28 @@ public class InvoiceViewPanel extends JPanel {
         pnlLinesContainer.add(new JScrollPane(tbLines), BorderLayout.CENTER);
         pnlLinesContainer.add(pnlLineActions, BorderLayout.SOUTH);
 
-        // Panel riêng cho bảng trả hàng kèm nút hủy một lượt trả
+        // Hóa đơn điều chỉnh: THAY cho bảng "Tra hang (Return)" cũ, và đặt
+        // SONG SONG với hóa đơn gốc -- hai bảng cùng thứ tự Dong nên đọc ngang
+        // được: trái là đã mua, phải là sau khi trả.
         JPanel pnlReturnActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         btDeleteReturn.setForeground(new Color(180, 40, 40));
         btDeleteReturn.addActionListener(e -> onDeleteReturn());
         pnlReturnActions.add(btDeleteReturn);
 
-        JPanel pnlReturnsContainer = new JPanel(new BorderLayout(2, 2));
-        pnlReturnsContainer.add(new JScrollPane(tbReturns), BorderLayout.CENTER);
-        pnlReturnsContainer.add(pnlReturnActions, BorderLayout.SOUTH);
+        pnlAdjustedContainer.add(new JScrollPane(tbAdjusted), BorderLayout.CENTER);
+        pnlAdjustedContainer.add(pnlReturnActions, BorderLayout.SOUTH);
+        pnlAdjustedContainer.setBorder(adjustedBorder);
 
-        JPanel right = new JPanel(new GridLayout(4, 1, 6, 6));
+        JSplitPane linesSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                Ui.titled("Hoa don goc (Invoice_Line)", pnlLinesContainer),
+                pnlAdjustedContainer);
+        linesSplit.setResizeWeight(0.5);
+        linesSplit.setBorder(null);
+
+        JPanel right = new JPanel(new GridLayout(3, 1, 6, 6));
         right.add(Ui.titled("Thong tin chung + tong tien", new JScrollPane(taHeader)));
-        right.add(Ui.titled("Cac dong hang (Invoice_Line)", pnlLinesContainer));
+        right.add(linesSplit);
         right.add(Ui.titled("Thanh toan (Payment + bang con)", new JScrollPane(tbPayments)));
-        right.add(Ui.titled("Tra hang (Return)", pnlReturnsContainer));
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
         split.setResizeWeight(0.42);
@@ -350,7 +361,7 @@ public class InvoiceViewPanel extends JPanel {
             btEditLine.setToolTipText("Chinh sua so luong, don gia dong hang trong DB");
             btDeleteLine.setToolTipText("Xoa dong hang khoi DB");
             btReturnLine.setToolTipText("Ghi mot luot tra hang cho cac dong cua hoa don dang chon");
-            btDeleteReturn.setToolTipText("Huy mot luot tra hang da ghi (chon dong trong bang Tra hang)");
+            btDeleteReturn.setToolTipText("Huy phan tra hang cua dong dang chon trong bang Hoa don dieu chinh");
         }
     }
 
@@ -430,26 +441,39 @@ public class InvoiceViewPanel extends JPanel {
             QueryResult payments = dao.invoicePayments(invoiceId);
             fillFormatted(tbPayments, payments, new int[]{1, 4}, null, null, null);
 
-            // tbReturns: Dong, Lan_tra, San_pham, Ngay_tra, SL_tra, Tien_hoan, Nguoi_duyet
-            // SL_tra (4) la so luong; Tien_hoan (5) la tien. Chi so da dich mot cot
-            // so voi truoc khoi 3 vi sp_get_invoice_returns them cot Lan_tra.
-            QueryResult returns = dao.invoiceReturns(invoiceId);
-            
-            // Lưu Return_ID (Lan_tra) vào danh sách ẩn, thay cột hiển thị thành InvoiceID
-            returnIds.clear();
-            for (Object[] row : returns.rows) {
-                returnIds.add(intOf(row[1]));  // cột 1 là Lan_tra/Return_ID
-                row[1] = invoiceId;             // thay bằng InvoiceID để hiển thị
+            // tbAdjusted (sp_get_invoice_adjusted):
+            //   0 Ma_HD | 1 Dong | 2 San_pham | 3 DVT | 4 SL_mua | 5 SL_tra
+            //   6 SL_con_lai | 7 Don_gia | 8 Thanh_tien_goc | 9 Tien_hoan
+            //   10 Thanh_tien_moi | 11 Ngay_tra
+            // Chỉ hiện khi hóa đơn ĐÃ trả hàng (header cột 12 Tien_hoan > 0):
+            // hóa đơn chưa trả thì "hóa đơn điều chỉnh" y hệt hóa đơn gốc --
+            // hiện ra chỉ gây nhầm là đã có điều chỉnh.
+            BigDecimal refund = (!h.isEmpty() && h.columns.size() > 13)
+                    ? Ui.dec(h.rows.get(0)[12]) : BigDecimal.ZERO;
+            if (refund.signum() > 0) {
+                QueryResult adjusted = dao.invoiceAdjusted(invoiceId);
+                fillFormatted(tbAdjusted, adjusted, new int[]{7, 8, 9, 10}, null,
+                              new int[]{4, 5, 6}, null);
+                BigDecimal newTotal = Ui.dec(h.rows.get(0)[13]);
+                adjustedBorder.setTitle("Hoa don dieu chinh (= Invoice_Line - Return) -- tong moi "
+                        + Ui.money(newTotal) + ", da hoan " + Ui.money(refund));
+            } else {
+                clearAdjusted();
             }
-            
-            fillFormatted(tbReturns, returns, new int[]{5}, null, new int[]{4}, null);
-            
-            // Đổi tiêu đề cột 1 từ "Lan_tra" thành "InvoiceID"
-            tbReturns.getColumnModel().getColumn(1).setHeaderValue("InvoiceID");
+            pnlAdjustedContainer.repaint();
 
         } catch (Exception ex) {
             Ui.error(this, ex);
         }
+    }
+
+    /** Bảng hóa đơn điều chỉnh về trạng thái "chưa trả hàng". */
+    private void clearAdjusted() {
+        DefaultTableModel m = (DefaultTableModel) tbAdjusted.getModel();
+        m.setRowCount(0);
+        m.setColumnCount(0);
+        adjustedBorder.setTitle(ADJ_TITLE_NONE);
+        pnlAdjustedContainer.repaint();
     }
 
     /** Chọn lại đúng hàng của hóa đơn này trong tbInvoices sau khi reload() xóa selection. */
@@ -607,7 +631,7 @@ public class InvoiceViewPanel extends JPanel {
                 taHeader.setText("");
                 Ui.clear(tbLines);
                 Ui.clear(tbPayments);
-                Ui.clear(tbReturns);
+                clearAdjusted();
 
                 reload();
             } catch (Exception ex) {
@@ -1154,7 +1178,9 @@ public class InvoiceViewPanel extends JPanel {
                 int choice = JOptionPane.showConfirmDialog(returnDialog,
                         "Ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + "?\n\n"
                       + "Tong tien phai tra lai: " + Ui.money(total) + "\n"
-                      + "Nguoi duyet: " + approverLabel,
+                      + "Nguoi duyet: " + approverLabel + "\n\n"
+                      + "Sau khi tra, hoa don " + invoiceId + " chuyen sang VOIDED va KHONG tra\n"
+                      + "hang them duoc nua. Doanh thu tinh theo hoa don dieu chinh.",
                         "Xac nhan xu ly tra hang",
                         JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
                 if (choice != JOptionPane.YES_OPTION) return;
@@ -1264,68 +1290,68 @@ public class InvoiceViewPanel extends JPanel {
     }
 
     /**
-     * Hủy một lượt trả hàng đã ghi.
+     * Hủy phần trả hàng của MỘT dòng trong bảng "Hoa don dieu chinh".
      *
-     * Lấy Dong và Lan_tra từ cột 0 và cột 1 của tbReturns -- hai cột này tồn tại
-     * được là nhờ cột Lan_tra mới của sp_get_invoice_returns (plan/12 mục 3.5).
-     * Không gọi reload() nên selection của tbInvoices còn nguyên.
+     * <p>Theo DÒNG, không theo lượt: Return_ID vẫn là khóa trong DB nhưng đã
+     * ẩn khỏi giao diện, và hóa đơn điều chỉnh hiện mỗi dòng hóa đơn một hàng
+     * (đã cộng mọi lượt trả của dòng). {@code sp_delete_return} xóa mọi lượt
+     * trả của dòng đó; nếu không còn dòng nào bị trả, hóa đơn trở lại PAID --
+     * coi như chưa từng trả hàng.
+     *
+     * <p>Đọc cột theo chỉ số của sp_get_invoice_adjusted: 1 Dong, 2 San_pham,
+     * 5 SL_tra, 9 Tien_hoan.
      */
     private void onDeleteReturn() {
         String invoiceId = getSelectedInvoiceId();
-        int row = tbReturns.getSelectedRow();
-        if (invoiceId == null || row < 0) {
+        int row = tbAdjusted.getSelectedRow();
+        if (invoiceId == null || row < 0 || tbAdjusted.getColumnCount() < 10) {
             JOptionPane.showMessageDialog(this,
-                    "Vui long chon mot luot tra trong bang 'Tra hang (Return)' de huy!",
-                    "Chua chon luot tra", JOptionPane.WARNING_MESSAGE);
+                    "Vui long chon mot dong trong bang 'Hoa don dieu chinh' de huy tra hang!",
+                    "Chua chon dong", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         int lineNo;
-        int returnId;
         try {
-            lineNo = Integer.parseInt(String.valueOf(tbReturns.getValueAt(row, 0)).trim());
-            // Lấy Return_ID từ danh sách ẩn thay vì từ cột hiển thị (giờ là InvoiceID)
-            if (row >= 0 && row < returnIds.size()) {
-                returnId = returnIds.get(row);
-            } else {
-                throw new NumberFormatException("Row index out of bounds");
-            }
+            lineNo = intOf(tbAdjusted.getValueAt(row, 1));
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this,
-                    "Khong doc duoc so dong / lan tra cua hang dang chon.",
+                    "Khong doc duoc so dong cua hang dang chon.",
                     "Loi", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        String product = String.valueOf(tbReturns.getValueAt(row, 2));
-        String quantity = String.valueOf(tbReturns.getValueAt(row, 4));
-        String refund = String.valueOf(tbReturns.getValueAt(row, 5));
+        String product  = String.valueOf(tbAdjusted.getValueAt(row, 2));
+        String quantity = String.valueOf(tbAdjusted.getValueAt(row, 5));
+        String refund   = String.valueOf(tbAdjusted.getValueAt(row, 9));
 
         int choice = JOptionPane.showConfirmDialog(this,
-                "Huy luot tra nay khoi Database?\n\n"
+                "Huy tra hang cua dong nay?\n\n"
               + "  Hoa don : " + invoiceId + "\n"
               + "  Dong    : " + lineNo + " (" + product + ")\n"
-              + "  Lan tra : " + returnId + "\n"
               + "  SL tra  : " + quantity + "\n"
               + "  Tien hoan da ghi nhan: " + refund + "\n\n"
-              + "Sau khi huy, so luong nay duoc tra lai vao phan con tra duoc cua dong.\n"
-              + "Hanh dong khong the hoan tac!",
-                "Xac nhan huy luot tra",
+              + "Neu day la dong tra hang cuoi cung, hoa don tro lai PAID\n"
+              + "(coi nhu chua tung tra hang). Hanh dong khong the hoan tac!",
+                "Xac nhan huy tra hang",
                 JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice != JOptionPane.YES_OPTION) return;
 
         try {
-            int affected = dao.deleteReturn(invoiceId, lineNo, returnId);
-            if (affected == 0) {
+            int deleted = dao.deleteLineReturns(invoiceId, lineNo);
+            if (deleted == 0) {
                 JOptionPane.showMessageDialog(this,
-                        "Khong tim thay luot tra lan " + returnId + " cua dong " + lineNo
+                        "Dong " + lineNo + " khong co luot tra hang nao"
                       + " (co the ai khac da huy truoc).",
                         "Khong co gi bi huy", JOptionPane.WARNING_MESSAGE);
             } else {
                 JOptionPane.showMessageDialog(this,
-                        "Da huy luot tra lan " + returnId + " cua dong " + lineNo + ".",
+                        "Da huy " + deleted + " luot tra cua dong " + lineNo + ".",
                         "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
             }
+            // Trạng thái có thể vừa đổi VOIDED -> PAID: nạp lại cả danh sách.
+            reload();
+            selectInvoiceRow(invoiceId);
             showDetail(invoiceId);
         } catch (Exception ex) {
             Ui.error(this, ex);
