@@ -99,7 +99,18 @@ public class SearchPanel extends JPanel {
         // === Toolbar ===
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         cbTables = new JComboBox<>(tableNames); // reuse the same array
-        cbTables.setPreferredSize(new Dimension(180, 28));
+        cbTables.setPreferredSize(new Dimension(220, 28));
+        // O chon van giu TEN BANG (dung de truy van), nhung nhan vien chi thay
+        // ten de hieu -- khong thay "Invoice_Line", "EWallet_Payment"...
+        cbTables.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean selected, boolean focus) {
+                super.getListCellRendererComponent(list, value, index, selected, focus);
+                setText(tableLabel(String.valueOf(value)));
+                return this;
+            }
+        });
         cbTables.addActionListener(e -> {
             String tableName = (String) cbTables.getSelectedItem();
             int index = cbTables.getSelectedIndex();
@@ -120,7 +131,7 @@ public class SearchPanel extends JPanel {
         btReload = new JButton("Tải lại / Xem tất cả");
         btReload.addActionListener(e -> reloadCurrentTable());
 
-        toolbar.add(new JLabel("Chọn bảng: "));
+        toolbar.add(new JLabel(I18n.text("Danh mục: ", "Category: ")));
         toolbar.add(cbTables);
         toolbar.add(new JLabel("Từ khóa: "));
         toolbar.add(tfSearch);
@@ -156,6 +167,27 @@ public class SearchPanel extends JPanel {
         loadTableData((String) cbTables.getSelectedItem());
         // Initialize the first filter panel to default state
         resetFilterPanel(0);
+    }
+
+    /** Ten de hieu cho nhan vien cua mot bang trong o chon. */
+    static String tableLabel(String table) {
+        switch (table) {
+            case "Product":         return I18n.msg("Sản phẩm", "Products");
+            case "Invoice":         return I18n.msg("Hóa đơn", "Invoices");
+            case "Invoice_Line":    return I18n.msg("Dòng hàng của hóa đơn", "Invoice items");
+            case "Price_History":   return I18n.msg("Lịch sử giá", "Price history");
+            case "Promotion":       return I18n.msg("Khuyến mãi", "Promotions");
+            case "Return":          return I18n.msg("Trả hàng", "Returns");
+            case "Customer":        return I18n.msg("Khách hàng", "Customers");
+            case "Cashier":         return I18n.msg("Thu ngân", "Cashiers");
+            case "Shop":            return I18n.msg("Cửa hàng", "Shops");
+            case "Counter":         return I18n.msg("Quầy", "Counters");
+            case "Payment":         return I18n.msg("Thanh toán", "Payments");
+            case "Cash_Payment":    return I18n.msg("Thanh toán tiền mặt", "Cash payments");
+            case "Card_Payment":    return I18n.msg("Thanh toán thẻ", "Card payments");
+            case "EWallet_Payment": return I18n.msg("Thanh toán ví điện tử", "E-wallet payments");
+            default:                return table;
+        }
     }
 
     /**
@@ -714,9 +746,7 @@ public class SearchPanel extends JPanel {
 
             populateTable(rs);
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Lỗi khi tải dữ liệu từ bảng '" + tableName + "':\n" + ex.getMessage(),
-                    "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
+            Ui.error(this, ex);
             ex.printStackTrace();
         }
     }
@@ -808,9 +838,7 @@ public class SearchPanel extends JPanel {
                     }
                 }
             } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this,
-                        "Lỗi khi xác định cột tìm kiếm:\n" + ex.getMessage(),
-                        "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
+                Ui.error(this, ex);
                 ex.printStackTrace();
             }
         }
@@ -841,9 +869,7 @@ public class SearchPanel extends JPanel {
                 populateTable(rs);
             }
         } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Lỗi khi thực hiện tìm kiếm:\n" + ex.getMessage(),
-                    "Lỗi cơ sở dữ liệu", JOptionPane.ERROR_MESSAGE);
+            Ui.error(this, ex);
             ex.printStackTrace();
         }
     }

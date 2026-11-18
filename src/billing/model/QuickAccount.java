@@ -67,8 +67,8 @@ public class QuickAccount {
             String password = (f.length >= 2) ? f[1] : null;
 
             if (username.isEmpty() || password == null || password.isEmpty()) {
-                System.out.println("[quick.login.accounts] Bo qua muc sai cu phap: '" + item.trim()
-                    + "'. Dung cu phap: <username>:<password>[:<nhan>]");
+                System.out.println("[quick.login.accounts] Skipped malformed entry: '" + item.trim()
+                    + "'. Use the format: <username>:<password>[:<label>]");
                 continue;
             }
 

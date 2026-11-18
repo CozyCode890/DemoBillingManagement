@@ -1620,7 +1620,7 @@ public class NewInvoicePanel extends JPanel {
      * thẻ / ví -- ba con số của hợp đồng mục 3.1 nhìn thấy được cùng lúc.
      */
     private void refreshPayTable() {
-        String[] cols = {"Phuong thuc", "So tien", "Khach dua", "Tien thoi", "Chi tiet"};
+        String[] cols = {"Phuong thuc", I18n.text("Số tiền", "Amount"), "Khach dua", "Tien thoi", "Chi tiet"};
         Object[][] data = new Object[payments.size()][cols.length];
         for (int i = 0; i < payments.size(); i++) {
             PaymentEntry p = payments.get(i);

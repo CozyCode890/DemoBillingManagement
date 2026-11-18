@@ -78,8 +78,8 @@ public class QueryResult {
         } catch (SQLException e) {
             // Trong app demo ta biến lỗi SQL thành RuntimeException để
             // tầng giao diện bắt và hiện hộp thoại báo lỗi.
-            throw new RuntimeException("Loi SQL: " + e.getMessage()
-                                     + "\n\nCau lenh:\n" + sql, e);
+            throw new RuntimeException("SQL error: " + e.getMessage()
+                                     + "\n\nStatement:\n" + sql, e);
         }
 
         SqlLog.add(sql, params, System.currentTimeMillis() - t0, qr.rows.size());
@@ -128,8 +128,8 @@ public class QueryResult {
             }
 
         } catch (SQLException e) {
-            throw new RuntimeException("Loi goi thu tuc SQL: " + e.getMessage()
-                                     + "\n\nCau lenh:\n" + callSql, e);
+            throw new RuntimeException("Failed to call SQL procedure: " + e.getMessage()
+                                     + "\n\nStatement:\n" + callSql, e);
         }
 
         SqlLog.add(callSql, params, System.currentTimeMillis() - t0, qr.rows.size());

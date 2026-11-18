@@ -215,11 +215,11 @@ public class ReceiptDialog {
         s.append(dash());
 
         // --- Thông tin giao dịch ---------------------------------------
-        s.append(kv("Ma HD",      esc(invoiceId)));
-        s.append(kv("Thoi gian",  esc(date) + " " + esc(time)));
-        s.append(kv("Quay",       esc(counter)));
-        s.append(kv("Thu ngan",   esc(cashier)));
-        s.append(kv("Khach hang", esc(customer)));
+        s.append(kv(I18n.msg("Mã HĐ", "Invoice ID"), esc(invoiceId)));
+        s.append(kv(I18n.msg("Thời gian", "Time"), esc(date) + " " + esc(time)));
+        s.append(kv(I18n.msg("Quầy", "Counter"), esc(counter)));
+        s.append(kv(I18n.msg("Thu ngân", "Cashier"), esc(cashier)));
+        s.append(kv(I18n.msg("Khách hàng", "Customer"), esc(customer)));
         s.append(dash());
 
         // --- Các dòng hàng: SL qua Ui.qty (lỗi #4), VAT qua Ui.percent ---
@@ -257,14 +257,14 @@ public class ReceiptDialog {
         // --- Tổng tiền: ba con số của sp_get_invoice_header -------------
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:13px;\">");
-        s.append(row2("Tong tien hang", Ui.money(beforeDisc), false));
-        s.append(row2("Giam gia / Khuyen mai", Ui.money(totalDisc), false));
-        s.append(row2("TONG CONG", Ui.money(due), true));
+        s.append(row2(I18n.msg("Tổng tiền hàng", "Subtotal"), Ui.money(beforeDisc), false));
+        s.append(row2(I18n.msg("Giảm giá / Khuyến mãi", "Discount / Promotion"), Ui.money(totalDisc), false));
+        s.append(row2(I18n.msg("TỔNG CỘNG", "TOTAL"), Ui.money(due), true));
         if (refund.signum() > 0) {
             // Hoa don dieu chinh = Invoice_Line - Return: hoa don goc da
             // VOIDED vi tra hang, con lai la gia tri sau khi tru phan tra.
-            s.append(row2("Tra hang (da hoan)", "-" + Ui.money(refund), false));
-            s.append(row2("TONG SAU DIEU CHINH", Ui.money(adjusted), true));
+            s.append(row2(I18n.msg("Trả hàng (đã hoàn)", "Returned (refunded)"), "-" + Ui.money(refund), false));
+            s.append(row2(I18n.msg("TỔNG SAU ĐIỀU CHỈNH", "TOTAL AFTER RETURNS"), Ui.money(adjusted), true));
         }
         s.append("</table>");
         s.append(dash());
@@ -304,9 +304,9 @@ public class ReceiptDialog {
 
         s.append("<table width=\"100%\" cellpadding=\"3\" cellspacing=\"0\" border=\"0\"")
          .append(" style=\"font-size:13px;\">");
-        s.append(row2("Tien khach dua", Ui.money(tendered), false));
-        s.append(row2("Da ghi nhan", Ui.money(recorded), false));
-        s.append(row2("Tien thoi lai", Ui.money(change), true));
+        s.append(row2(I18n.msg("Tiền khách đưa", "Cash tendered"), Ui.money(tendered), false));
+        s.append(row2(I18n.msg("Đã ghi nhận", "Recorded"), Ui.money(recorded), false));
+        s.append(row2(I18n.msg("Tiền thối lại", "Change"), Ui.money(change), true));
         s.append("</table>");
 
         // --- Chân hoá đơn ----------------------------------------------
@@ -333,19 +333,20 @@ public class ReceiptDialog {
         String text;
         String color;
         if (st == InvoiceStatus.PAID) {
-            text  = I18n.translate(st.display()).toUpperCase();
+            text  = I18n.msg("ĐÃ THANH TOÁN", "PAID");
             color = "#1b7f1b";
             if (missing.signum() > 0) {
-                text += " -- con thieu " + Ui.money(missing);
+                text += I18n.msg(" -- còn thiếu ", " -- remaining ") + Ui.money(missing);
                 color = "#d35400";
             }
         } else if (st == InvoiceStatus.VOIDED && refund.signum() > 0) {
             // VOIDED vi TRA HANG, khong phai bi huy: in "Da huy" o day la noi
             // sai -- doanh thu cua hoa don nay van duoc tinh (phan con lai).
-            text  = "DA TRA HANG -- XEM HOA DON DIEU CHINH (VOIDED)";
+            text  = I18n.msg("ĐÃ TRẢ HÀNG -- XEM TỔNG SAU ĐIỀU CHỈNH",
+                             "ITEMS RETURNED -- SEE TOTAL AFTER RETURNS");
             color = "#d35400";
         } else if (st == InvoiceStatus.VOIDED) {
-            text  = I18n.translate(st.display()).toUpperCase();
+            text  = I18n.msg("ĐÃ HỦY", "VOIDED");
             color = "#c0392b";
         } else {
             text  = statusRaw;                  // gia tri la trong cot Status

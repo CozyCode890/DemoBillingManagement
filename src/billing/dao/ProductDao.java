@@ -52,7 +52,7 @@ public class ProductDao {
                         rs.getBigDecimal("Tax_Rate")));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Khong doc duoc danh sach san pham: " + e.getMessage(), e);
+            throw new RuntimeException("Cannot read product list: " + e.getMessage(), e);
         }
 
         SqlLog.add(sql, null, System.currentTimeMillis() - t0, list.size());
@@ -98,7 +98,7 @@ public class ProductDao {
             price = cs.getBigDecimal(1);
 
         } catch (SQLException e) {
-            throw new RuntimeException("Khong tim duoc gia: " + e.getMessage(), e);
+            throw new RuntimeException("Cannot find the price: " + e.getMessage(), e);
         }
 
         SqlLog.add(sql, new Object[]{barcode, date}, System.currentTimeMillis() - t0,
@@ -131,7 +131,7 @@ public class ProductDao {
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Khong doc duoc khuyen mai: " + e.getMessage(), e);
+            throw new RuntimeException("Cannot read promotion: " + e.getMessage(), e);
         }
 
         SqlLog.add(sql, new Object[]{barcode, date},
