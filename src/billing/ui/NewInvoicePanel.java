@@ -104,16 +104,16 @@ public class NewInvoicePanel extends JPanel {
     private final JButton    btDelPay  = new JButton("Xoa dong dang chon");
     private final JButton    btClrPay  = new JButton("Xoa het");
     /** Tách tiền thối thành các tờ VND (note: "nút thối tiền"). */
-    private final JButton    btChange  = new JButton("Thoi tien");
+    private final JButton    btChange  = new JButton(I18n.text("Thối tiền", "Change"));
 
     // --- Hàng tổng + nút lưu ----------------------------------------
     private final JLabel  lbTotal  = new JLabel();
     private final JLabel  lbPaid   = new JLabel();
     private final JLabel  lbLeft   = new JLabel();
     private final JLabel  lbChange = new JLabel();
-    private final JButton btSave   = new JButton("XUAT HOA DON");
+    private final JButton btSave   = new JButton(saveLabel());
     /** Xóa trắng cả tab để lập hóa đơn khác (note: "nút reset tab"). */
-    private final JButton btReset  = new JButton("Lam moi tab");
+    private final JButton btReset  = new JButton(I18n.text("Làm mới tab", "Reset Tab"));
 
     private final List<CartLine>     cart     = new ArrayList<>();
     private final List<PaymentEntry> payments = new ArrayList<>();
@@ -160,6 +160,14 @@ public class NewInvoicePanel extends JPanel {
         add(buildFooter(), BorderLayout.SOUTH);
 
         wireUp();
+        // Nhan ghep so lieu (tong tien, nhan o tien, bang) khong co trong tu
+        // dien -- doi ngon ngu thi tu ve lai bang du lieu dang co.
+        I18n.onLanguageChange(this, () -> {
+            lbAmount.setText(method().amountFieldLabel() + ":");
+            if (btSave.isEnabled()) btSave.setText(saveLabel());
+            refreshCartTable();
+            refreshPayTable();
+        });
         loadLookups();              // NGOAI EDT (plan/14 loi #19)
         onMethodChanged();
         refreshCartTable();
@@ -193,13 +201,13 @@ public class NewInvoicePanel extends JPanel {
         }
         StringBuilder sb = new StringBuilder();
         if (!cart.isEmpty()) {
-            sb.append(cart.size()).append(" dong hang");
+            sb.append(cart.size()).append(I18n.msg(" dòng hàng", " item line(s)"));
         }
         if (!payments.isEmpty()) {
             if (sb.length() > 0) {
                 sb.append(", ");
             }
-            sb.append(payments.size()).append(" lan thanh toan");
+            sb.append(payments.size()).append(I18n.msg(" lần thanh toán", " payment(s)"));
         }
         return sb.toString();
     }
@@ -238,8 +246,11 @@ public class NewInvoicePanel extends JPanel {
         g.gridwidth = 1;
 
         // Hàng 3: dòng mẹo -- thứ cả app sinh ra để minh hoạ, GIỮ NGUYÊN
-        JLabel note = new JLabel("<html><i>Meo: doi 'Ngay ban' ve nam ngoai "
-                + "roi them san pham -> don gia se lay theo GIA CU trong Price_History.</i></html>");
+        JLabel note = new JLabel(I18n.text(
+                "<html><i>Mẹo: đổi 'Ngày bán' về ngày trước rồi thêm sản phẩm"
+                        + " -> đơn giá sẽ lấy theo GIÁ CỦA NGÀY ĐÓ.</i></html>",
+                "<html><i>Tip: set the sale date to an earlier day, then add a product"
+                        + " to use THAT DAY'S price.</i></html>"));
         g.gridy = 2; g.gridx = 0; g.gridwidth = 5;
         p.add(note, g);
         return p;
@@ -253,13 +264,21 @@ public class NewInvoicePanel extends JPanel {
         g.anchor = GridBagConstraints.WEST;
 
         cbProduct.setPreferredSize(new Dimension(360, 26));
-        tfQty.setToolTipText("<html>Dau <b>,</b> hoac <b>.</b> la dau THAP PHAN"
-                + " (toi da 3 chu so) -- KHONG phai dau tach nghin.<br>"
-                + "So thap phan CHI cho san pham ban theo KG / LITER;"
-                + " cai / goi / hop chi so nguyen. Toi da 10.000 moi dong.<br>"
-                + "Dung: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br>"
-                + "<i>Khac hẳn o tien ben duoi, noi dau <b>.</b> la dau tach nghin.</i><br>"
-                + "Enter = Them vao hoa don.</html>");
+        tfQty.setToolTipText(I18n.text(
+                "<html>Dấu <b>,</b> hoặc <b>.</b> là dấu THẬP PHÂN"
+                + " (tối đa 3 chữ số) -- KHÔNG phải dấu tách nghìn.<br>"
+                + "Số thập phân CHỈ cho sản phẩm bán theo KG / LITER;"
+                + " cái / gói / hộp chỉ số nguyên. Tối đa 10.000 mỗi dòng.<br>"
+                + "Đúng: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br>"
+                + "<i>Khác hẳn ô tiền bên dưới, nơi dấu <b>.</b> là dấu tách nghìn.</i><br>"
+                + "Enter = Thêm vào hóa đơn.</html>",
+                "<html>Use <b>,</b> or <b>.</b> as the decimal point"
+                + " (up to 3 digits) -- NOT a thousands separator.<br>"
+                + "Decimals are allowed ONLY for products sold by KG / LITER;"
+                + " pieces / packs / boxes take whole numbers. At most 10,000 per line.<br>"
+                + "Valid: <code>2</code> | <code>1,5</code> | <code>1.5</code> | <code>0,25</code><br>"
+                + "<i>Unlike the amount field below, where <b>.</b> separates thousands.</i><br>"
+                + "Enter = add to the invoice.</html>"));
 
         g.gridy = 0;
         g.gridx = 0; bar.add(new JLabel("San pham:"), g);
@@ -280,7 +299,7 @@ public class NewInvoicePanel extends JPanel {
 
         JScrollPane sp = new JScrollPane(tbCart);
         sp.setBorder(BorderFactory.createTitledBorder(
-                "3. Cac dong hang (se thanh bang Invoice_Line)"));
+                I18n.text("3. Các dòng hàng", "3. Items")));
 
         JPanel center = new JPanel(new BorderLayout(6, 6));
         center.add(bar, BorderLayout.NORTH);
@@ -305,12 +324,19 @@ public class NewInvoicePanel extends JPanel {
         g.insets = new Insets(3, 6, 3, 6);
         g.anchor = GridBagConstraints.WEST;
 
-        tfAmount.setToolTipText("<html>Dau <b>.</b> la dau TACH NGHIN (phai du 3 chu so),"
-                + " dau <b>,</b> la dau thap phan.<br>"
-                + "Dung: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>"
-                + "Sai : <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br>"
-                + "<i>Khac hẳn o so luong o tren, noi dau <b>.</b> la dau thap phan.</i><br>"
-                + "Enter = Them thanh toan.</html>");
+        tfAmount.setToolTipText(I18n.text(
+                "<html>Dấu <b>.</b> là dấu TÁCH NGHÌN (phải đủ 3 chữ số),"
+                + " dấu <b>,</b> là dấu thập phân.<br>"
+                + "Đúng: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>"
+                + "Sai: <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br>"
+                + "<i>Khác hẳn ô số lượng bên trên, nơi dấu <b>.</b> là dấu thập phân.</i><br>"
+                + "Enter = Thêm thanh toán.</html>",
+                "<html><b>.</b> separates THOUSANDS (must be followed by 3 digits),"
+                + " <b>,</b> is the decimal separator.<br>"
+                + "Valid: <code>500.000</code> | <code>1.234,50</code> | <code>500000</code><br>"
+                + "Invalid: <code>500.00</code> | <code>1.2.3</code> | <code>1,234</code><br>"
+                + "<i>Unlike the quantity field above, where <b>.</b> is the decimal separator.</i><br>"
+                + "Enter = add the payment.</html>"));
 
         // Hàng 1: phương thức + ô tiền + nhãn vọng lại
         g.gridy = 0;
@@ -450,7 +476,7 @@ public class NewInvoicePanel extends JPanel {
             return;
         }
         BigDecimal q = parseQtySilently(text);
-        String problem = (q == null) ? "So luong khong doc duoc."
+        String problem = (q == null) ? I18n.msg("Số lượng không đọc được.", "The quantity cannot be read.")
                                      : CashRules.quantityProblem(q, selectedUnit());
         if (problem != null) {
             showQtyError(problem);
@@ -501,17 +527,20 @@ public class NewInvoicePanel extends JPanel {
         String problem = CashRules.quantityProblem(q, productUnit);
         if (problem != null) {
             if (!isEdit) showQtyError(problem);
-            Ui.warn(this, problem, "So luong khong hop le");
+            Ui.warn(this, problem, I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             tfQty.requestFocusInWindow();
             return null;
         }
         // Cộng dồn với dòng đã có trong giỏ (chỉ khi thêm mới)
         if (existingQty != null && !isEdit
                 && existingQty.add(q).compareTo(CashRules.MAX_LINE_QTY) > 0) {
-            String msg = "Tong so luong (da co trong gio " + Ui.qty(existingQty)
-                       + " + nhap moi " + Ui.qty(q) + ") vuot qua 10.000 moi dong.";
+            String msg = I18n.msg(
+                    "Tổng số lượng (đã có trong giỏ " + Ui.qty(existingQty)
+                  + " + nhập mới " + Ui.qty(q) + ") vượt quá 10.000 mỗi dòng.",
+                    "Total quantity (already in cart " + Ui.qty(existingQty)
+                  + " + new " + Ui.qty(q) + ") exceeds 10,000 per line.");
             showQtyError(msg);
-            Ui.warn(this, msg, "So luong khong hop le");
+            Ui.warn(this, msg, I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             tfQty.requestFocusInWindow();
             return null;
         }
@@ -531,9 +560,12 @@ public class NewInvoicePanel extends JPanel {
         }
         t = t.add(line.lineTotal());
         if (t.compareTo(CashRules.MAX_MONEY) <= 0) return false;
-        Ui.warn(this, "Tong hoa don se la " + Ui.money(t) + ", vuot gioi han cot tien\n"
-                    + "cua database (" + Ui.money(CashRules.MAX_MONEY) + "). Hay tach thanh nhieu hoa don.",
-                "Tong tien qua lon");
+        Ui.warn(this, I18n.msg(
+                    "Tổng hóa đơn sẽ là " + Ui.money(t) + ", vượt mức tối đa của một hóa đơn\n"
+                  + "(" + Ui.money(CashRules.MAX_MONEY) + "). Hãy tách thành nhiều hóa đơn.",
+                    "The invoice total would be " + Ui.money(t) + ", over the limit for one invoice\n"
+                  + "(" + Ui.money(CashRules.MAX_MONEY) + "). Please split it into several invoices!"),
+                I18n.msg("Tổng tiền quá lớn", "Total Too Large"));
         return true;
     }
 
@@ -686,9 +718,12 @@ public class NewInvoicePanel extends JPanel {
     private void addToCart() {
         final Product p = (Product) cbProduct.getSelectedItem();
         if (p == null) {
-            Ui.warn(this, "Chua chon san pham nao.\n"
-                        + "Neu o chon trong: bam \"Tai lai\" o khung 1 de nap lai danh muc.",
-                    "Chua chon san pham");
+            Ui.warn(this, I18n.msg(
+                        "Chưa chọn sản phẩm nào.\n"
+                      + "Nếu ô chọn trống: bấm \"Tải lại\" ở khung 1 để nạp lại danh mục.",
+                        "Please select a product!\n"
+                      + "If the list is empty, click \"Reload\" in section 1 to reload the catalog."),
+                    I18n.msg("Chưa chọn sản phẩm", "No Product Selected"));
             return;
         }
 
@@ -719,9 +754,11 @@ public class NewInvoicePanel extends JPanel {
                 }
                 if (pr.price == null) {
                     Ui.warn(NewInvoicePanel.this,
-                            "San pham nay chua co gia nao co hieu luc truoc ngay "
-                          + date + ".\nHay chon ngay muon hon.",
-                            "Khong co gia tai ngay ban");
+                            I18n.msg("Sản phẩm này chưa có giá nào có hiệu lực trước ngày "
+                                   + date + ".\nHãy chọn ngày muộn hơn.",
+                                     "This product has no price in effect before "
+                                   + date + ".\nPlease pick a later date!"),
+                            I18n.msg("Không có giá tại ngày bán", "No Price on Sale Date"));
                     return;
                 }
 
@@ -737,9 +774,13 @@ public class NewInvoicePanel extends JPanel {
                     CartLine added = priceLine(p, qty, pr);
                     if (exceedsMoneyCap(added, -1)) return;
                     cart.add(added);
-                    hint(date, pr, "  Gia ngay " + date + " (" + Ui.money(pr.price)
-                            + ") khac don gia cua dong da co (" + Ui.money(existing.unitPrice)
-                            + ") -> them dong moi.");
+                    hint(date, pr, I18n.msg(
+                            "  Giá ngày " + date + " (" + Ui.money(pr.price)
+                          + ") khác đơn giá của dòng đã có (" + Ui.money(existing.unitPrice)
+                          + ") -> thêm dòng mới.",
+                            "  The price on " + date + " (" + Ui.money(pr.price)
+                          + ") differs from the existing line (" + Ui.money(existing.unitPrice)
+                          + ") -> added a new line."));
                 } else {
                     CartLine added = priceLine(p, qty, pr);
                     if (exceedsMoneyCap(added, -1)) return;
@@ -754,8 +795,9 @@ public class NewInvoicePanel extends JPanel {
     }
 
     private void hint(LocalDate date, Priced pr, String extra) {
-        lbHint.setText("Gia ngay " + date + " = " + Ui.money(pr.price)
-                + (pr.note.isEmpty() ? "  (khong co KM)" : "  " + pr.note) + extra);
+        lbHint.setText(I18n.msg("Giá ngày ", "Price on ") + date + " = " + Ui.money(pr.price)
+                + (pr.note.isEmpty() ? I18n.msg("  (không có KM)", "  (no promotion)") : "  " + pr.note)
+                + extra);
     }
 
     private void setAddBusy(boolean busy) {
@@ -775,7 +817,8 @@ public class NewInvoicePanel extends JPanel {
     private void editQuantity() {
         int row = tbCart.getSelectedRow();
         if (row < 0 || row >= cart.size()) {
-            Ui.warn(this, "Chua chon dong hang nao de sua.", "Chua chon dong hang");
+            Ui.warn(this, I18n.msg("Chưa chọn dòng hàng nào để sửa.", "Please select a line to edit!"),
+                    I18n.msg("Chưa chọn dòng hàng", "No Line Selected"));
             return;
         }
         final CartLine line = cart.get(row);
@@ -786,20 +829,25 @@ public class NewInvoicePanel extends JPanel {
 
         // Tạo dialog tùy chỉnh
         Window parent = SwingUtilities.getWindowAncestor(this);
-        JDialog dialog = new JDialog(parent, "Sửa số lượng", Dialog.ModalityType.APPLICATION_MODAL);
+        JDialog dialog = new JDialog(parent, I18n.msg("Sửa số lượng", "Edit Quantity"),
+                Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setLayout(new BorderLayout(8, 8));
         ((JComponent) dialog.getContentPane()).setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        JLabel msgLabel = new JLabel("<html>So luong moi cho \"" + line.product.name + "\" (" + line.product.unit + "):<br>"
+        JLabel msgLabel = new JLabel("<html>"
+                + I18n.msg("Số lượng mới cho \"", "New quantity for \"")
+                + line.product.name + "\" (" + line.product.unit + "):<br>"
                 + (CashRules.allowsDecimal(line.product.unit)
-                        ? "Dau , hoac . la dau thap phan, toi da 3 chu so."
-                        : "Chi so nguyen (san pham khong ban le theo can / dong).")
-                + " Toi da 10.000.</html>");
+                        ? I18n.msg("Dấu , hoặc . là dấu thập phân, tối đa 3 chữ số.",
+                                   "Use , or . as the decimal separator, up to 3 digits.")
+                        : I18n.msg("Chỉ số nguyên (sản phẩm không bán lẻ theo cân / đong).",
+                                   "Whole numbers only (this product is not sold by weight / volume)."))
+                + I18n.msg(" Tối đa 10.000.", " At most 10,000.") + "</html>");
         msgLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton okBtn = new JButton("OK");
-        JButton cancelBtn = new JButton("Huy");
+        JButton cancelBtn = new JButton(I18n.msg("Hủy", "Cancel"));
         btnPanel.add(okBtn);
         btnPanel.add(cancelBtn);
 
@@ -852,8 +900,9 @@ public class NewInvoicePanel extends JPanel {
                 }
                 if (pr.price == null) {
                     Ui.warn(NewInvoicePanel.this,
-                            "San pham nay khong co gia nao co hieu luc truoc ngay " + date + ".",
-                            "Khong co gia tai ngay ban");
+                            I18n.msg("Sản phẩm này không có giá nào có hiệu lực trước ngày " + date + ".",
+                                     "This product has no price in effect before " + date + "."),
+                            I18n.msg("Không có giá tại ngày bán", "No Price on Sale Date"));
                     return;
                 }
                 int i = cart.indexOf(line);
@@ -1032,29 +1081,36 @@ public class NewInvoicePanel extends JPanel {
      */
     private boolean addPayment(PayMethod m, BigDecimal typed, String detail1, String detail2) {
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao, chua biet phai thu bao nhieu.",
-                    "Chua co dong hang");
+            Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào, chưa biết phải thu bao nhiêu.",
+                                   "The invoice has no items yet, so there is nothing to collect!"),
+                    I18n.msg("Chưa có dòng hàng", "No Items Yet"));
             return false;
         }
         BigDecimal left = remaining();
         if (left.signum() <= 0) {
-            Ui.warn(this, "Hoa don nay da thu du tien (" + Ui.money(totalDue()) + ").\n"
-                        + "Khong can them dong thanh toan nao nua.",
-                    "Da thu du tien");
+            Ui.warn(this, I18n.msg(
+                        "Hóa đơn này đã thu đủ tiền (" + Ui.money(totalDue()) + ").\n"
+                      + "Không cần thêm dòng thanh toán nào nữa.",
+                        "This invoice is fully paid (" + Ui.money(totalDue()) + ").\n"
+                      + "No more payments are needed."),
+                    I18n.msg("Đã thu đủ tiền", "Fully Paid"));
             return false;
         }
 
         Split split = splitPayment(m, typed, left);
         if (split == null) {
-            Ui.warn(this,
-                    m.label() + " " + Ui.money(typed) + " nhieu hon so con thieu "
+            Ui.warn(this, I18n.msg(
+                    m.displayLabel() + " " + Ui.money(typed) + " nhiều hơn số còn thiếu "
                   + Ui.money(left) + ".\n\n"
-                  + "Khong co duong tra lai cho " + m.label().toLowerCase()
-                  + ": bang Payment khong co cot tien thoi cho phuong thuc nay,\n"
-                  + "va phieu hoan tien nam ngoai pham vi ban demo.\n\n"
-                  + "Hay go dung " + Ui.money(left)
-                  + ", hoac chon \"Tien mat\" neu khach dua thua.",
-                    "So tien vuot qua so con thieu");
+                  + m.displayLabel() + " không thối lại tiền được.\n\n"
+                  + "Hãy gõ đúng " + Ui.money(left)
+                  + ", hoặc chọn \"Tiền mặt\" nếu khách đưa thừa.",
+                    m.displayLabel() + " " + Ui.money(typed) + " is more than the remaining "
+                  + Ui.money(left) + ".\n\n"
+                  + m.displayLabel() + " cannot give change.\n\n"
+                  + "Please enter exactly " + Ui.money(left)
+                  + ", or choose \"Cash\" if the customer pays more!"),
+                    I18n.msg("Số tiền vượt quá số còn thiếu", "Amount Too High"));
             return false;
         }
 
@@ -1065,14 +1121,18 @@ public class NewInvoicePanel extends JPanel {
         if (m.hasChange()) {
             CashRules.TenderCheck tc = CashRules.checkTendered(typed, left);
             if (tc.verdict == CashRules.Verdict.REJECT) {
-                Ui.warn(this, tc.message, "So tien khach dua khong hop ly");
+                Ui.warn(this, tc.message, I18n.msg("Số tiền khách đưa không hợp lý",
+                                                   "Unreasonable Amount"));
                 return false;
             }
             if (tc.verdict == CashRules.Verdict.SUSPICIOUS) {
-                Object[] opts = {"Go lai so tien", "Van ghi"};
+                Object[] opts = {I18n.msg("Gõ lại số tiền", "Re-enter amount"),
+                                 I18n.msg("Vẫn ghi", "Record anyway")};
                 int c = JOptionPane.showOptionDialog(this,
-                        tc.message + "\nCo phai thu ngan go nham khong?",
-                        "Khach dua thua to tien?", JOptionPane.YES_NO_OPTION,
+                        tc.message + I18n.msg("\nCó phải thu ngân gõ nhầm không?",
+                                              "\nDid the cashier mistype?"),
+                        I18n.msg("Khách đưa thừa tờ tiền?", "Extra Banknote?"),
+                        JOptionPane.YES_NO_OPTION,
                         JOptionPane.WARNING_MESSAGE, null, opts, opts[0]);
                 if (c != 1) return false;
             }
@@ -1114,13 +1174,17 @@ public class NewInvoicePanel extends JPanel {
         JTextField tfLast4 = new JTextField(6);
         JTextField tfAuth  = new JTextField(8);
         JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
-        form.add(new JLabel("Quet the " + Ui.money(amount) + " tren may POS, roi nhap theo phieu in ra:"));
-        form.add(new JLabel("4 so cuoi cua the:"));
+        form.add(new JLabel(I18n.msg(
+                "Quẹt thẻ " + Ui.money(amount) + " trên máy POS, rồi nhập theo phiếu in ra:",
+                "Swipe " + Ui.money(amount) + " on the POS terminal, then copy from its slip:")));
+        form.add(new JLabel(I18n.msg("4 số cuối của thẻ:", "Last 4 card digits:")));
         form.add(tfLast4);
-        form.add(new JLabel("Ma chuan chi (6 ky tu, 'APPR CODE' tren phieu):"));
+        form.add(new JLabel(I18n.msg("Mã chuẩn chi (6 ký tự, 'APPR CODE' trên phiếu):",
+                                     "Authorization code (6 characters, 'APPR CODE' on the slip):")));
         form.add(tfAuth);
         while (true) {
-            int c = JOptionPane.showConfirmDialog(this, form, "Chi tiet thanh toan the ngan hang",
+            int c = JOptionPane.showConfirmDialog(this, form,
+                    I18n.msg("Chi tiết thanh toán thẻ ngân hàng", "Bank Card Details"),
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
             if (c != JOptionPane.OK_OPTION) return null;
             String last4 = tfLast4.getText().trim();
@@ -1129,7 +1193,7 @@ public class NewInvoicePanel extends JPanel {
             if (problem == null) {
                 return new String[]{CashRules.maskedCard(last4), auth};
             }
-            Ui.warn(this, problem, "Chi tiet the chua dung");
+            Ui.warn(this, problem, I18n.msg("Chi tiết thẻ chưa đúng", "Invalid Card Details"));
         }
     }
 
@@ -1137,11 +1201,13 @@ public class NewInvoicePanel extends JPanel {
     private void payRestInCash() {
         BigDecimal left = remaining();
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao.", "Chua co dong hang");
+            Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào.", "The invoice has no items yet!"),
+                    I18n.msg("Chưa có dòng hàng", "No Items Yet"));
             return;
         }
         if (left.signum() <= 0) {
-            Ui.warn(this, "Hoa don nay da thu du tien.", "Da thu du tien");
+            Ui.warn(this, I18n.msg("Hóa đơn này đã thu đủ tiền.", "This invoice is fully paid."),
+                    I18n.msg("Đã thu đủ tiền", "Fully Paid"));
             return;
         }
         addPayment(PayMethod.CASH, left, null, null);
@@ -1156,12 +1222,14 @@ public class NewInvoicePanel extends JPanel {
      */
     private void showQr() {
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao.", "Chua co dong hang");
+            Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào.", "The invoice has no items yet!"),
+                    I18n.msg("Chưa có dòng hàng", "No Items Yet"));
             return;
         }
         BigDecimal left = remaining();
         if (left.signum() <= 0) {
-            Ui.warn(this, "Hoa don nay da thu du tien.", "Da thu du tien");
+            Ui.warn(this, I18n.msg("Hóa đơn này đã thu đủ tiền.", "This invoice is fully paid."),
+                    I18n.msg("Đã thu đủ tiền", "Fully Paid"));
             return;
         }
 
@@ -1171,20 +1239,28 @@ public class NewInvoicePanel extends JPanel {
         BigDecimal amount;
         String typed = tfAmount.getText().trim();
         if (typed.isEmpty()) {
-            Ui.warn(this, "Chua nhap so tien can thu bang ma QR.\n"
-                        + "Chon phuong thuc \"" + PayMethod.EWALLET.label()
-                        + "\" de o So tien tu dien so con thieu.",
-                    "Chua nhap so tien");
+            Ui.warn(this, I18n.msg(
+                        "Chưa nhập số tiền cần thu bằng mã QR.\n"
+                      + "Chọn phương thức \"" + PayMethod.EWALLET.displayLabel()
+                      + "\" để ô Số tiền tự điền số còn thiếu.",
+                        "Please enter the amount to collect with the QR code!\n"
+                      + "Choosing \"" + PayMethod.EWALLET.displayLabel()
+                      + "\" fills the Amount field with the remaining balance."),
+                    I18n.msg("Chưa nhập số tiền", "Missing Amount"));
             tfAmount.requestFocusInWindow();
             return;
         } else {
-            amount = Ui.readMoney(this, typed, "So tien");
+            amount = Ui.readMoney(this, typed, I18n.msg("Số tiền", "Amount"));
             if (amount == null) return;
             if (amount.compareTo(left) > 0) {
-                Ui.warn(this, "So tien " + Ui.money(amount) + " nhieu hon so con thieu "
-                            + Ui.money(left) + ".\n"
-                            + "Vi dien tu khong co tien thoi, hay go dung " + Ui.money(left) + ".",
-                        "So tien vuot qua so con thieu");
+                Ui.warn(this, I18n.msg(
+                            "Số tiền " + Ui.money(amount) + " nhiều hơn số còn thiếu "
+                          + Ui.money(left) + ".\n"
+                          + "Ví điện tử không có tiền thối, hãy gõ đúng " + Ui.money(left) + ".",
+                            "The amount " + Ui.money(amount) + " is more than the remaining "
+                          + Ui.money(left) + ".\n"
+                          + "E-wallets give no change. Please enter exactly " + Ui.money(left) + "."),
+                        I18n.msg("Số tiền vượt quá số còn thiếu", "Amount Too High"));
                 return;
             }
         }
@@ -1204,31 +1280,37 @@ public class NewInvoicePanel extends JPanel {
     private void showChangeBreakdown() {
         BigDecimal change = totalChange();
         if (change.signum() <= 0) {
-            Ui.warn(this, "Khong co tien thoi.", "Tien thoi");
+            Ui.warn(this, I18n.msg("Không có tiền thối.", "There is no change to give."),
+                    I18n.msg("Tiền thối", "Change"));
             return;
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("Tien thoi cho khach: ").append(Ui.money(change)).append("\n\n");
+        sb.append(I18n.msg("Tiền thối cho khách: ", "Change for the customer: "))
+          .append(Ui.money(change)).append("\n\n");
         for (long[] part : CashRules.breakdown(change)) {
             sb.append(String.format("  %10s  x %d%n", Ui.money(BigDecimal.valueOf(part[0])), part[1]));
         }
         BigDecimal rest = CashRules.breakdownRemainder(change);
         if (rest.signum() > 0) {
-            sb.append("\n  Le ").append(Ui.money(rest))
-              .append(" duoi to nho nhat (100d) -- lam tron voi khach.");
+            sb.append(I18n.msg("\n  Lẻ ", "\n  ")).append(Ui.money(rest))
+              .append(I18n.msg(" dưới tờ nhỏ nhất (100đ) -- làm tròn với khách.",
+                               " is below the smallest note (100 VND) -- round it with the customer."));
         }
         JTextArea ta = new JTextArea(sb.toString());
         ta.setEditable(false);
         ta.setFont(Ui.MONO);
-        JOptionPane.showMessageDialog(this, ta, "Thoi tien", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(this, ta, I18n.msg("Thối tiền", "Change"),
+                JOptionPane.INFORMATION_MESSAGE);
     }
 
     /** Nút "Lam moi tab": hỏi trước nếu đang có dữ liệu chưa lưu. */
     private void onResetTab() {
         if (hasPendingWork()) {
             int c = JOptionPane.showConfirmDialog(this,
-                    "Xoa trang tab Lap hoa don?\nSe mat " + pendingWorkSummary() + " chua luu.",
-                    "Lam moi tab", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    I18n.msg("Xóa trắng tab Lập hóa đơn?\nSẽ mất " + pendingWorkSummary() + " chưa lưu.",
+                             "Clear the New invoice tab?\nUnsaved " + pendingWorkSummary() + " will be lost."),
+                    I18n.msg("Làm mới tab", "Reset Tab"), JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
             if (c != JOptionPane.YES_OPTION) return;
         }
         resetForm();
@@ -1308,10 +1390,12 @@ public class NewInvoicePanel extends JPanel {
             refreshPayTable();
         } else {
             // Trường hợp 2: Chỉ có Thẻ / Ví -> cảnh báo, không tự điều chỉnh được
-            Ui.warn(this,
-                    "Tong tien hoa don moi nho hon so tien da thanh toan qua the/vi dien tu.\n\n"
-                  + "Vui long bam nut \"Xoa het\" o muc Thanh toan de nhap lai so tien phu hop.",
-                    "Tien thoi khong the tu dong dieu chinh");
+            Ui.warn(this, I18n.msg(
+                    "Tổng tiền hóa đơn mới nhỏ hơn số tiền đã thanh toán qua thẻ/ví điện tử.\n\n"
+                  + "Vui lòng bấm nút \"Xóa hết\" ở mục Thanh toán để nhập lại số tiền phù hợp.",
+                    "The new invoice total is less than the amount already paid by card/e-wallet.\n\n"
+                  + "Please click \"Clear all\" in the payment section and enter the payments again!"),
+                    I18n.msg("Tiền thối không thể tự động điều chỉnh", "Cannot Adjust Change"));
             // Không refreshPayTable() vì không thay đổi dữ liệu
             // save() sẽ kiểm tra và chặn nếu vẫn còn paid > due
         }
@@ -1338,7 +1422,8 @@ public class NewInvoicePanel extends JPanel {
      */
     private void save() {
         if (cart.isEmpty()) {
-            Ui.warn(this, "Hoa don chua co dong hang nao.", "Chua co dong hang");
+            Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào.", "The invoice has no items yet!"),
+                    I18n.msg("Chưa có dòng hàng", "No Items Yet"));
             return;
         }
         // Phép kiểm "chưa có thanh toán nào" phải đi TRƯỚC: giỏ có hàng mà
@@ -1346,7 +1431,8 @@ public class NewInvoicePanel extends JPanel {
         // dùng bấm Yes, rồi mới bị từ chối vì "Chua co dong thanh toan nao"
         // -- một câu hỏi vô ích (plan/13 mục 5.7).
         if (payments.isEmpty()) {
-            Ui.warn(this, "Chua co dong thanh toan nao.", "Chua co thanh toan");
+            Ui.warn(this, I18n.msg("Chưa có dòng thanh toán nào.", "Please add a payment first!"),
+                    I18n.msg("Chưa có thanh toán", "No Payments"));
             return;
         }
 
@@ -1355,9 +1441,12 @@ public class NewInvoicePanel extends JPanel {
         final IdName counter = (IdName) cbCounter.getSelectedItem();
         final IdName cashier = (IdName) cbCashier.getSelectedItem();
         if (counter == null || cashier == null) {
-            Ui.warn(this, "Chua nap duoc danh sach quay / thu ngan.\n"
-                        + "Kiem tra ket noi MySQL roi bam \"Tai lai\" o khung 1.",
-                    "Thieu du lieu danh muc");
+            Ui.warn(this, I18n.msg(
+                        "Chưa nạp được danh sách quầy / thu ngân.\n"
+                      + "Kiểm tra kết nối rồi bấm \"Tải lại\" ở khung 1.",
+                        "The counter / cashier lists have not loaded.\n"
+                      + "Please check the connection, then click \"Reload\" in section 1!"),
+                    I18n.msg("Thiếu dữ liệu danh mục", "Missing Information"));
             return;                                  // thay cho NPE (loi #20)
         }
 
@@ -1368,10 +1457,14 @@ public class NewInvoicePanel extends JPanel {
             // yêu cầu thu ngân thu đủ tiền trước khi xuất hóa đơn.
             BigDecimal remaining = due.subtract(paid);
             Ui.warn(this,
-                    "Tong hoa don la " + Ui.money(due) + " nhung moi thanh toan " + Ui.money(paid)
-                  + " (con thieu " + Ui.money(remaining) + ").\n"
-                  + "Vui long thu du tien truoc khi xuat hoa don!",
-                    "Thanh toan chua du");
+                    I18n.msg(
+                    "Tổng hóa đơn là " + Ui.money(due) + " nhưng mới thanh toán " + Ui.money(paid)
+                  + " (còn thiếu " + Ui.money(remaining) + ").\n"
+                  + "Vui lòng thu đủ tiền trước khi xuất hóa đơn!",
+                    "The invoice total is " + Ui.money(due) + " but only " + Ui.money(paid)
+                  + " has been paid (" + Ui.money(remaining) + " remaining).\n"
+                  + "Please collect the full amount before creating the invoice!"),
+                    I18n.msg("Thanh toán chưa đủ", "Payment Incomplete"));
             return;
         } else if (paid.compareTo(due) > 0) {
             // Trường hợp paid > due: kiểm tra có Tiền mặt để tự điều chỉnh không
@@ -1385,10 +1478,14 @@ public class NewInvoicePanel extends JPanel {
             if (!hasCashPayment) {
                 // Chỉ có Thẻ / Ví -> không thể tự điều chỉnh tiền thối, chặn lưu
                 Ui.warn(this,
-                        "Tong tien thanh toan (" + Ui.money(paid) + ") lon hon tong hoa don (" + Ui.money(due) + ").\n\n"
-                      + "Vi chi co thanh toan bang The/Vi dien tu (khong co tien thoi),\n"
-                      + "vui long bam nut \"Xoa het\" o muc Thanh toan de nhap lai so tien phu hop.",
-                        "Thanh toan vuot tong hoa don");
+                        I18n.msg(
+                        "Tổng tiền thanh toán (" + Ui.money(paid) + ") lớn hơn tổng hóa đơn (" + Ui.money(due) + ").\n\n"
+                      + "Vì chỉ có thanh toán bằng Thẻ/Ví điện tử (không có tiền thối),\n"
+                      + "vui lòng bấm nút \"Xóa hết\" ở mục Thanh toán để nhập lại số tiền phù hợp.",
+                        "Total payments (" + Ui.money(paid) + ") exceed the invoice total (" + Ui.money(due) + ").\n\n"
+                      + "Card/e-wallet payments give no change, so please click \"Clear all\"\n"
+                      + "in the payment section and enter the payments again!"),
+                        I18n.msg("Thanh toán vượt tổng hóa đơn", "Overpayment"));
                 return;
             }
             // Có Tiền mặt -> recalculatePaymentsIfNeeded() đã được gọi khi sửa/xóa hàng,
@@ -1399,8 +1496,9 @@ public class NewInvoicePanel extends JPanel {
             if (paid.compareTo(due) > 0) {
                 // Vẫn còn dư (hiếm xảy ra) -> chặn lưu
                 Ui.warn(this,
-                        "Khong the tu dieu chinh du tien thoi. Vui long kiem tra lai cac dong thanh toan.",
-                        "Loi dieu chinh tien thoi");
+                        I18n.msg("Không thể tự điều chỉnh đủ tiền thối. Vui lòng kiểm tra lại các dòng thanh toán.",
+                                 "Cannot adjust the change automatically. Please check the payment lines!"),
+                        I18n.msg("Lỗi điều chỉnh tiền thối", "Cannot Adjust Change"));
                 return;
             }
         }
@@ -1440,9 +1538,14 @@ public class NewInvoicePanel extends JPanel {
         }.execute();
     }
 
+    /** Nhan nut luu -- doc lai moi lan vi doi ngon ngu thi ve lai. */
+    private static String saveLabel() {
+        return I18n.text("XUẤT HÓA ĐƠN", "CREATE INVOICE");
+    }
+
     private void setSaving(boolean saving) {
         btSave.setEnabled(!saving);
-        btSave.setText(saving ? "Dang luu..." : "XUAT HOA DON");
+        btSave.setText(saving ? I18n.msg("Đang lưu...", "Saving...") : saveLabel());
         btAddPay.setEnabled(!saving);
         btPayAll.setEnabled(!saving);
         btAdd.setEnabled(!saving);
@@ -1489,7 +1592,7 @@ public class NewInvoicePanel extends JPanel {
      * nào dùng tới thuế suất, nên cột này kèm tooltip nói rõ điều đó.
      */
     private void refreshCartTable() {
-        String[] cols = {"Dong", "San pham", "SL", "DVT",
+        String[] cols = {"Dong", I18n.text("Sản phẩm", "Product"), "SL", "DVT",
                          "Don gia", "Giam gia", "Thanh tien", "VAT %"};
         Object[][] data = new Object[cart.size()][cols.length];
         for (int i = 0; i < cart.size(); i++) {
@@ -1506,8 +1609,9 @@ public class NewInvoicePanel extends JPanel {
         }
         ((DefaultTableModel) tbCart.getModel()).setDataVector(data, cols);
         Ui.autoSize(tbCart);
-        tbCart.setToolTipText("Cot VAT % la thue suat cua san pham;"
-                + " don gia trong Price_History DA GOM VAT.");
+        tbCart.setToolTipText(I18n.text(
+                "Cột VAT % là thuế suất của sản phẩm; đơn giá ĐÃ GỒM VAT.",
+                "VAT % is the product tax rate; unit prices already include VAT."));
         refreshTotals();
     }
 
@@ -1522,7 +1626,7 @@ public class NewInvoicePanel extends JPanel {
             PaymentEntry p = payments.get(i);
             boolean hasTendered = p.tendered != null;
             data[i] = new Object[]{
-                    p.methodLabel(),
+                    p.methodDisplayLabel(),
                     Ui.money(p.amount),
                     hasTendered ? Ui.money(p.tendered) : "",
                     hasTendered ? Ui.money(p.change())  : "",
@@ -1552,10 +1656,10 @@ public class NewInvoicePanel extends JPanel {
         BigDecimal left   = remaining();
         BigDecimal change = totalChange();
 
-        lbTotal.setText("Tong: " + Ui.money(due));
-        lbPaid.setText("Da thu: " + Ui.money(paid));
-        lbLeft.setText("Con thieu: " + Ui.money(left));
-        lbChange.setText("Tien thoi: " + Ui.money(change));
+        lbTotal.setText(I18n.msg("Tổng: ", "Total: ") + Ui.money(due));
+        lbPaid.setText(I18n.msg("Đã thu: ", "Paid: ") + Ui.money(paid));
+        lbLeft.setText(I18n.msg("Còn thiếu: ", "Remaining: ") + Ui.money(left));
+        lbChange.setText(I18n.msg("Tiền thối: ", "Change: ") + Ui.money(change));
         lbLeft.setForeground(left.signum() > 0 ? Color.RED.darker() : new Color(0, 110, 0));
         btChange.setEnabled(change.signum() > 0);
 

@@ -90,4 +90,10 @@ public class PaymentEntry {
         PayMethod m = PayMethod.of(method);
         return m == null ? method : m.label();
     }
+
+    /** Như {@link #methodLabel()} nhưng theo ngôn ngữ đang chọn -- CHỈ để hiển thị. */
+    public String methodDisplayLabel() {
+        PayMethod m = PayMethod.of(method);
+        return m == null ? method : m.displayLabel();
+    }
 }

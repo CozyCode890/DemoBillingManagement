@@ -47,8 +47,8 @@ public class LoginDialog extends JDialog {
     private final AccountDao accountDao = new AccountDao();
 
     private final JLabel lbStatus = new JLabel(" ");
-    private final JButton btLogin = new JButton("Dang nhap");
-    private final JButton btExit  = new JButton("Thoat");
+    private final JButton btLogin = new JButton(I18n.text("Đăng nhập", "Login"));
+    private final JButton btExit  = new JButton(I18n.text("Thoát", "Exit"));
     private final JButton btLanguage = new JButton();
 
     /** Các nút nhanh, giữ lại để {@link #setBusy} khoá/mở được cả hàng. */
@@ -68,7 +68,7 @@ public class LoginDialog extends JDialog {
      *               sao mình vẫn đang đứng ở màn hình đăng nhập.
      */
     public LoginDialog(Frame parent, String notice) {
-        super(parent, "Dang nhap he thong -- Retail Invoicing", true);
+        super(parent, I18n.text("Đăng nhập hệ thống -- Retail Invoicing", "Login to the System -- Retail Invoicing"), true);
         setLayout(new BorderLayout(10, 10));
         setResizable(false);
 
@@ -80,7 +80,7 @@ public class LoginDialog extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         gbc.gridx = 0; gbc.gridy = 0;
-        JLabel lbUser = new JLabel("Ten dang nhap:");
+        JLabel lbUser = new JLabel(I18n.text("Tên đăng nhập:", "Username:"));
         lbUser.setFont(Ui.BOLD);
         form.add(lbUser, gbc);
 
@@ -88,7 +88,7 @@ public class LoginDialog extends JDialog {
         form.add(tfUsername, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1;
-        JLabel lbPass = new JLabel("Mat khau:");
+        JLabel lbPass = new JLabel(I18n.text("Mật khẩu:", "Password:"));
         lbPass.setFont(Ui.BOLD);
         form.add(lbPass, gbc);
 
@@ -163,7 +163,7 @@ public class LoginDialog extends JDialog {
     private JComponent quickPanel(List<QuickAccount> accounts) {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createTitledBorder("Dang nhap nhanh (tai khoan mau cua ban demo)"));
+        panel.setBorder(BorderFactory.createTitledBorder(I18n.text("Đăng nhập nhanh (tài khoản mẫu)", "Quick login (sample accounts)")));
 
         int cols = Math.min(accounts.size(), MAX_QUICK_BUTTONS_PER_ROW);
         int rows = (accounts.size() + cols - 1) / cols;
@@ -181,7 +181,8 @@ public class LoginDialog extends JDialog {
             if (i < 9) {
                 bt.setMnemonic(Character.forDigit(i + 1, 10));
             }
-            bt.setToolTipText("Dien san va dang nhap bang tai khoan '" + acc.getUsername() + "'");
+            bt.setToolTipText(I18n.msg("Điền sẵn và đăng nhập bằng tài khoản '",
+                                       "Fill in and login with account '") + acc.getUsername() + "'");
             bt.addActionListener(e -> quickLogin(acc));
             quickButtons.add(bt);
             quickAccountsForLabels.add(acc);
@@ -190,9 +191,11 @@ public class LoginDialog extends JDialog {
 
         panel.add(grid);
         panel.add(Box.createVerticalStrut(4));
-        panel.add(hint("Bam mot nut de dien san va dang nhap ngay."));
-        panel.add(hint("Phim tat: Alt+1 ... Alt+" + Math.min(accounts.size(), 9)
-                     + ".  Enter = Dang nhap."));
+        panel.add(hint(I18n.text("Bấm một nút để điền sẵn và đăng nhập ngay.",
+                                 "Click a button to fill in and login right away.")));
+        panel.add(hint(I18n.msg("Phím tắt: Alt+1 ... Alt+", "Shortcuts: Alt+1 ... Alt+")
+                     + Math.min(accounts.size(), 9)
+                     + I18n.msg(".  Enter = Đăng nhập.", ".  Enter = Login.")));
         return panel;
     }
 
@@ -233,7 +236,7 @@ public class LoginDialog extends JDialog {
 
     private void refreshLanguageControls() {
         btLanguage.setText(I18n.languageSwitchLabel());
-        setTitle(I18n.text("Dang nhap he thong -- Retail Invoicing", "Sign in -- Retail Invoicing"));
+        setTitle(I18n.text("Đăng nhập hệ thống -- Retail Invoicing", "Login to the System -- Retail Invoicing"));
         refreshQuickButtonLabels();
     }
 
@@ -259,7 +262,8 @@ public class LoginDialog extends JDialog {
             // Dòng trạng thái thay cho JOptionPane: một hộp thoại phải bấm OK
             // mới làm tiếp được là thêm một cú bấm nữa vào đúng cái vòng lặp
             // mà khối này đang muốn rút ngắn.
-            setStatus("Vui long nhap day du Ten dang nhap va Mat khau.", COLOR_ERROR);
+            setStatus(I18n.msg("Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu!",
+                               "Please enter your full Username and Password!"), COLOR_ERROR);
             (username.isEmpty() ? tfUsername : pfPassword).requestFocusInWindow();
             return;
         }
@@ -283,7 +287,7 @@ public class LoginDialog extends JDialog {
      * bấm nút nhanh hơn gõ mật khẩu.
      */
     private void submit(String username, String password) {
-        setBusy(true, "Dang kiem tra tai khoan...");
+        setBusy(true, I18n.msg("Đang kiểm tra tài khoản...", "Checking account..."));
         new SwingWorker<Account, Void>() {
             @Override
             protected Account doInBackground() {
@@ -296,7 +300,8 @@ public class LoginDialog extends JDialog {
                 try {
                     Account acc = get();
                     if (acc == null) {
-                        setStatus("Sai ten dang nhap hoac mat khau.", COLOR_ERROR);
+                        setStatus(I18n.msg("Sai tên đăng nhập hoặc mật khẩu! Vui lòng kiểm tra lại.",
+                                           "Incorrect Username or Password! Please check again."), COLOR_ERROR);
                         pfPassword.setText("");
                         pfPassword.requestFocusInWindow();
                     } else {

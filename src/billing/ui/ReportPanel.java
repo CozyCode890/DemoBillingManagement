@@ -15,15 +15,17 @@ import java.util.function.Supplier;
  * ====================================================================
  *  MÀN HÌNH 3 -- BÁO CÁO  (đề bài câu 2, 3, 4, 5)
  * ====================================================================
- *  Bấm một nút -> app hiện CÂU SQL ở khung đen bên trên và KẾT QUẢ ở
- *  bảng bên dưới. Đọc song song hai thứ đó là cách nhanh nhất để hiểu
- *  một câu SQL đang làm gì.
+ *  Bấm một nút -> app hiện MÔ TẢ báo cáo (lời thường, cho nhân viên) và
+ *  KẾT QUẢ ở bảng bên dưới.
+ *
+ *  <p>Khung "Câu SQL đang chạy" đã bỏ khỏi giao diện (feat/i18n): app dành
+ *  cho nhân viên, họ không cần đọc SQL. Câu SQL vẫn nằm trong ReportDao
+ *  (ContractCheck dùng) và vẫn được ghi vào SqlLog.
  */
 public class ReportPanel extends JPanel {
 
     private final ReportDao dao = new ReportDao();
 
-    private final JTextArea taSql   = Ui.sqlBox("-- Bam mot nut o tren de chay bao cao");
     private final JTextArea taWhat  = new JTextArea(3, 40);
     private final JTable    tbData  = Ui.readOnlyTable();
 
@@ -53,67 +55,62 @@ public class ReportPanel extends JPanel {
         taWhat.setMargin(new Insets(8, 8, 8, 8));
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
-        buttons.setBorder(BorderFactory.createTitledBorder("Chon bao cao"));
+        buttons.setBorder(BorderFactory.createTitledBorder(I18n.text("Chọn báo cáo", "Choose a report")));
 
-        buttons.add(makeButton("2. Doanh thu 7 ngay / cua hang",
-                ReportDao.SQL_DAILY_TAKINGS,
-                "Doanh thu tung NGAY cua tung CUA HANG trong 7 ngay gan nhat. "
-              + "Hoa don khong noi thang toi Shop nen phai di vong: Invoice -> Counter -> Shop. "
-              + "GROUP BY hai cot (shop, ngay) nen moi dong ket qua la mot o trong bang cheo.",
+        buttons.add(makeButton(I18n.text("2. Doanh thu 7 ngày / cửa hàng", "2. 7-day revenue by shop"),
+                I18n.text("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất. "
+                        + "Hóa đơn đã trả hàng chỉ tính phần khách còn giữ; hóa đơn bị hủy không tính.",
+                          "Revenue for each SHOP on each DAY of the last 7 days. "
+                        + "Invoices with returns count only what the customer kept; voided invoices are excluded."),
                 dao::dailyTakings));
 
-        buttons.add(makeButton("3. San pham tang gia > 10%",
-                ReportDao.SQL_PRICE_RISE,
-                "SELF JOIN: noi bang Price_History voi CHINH NO de dat gia moi canh gia cu. "
-              + "Subquery MAX(...) tim moc gia LIEN TRUOC cua cung san pham. "
-              + "Dieu kien: gia moi > gia cu * 1.10 va nam trong nam nay.",
+        buttons.add(makeButton(I18n.text("3. Sản phẩm tăng giá > 10%", "3. Price rises > 10%"),
+                I18n.text("Các lần đổi giá trong năm nay mà giá mới cao hơn giá ngay trước đó trên 10%.",
+                          "Price changes this year where the new price is more than 10% above the previous one."),
                 dao::priceRise));
 
-        buttons.add(makeButton("4. Thu ngan gio hang TB cao nhat",
-                ReportDao.SQL_BEST_CASHIER,
-                "Bay pho bien: AVG thang tren Invoice_Line se ra trung binh moi DONG chu khong phai moi HOA DON. "
-              + "Phai tinh tong tien tung hoa don truoc (subquery), roi moi AVG theo thu ngan.",
+        buttons.add(makeButton(I18n.text("4. Thu ngân giỏ hàng TB cao nhất", "4. Cashier with the highest average basket"),
+                I18n.text("Giá trị trung bình MỘT HÓA ĐƠN của từng thu ngân, cao nhất ở trên cùng.",
+                          "Average value PER INVOICE for each cashier, highest first."),
                 dao::bestCashier));
 
-        buttons.add(makeButton("5. Hoa don tra hang > 50%",
-                ReportDao.SQL_BIG_RETURNS,
-                "Hai subquery: mot tinh tong hoa don, mot tinh tien tra lai. "
-              + "Tien tra lai tinh theo TY LE (SL tra / SL mua) nhan thanh tien, de phan giam gia cung duoc hoan dung ty le.",
+        buttons.add(makeButton(I18n.text("5. Hóa đơn trả hàng > 50%", "5. Invoices with > 50% returned"),
+                I18n.text("Hóa đơn mà khách đã trả lại hơn một nửa giá trị. "
+                        + "Tiền hoàn tính theo tỷ lệ số lượng trả, kể cả phần giảm giá.",
+                          "Invoices where the customer returned more than half of the value. "
+                        + "Refunds follow the returned quantity, discounts included."),
                 dao::bigReturns));
 
-        // Chữ giải thích SỬA Ở KHỐI 6 cùng lúc với câu truy vấn: bản cũ nói
-        // "Hai hoa don INV-OLD-*..." vì đó là chỗ duy nhất có giá cũ. Từ khối
-        // 6, mốc đổi giá nằm GIỮA cửa sổ 91 ngày nên chuyện đó xảy ra ở hàng
-        // trăm dòng, và báo cáo gộp chúng lại (plan/15 mục 5.3).
-        // Một chữ giải thích ghim bằng tay thì không có gì báo khi nó hết
-        // đúng -- nên nó phải được sửa CÙNG LÚC với thủ tục.
-        buttons.add(makeButton("Bonus: hoa don cu giu gia cu",
-                ReportDao.SQL_OLD_PRICE_PROOF,
-                "Cot 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). "
-              + "Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). "
-              + "Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: "
-              + "'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, "
-              + "va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai "
-              + "hoa don INV-OLD-* tu nam truoc.",
+        buttons.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
+                I18n.text("So sánh giá ghi trên hóa đơn (giá lúc bán) với giá hôm nay. "
+                        + "Mỗi dòng: bao nhiêu dòng hàng đang ghi giá đó, bán từ ngày nào đến ngày nào, "
+                        + "và giá hôm nay là bao nhiêu -- giá trên hóa đơn cũ không đổi khi giá mới được áp dụng.",
+                          "Compares the price on each invoice (the price at the time of sale) with today's price. "
+                        + "Each row: how many item lines carry that price, when they were sold, "
+                        + "and today's price -- old invoices keep their price when a new price takes effect."),
                 dao::oldPriceProof));
 
         // --- Báo cáo 6: cần chọn sản phẩm -> nút riêng + ô chọn -----------
-        JButton btPrice30 = new JButton("6. Gia 30 ngay (SL 1)");
+        JButton btPrice30 = new JButton(I18n.text("6. Giá 30 ngày (SL 1)", "6. 30-day price (qty 1)"));
         reportButtons.add(btPrice30);
         cbPriceProduct.setPreferredSize(new Dimension(300, 26));
         btPrice30.addActionListener(e -> {
             Product p = (Product) cbPriceProduct.getSelectedItem();
             if (p == null) {
-                Ui.warn(this, "Chua nap duoc danh sach san pham.", "Chua chon san pham");
+                Ui.warn(this, I18n.msg("Chưa nạp được danh sách sản phẩm.", "Cannot read product list!"),
+                        I18n.msg("Chưa chọn sản phẩm", "No Product Selected"));
                 return;
             }
             final String barcode = p.barcode;            // doc o tren EDT
-            runReport(btPrice30, btPrice30.getText(), ReportDao.sqlPrice30Days(barcode),
-                    "Gia cua MOT san pham khi mua SO LUONG 1, tung ngay trong 30 ngay gan nhat "
-                  + "(chung minh gia doi theo ngay). CTE de quy sinh 30 ngay; moi ngay goi "
-                  + "fn_get_product_price, fn_active_promo_pct, fn_line_discount -- dung ba ham tab 1 "
-                  + "dung khi lap hoa don. Cot Chenh_lech dung LAG() so voi hom truoc. "
-                  + "Seed cho 3 san pham doi gia MOI NGAY: Nuoc mam Nam Ngu, Ca phe G7, Nuoc rua tay Lifebuoy.",
+            runReport(btPrice30, btPrice30.getText(),
+                    I18n.text("Giá của MỘT sản phẩm khi mua SỐ LƯỢNG 1, từng ngày trong 30 ngày gần nhất, "
+                           + "đã trừ khuyến mãi -- đúng giá thu ngân thấy khi lập hóa đơn. "
+                           + "Cột Chênh lệch so với hôm trước. Ba sản phẩm đổi giá MỖI NGÀY: "
+                           + "Nước mắm Nam Ngư, Cà phê G7, Nước rửa tay Lifebuoy.",
+                             "The price of ONE product at QUANTITY 1 for each of the last 30 days, "
+                           + "after promotions -- the same price the cashier sees on a new invoice. "
+                           + "The Change column compares with the previous day. Three products change price "
+                           + "EVERY DAY: Nam Ngu fish sauce, G7 coffee, Lifebuoy hand wash."),
                     () -> dao.price30Days(barcode));
         });
         JPanel pricePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -122,16 +119,13 @@ public class ReportPanel extends JPanel {
         buttons.add(pricePanel);
         loadPriceProducts();
 
-        JScrollPane spSql = new JScrollPane(taSql);
-        spSql.setPreferredSize(new Dimension(100, 230));
-
         JPanel top = new JPanel(new BorderLayout(6, 6));
         top.add(buttons, BorderLayout.NORTH);
-        top.add(Ui.titled("Y nghia cau truy van", new JScrollPane(taWhat)), BorderLayout.CENTER);
-        top.add(Ui.titled("Cau SQL dang chay", spSql), BorderLayout.SOUTH);
+        top.add(Ui.titled(I18n.text("Báo cáo này cho biết", "About this report"),
+                new JScrollPane(taWhat)), BorderLayout.CENTER);
 
         add(top, BorderLayout.NORTH);
-        add(Ui.titled("Ket qua", new JScrollPane(tbData)), BorderLayout.CENTER);
+        add(Ui.titled(I18n.text("Kết quả", "Results"), new JScrollPane(tbData)), BorderLayout.CENTER);
     }
 
     /**
@@ -147,29 +141,26 @@ public class ReportPanel extends JPanel {
      *
      * <p>Năm nút dùng chung hàm này, nên đây là <b>một</b> chỗ sửa cho cả năm.
      */
-    private JButton makeButton(String label, String sql, String explain,
-                               Supplier<QueryResult> action) {
+    private JButton makeButton(String label, String explain, Supplier<QueryResult> action) {
         JButton b = new JButton(label);
         reportButtons.add(b);
-        b.addActionListener(e -> runReport(b, label, sql, explain, action));
+        b.addActionListener(e -> runReport(b, b.getText(), explain, action));
         return b;
     }
 
     /**
-     * Hiện câu SQL + ý nghĩa, rồi chạy {@code action} NGOÀI EDT và đổ kết quả
+     * Hiện mô tả báo cáo, rồi chạy {@code action} NGOÀI EDT và đổ kết quả
      * vào bảng. Sáu nút báo cáo dùng chung -- một chỗ sửa cho cả sáu.
      */
-    private void runReport(JButton b, String label, String sql, String explain,
+    private void runReport(JButton b, String label, String explain,
                            Supplier<QueryResult> action) {
-        taSql.setText(sql);
-        taSql.setCaretPosition(0);
-        taWhat.setText(I18n.translate(explain));
+        taWhat.setText(explain);
         taWhat.setCaretPosition(0);
 
         // Khoá cả sáu nút và đổi nhãn nút đang chạy: một cửa sổ không
         // phản hồi mà không nói gì thì người dùng tưởng app treo.
         setButtonsEnabled(false);
-        b.setText(label + " -- dang chay...");
+        b.setText(label + I18n.msg(" -- đang chạy...", " -- running..."));
 
         new SwingWorker<QueryResult, Void>() {
             @Override
@@ -186,7 +177,7 @@ public class ReportPanel extends JPanel {
                     Ui.fill(tbData, qr);
                     if (qr.isEmpty()) {
                         JOptionPane.showMessageDialog(ReportPanel.this,
-                                "Cau lenh chay xong nhung khong co dong nao thoa dieu kien.");
+                                I18n.msg("Báo cáo không có dòng nào.", "The report has no rows."));
                     }
                 } catch (Exception ex) {
                     Ui.error(ReportPanel.this, ex);
@@ -213,7 +204,7 @@ public class ReportPanel extends JPanel {
                     }
                 } catch (Exception ex) {
                     // Khong chan ca tab: 5 bao cao kia van chay duoc.
-                    System.out.println("[ReportPanel] Khong nap duoc san pham: " + ex.getMessage());
+                    System.out.println("[ReportPanel] Cannot read product list: " + ex.getMessage());
                 }
             }
         }.execute();

@@ -40,6 +40,8 @@ public final class I18n {
     private static final Map<JComponent, Runnable> LANGUAGE_CHANGE_CALLBACKS = new WeakHashMap<>();
 
     private static Language language = Language.VI;
+    /** Bo nho dem cho {@link #sortedKeys}; null = phai tinh lai. */
+    private static Map<Language, java.util.List<String>> sortedKeys;
     private static boolean windowListenerInstalled;
 
     static {
@@ -645,6 +647,52 @@ public final class I18n {
         field("Nguoi_duyet", "Người duyệt", "Approver");
         field("VAT_pct", "VAT %", "VAT %");
 
+        // Ten cot cua cac bao cao / hoa don dieu chinh (them o feat/i18n)
+        field("Ap_dung_tu", "Áp dụng từ", "Effective from");
+        field("Ban_den_ngay", "Bán đến ngày", "Sold until");
+        field("Ban_tu_ngay", "Bán từ ngày", "Sold from");
+        field("Chenh_lech", "Chênh lệch", "Change vs. previous day");
+        field("Cua_hang", "Cửa hàng", "Shop");
+        field("Shop", "Cửa hàng", "Shop");
+        field("Dia_chi", "Địa chỉ", "Address");
+        field("Dien_thoai", "Điện thoại", "Phone");
+        field("Doanh_thu", "Doanh thu", "Revenue");
+        field("Gia_cu", "Giá cũ", "Old price");
+        field("Gia_moi", "Giá mới", "New price");
+        field("Gia_ghi_tren_HD", "Giá ghi trên hóa đơn", "Price on invoice");
+        field("Gia_hom_nay", "Giá hôm nay", "Today's price");
+        field("Gio_hang_TB", "Giỏ hàng TB", "Average basket");
+        field("KM_phan_tram", "Khuyến mãi %", "Promotion %");
+        field("Khach_hang", "Khách hàng", "Customer");
+        field("Ma_KH", "Mã khách hàng", "Customer ID");
+        field("Ma_TN", "Mã thu ngân", "Cashier ID");
+        field("Ma_vach", "Mã vạch", "Barcode");
+        field("Mo_ta", "Mô tả", "Description");
+        field("Ngay_tra", "Ngày trả", "Return date");
+        field("Phan_tram_tra", "% trả lại", "% returned");
+        field("Quay", "Quầy", "Counter");
+        field("SL", "SL", "Qty");
+        field("DVT", "ĐVT", "Unit");
+        field("So_dong_hang", "Số dòng hàng", "Item lines");
+        field("So_hoa_don", "Số hóa đơn", "Invoices");
+        field("Tang_phan_tram", "Tăng %", "Increase %");
+        field("Ten", "Tên", "Name");
+        field("Ten_thu_ngan", "Tên thu ngân", "Cashier name");
+        field("Thanh_tien_SL1", "Thành tiền (SL 1)", "Total (qty 1)");
+        field("Thanh_tien_goc", "Thành tiền gốc", "Original total");
+        field("Thanh_tien_moi", "Thành tiền mới", "New total");
+        field("Tien_tra", "Tiền trả", "Refund");
+        field("Tien_tra_lai", "Tiền trả lại", "Refund");
+        field("Tien_thoi", "Tiền thối", "Change");
+        field("Tong", "Tổng", "Total");
+        field("Tong_HD", "Tổng hóa đơn", "Invoice total");
+        field("Tong_hoa_don", "Tổng hóa đơn", "Invoice total");
+        field("Tong_doanh_thu", "Tổng doanh thu", "Total revenue");
+        field("Tong_giam", "Tổng giảm", "Total discount");
+        field("Tong_phai_tra", "Tổng phải trả", "Total due");
+        field("Tong_sau_dieu_chinh", "Tổng sau điều chỉnh", "Total after adjustment");
+        field("Tong_truoc_giam", "Tổng trước giảm", "Total before discount");
+
         marks(
             "Doi vai tro", "Đổi vai trò",
             "Dang xuat", "Đăng xuất",
@@ -1150,8 +1198,33 @@ public final class I18n {
 
     public static boolean isEnglish() { return language == Language.EN; }
 
+    /**
+     * Chu tinh (nhan nut, nhan, tieu de khung, tooltip...): tra ve ban dung voi ngon
+     * ngu hien tai VA ghi cap (vi, en) vao tu dien, de khi bam doi ngon ngu bo duyet
+     * giao dien dich duoc ca thanh phan da tao truoc do.
+     *
+     * <p>Viet {@code vietnamese} CO DAU ngay tai cho dung -- khong can them dong nao
+     * vao bang tu dien o tren. Chuoi khong dau cu (bang tu dien cua Neve) van chay.
+     */
     public static String text(String vietnamese, String english) {
+        register(vietnamese, english);
         return isEnglish() ? english : translate(vietnamese);
+    }
+
+    /**
+     * Chu dong (thong bao ghep so lieu, hop thoai...): chi chon ban theo ngon ngu,
+     * KHONG ghi vao tu dien -- tranh tu dien phinh ra theo moi ma hoa don / so tien.
+     */
+    public static String msg(String vietnamese, String english) {
+        return isEnglish() ? english : vietnamese;
+    }
+
+    private static void register(String vietnamese, String english) {
+        if (vietnamese == null || english == null || vietnamese.equals(english)) return;
+        if (english.equals(TO_EN.get(vietnamese))) return;
+        TO_EN.put(vietnamese, english);
+        TO_VI.put(english, vietnamese);
+        sortedKeys = null;
     }
 
     public static String languageSwitchLabel() {
@@ -1179,6 +1252,7 @@ public final class I18n {
 
     public static void toggle() {
         language = isEnglish() ? Language.VI : Language.EN;
+        billing.util.Lang.setEnglish(isEnglish());
         updateOptionPaneDefaults();
         localizeOpenWindows();
         for (Runnable callback : new ArrayList<>(LANGUAGE_CHANGE_CALLBACKS.values())) callback.run();
@@ -1470,9 +1544,7 @@ public final class I18n {
 
         // Only translate a dynamic label's full leading or trailing phrase.
         // This keeps user data (names, IDs, currency values) intact.
-        ArrayList<String> keys = new ArrayList<>(dictionary.keySet());
-        if (language == Language.VI) keys.addAll(TO_VI_MARKS.keySet());
-        keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
+        java.util.List<String> keys = sortedKeys(dictionary);
         String result = source;
         boolean changed = false;
         for (String key : keys) {
@@ -1496,6 +1568,26 @@ public final class I18n {
             }
         }
         return changed ? result : source;
+    }
+
+    /** Khoa co dau cach o dau/cuoi, dai truoc -- tinh lai chi khi tu dien doi. */
+    private static java.util.List<String> sortedKeys(Map<String, String> dictionary) {
+        Map<Language, java.util.List<String>> cache = sortedKeys;
+        if (cache == null) {
+            cache = new EnumMap<>(Language.class);
+            sortedKeys = cache;
+        }
+        java.util.List<String> keys = cache.get(language);
+        if (keys == null) {
+            keys = new ArrayList<>();
+            for (String k : dictionary.keySet()) if (k.startsWith(" ") || k.endsWith(" ")) keys.add(k);
+            if (language == Language.VI) {
+                for (String k : TO_VI_MARKS.keySet()) if (k.startsWith(" ") || k.endsWith(" ")) keys.add(k);
+            }
+            keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
+            cache.put(language, keys);
+        }
+        return keys;
     }
 
     private static String translateKnownDynamicText(String source) {
