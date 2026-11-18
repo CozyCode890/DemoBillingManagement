@@ -185,12 +185,18 @@ public class ReceiptDialog {
 
         BigDecimal recorded = BigDecimal.ZERO;
         BigDecimal tendered = BigDecimal.ZERO;
+        BigDecimal change   = BigDecimal.ZERO;
         for (Object[] p : d.payments.rows) {
-            recorded = recorded.add(Ui.dec(p[1]));
-            if (p[4] != null) tendered = tendered.add(Ui.dec(p[4]));
+            BigDecimal amount = Ui.dec(p[1]);
+            recorded = recorded.add(amount);
+            if (p[4] != null) {
+                tendered = tendered.add(Ui.dec(p[4]));
+                // Tien thoi cong theo TUNG dong tien mat (khach dua - ghi nhan cua chinh dong do).
+                // Lay tong khach dua - tong ghi nhan la SAI khi co them the / vi dien tu:
+                // the 200.000 + tien mat dua 500.000 cho 300.000 con lai -> thoi 200.000, khong phai 0.
+                change = change.add(Ui.dec(p[4]).subtract(amount).max(BigDecimal.ZERO));
+            }
         }
-        BigDecimal change  = tendered.subtract(recorded);
-        if (change.signum() < 0) change = BigDecimal.ZERO;
         BigDecimal missing = due.subtract(recorded);
 
         StringBuilder s = new StringBuilder(4096);
