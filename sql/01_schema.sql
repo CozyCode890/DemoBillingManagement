@@ -292,27 +292,4 @@ CREATE TABLE EWallet_Payment (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 16. Account -- Bảng lưu tài khoản người dùng và phân quyền hệ thống
---     (bảng hỗ trợ ứng dụng, dùng để đăng nhập; nằm ngoài mô hình ER).
---     Cấu trúc cột giữ nguyên; chỉ khai báo thêm ON DELETE/ON UPDATE
---     cho FK theo yêu cầu của đề.
--- ---------------------------------------------------------------------
-CREATE TABLE Account (
-    Username   VARCHAR(50)  NOT NULL,
-    Password   VARCHAR(100) NOT NULL,
-    Role       ENUM('CASHIER', 'MANAGER') NOT NULL,
-    Full_Name  VARCHAR(100) NULL,
-    -- Nhan vien tuong ung trong bang Cashier. NULL = tai khoan khong gan voi
-    -- nhan vien nao (khi do khong duyet duoc tra hang -- xem plan/12 muc 3.3).
-    Cashier_ID VARCHAR(10)  NULL,
-    CONSTRAINT PK_account PRIMARY KEY (Username),
-    CONSTRAINT FK_account_cashier
-        FOREIGN KEY (Cashier_ID) REFERENCES Cashier (Cashier_ID)
-        ON DELETE SET NULL
-        ON UPDATE CASCADE
-) ENGINE=InnoDB;
-
-
 SELECT 'Schema da tao xong! 15 bang' AS ket_qua;
