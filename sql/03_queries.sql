@@ -170,7 +170,7 @@ ORDER BY Phan_tram_tra DESC;
 
 
 -- =====================================================================
--- BONUS: chứng minh "hóa đơn cũ giữ giá cũ"
+-- CAU 6: chứng minh "hóa đơn cũ giữ giá cũ"
 -- So sánh đơn giá đã ghi trên hóa đơn với giá HIỆN TẠI của sản phẩm.
 --
 -- GOM theo (sản phẩm, đơn giá đã đóng băng) thay vì liệt kê từng dòng:
@@ -186,7 +186,7 @@ ORDER BY Phan_tram_tra DESC;
 -- Hai hóa đơn INV-OLD-* vẫn nằm trong kết quả, chỉ là không còn là bằng
 -- chứng duy nhất.
 -- =====================================================================
-SELECT '=== BONUS: Hoa don cu van giu gia cu ===' AS ' ';
+SELECT '=== CAU 6: Hoa don cu van giu gia cu ===' AS ' ';
 
 SELECT  p.Name                                     AS San_pham,
         l.Unit_Price                               AS Gia_ghi_tren_HD,
@@ -203,11 +203,11 @@ ORDER BY p.Name, l.Unit_Price;
 
 
 -- =====================================================================
--- BONUS 2: truy vấn TÌM GIÁ ĐÚNG -- app Java dùng đúng câu này mỗi khi
+-- CAU 7: truy vấn TÌM GIÁ ĐÚNG -- app Java dùng đúng câu này mỗi khi
 -- bạn thêm một sản phẩm vào hóa đơn.
 --   "Lấy dòng giá có ngày hiệu lực gần nhất nhưng KHÔNG vượt quá ngày bán"
 -- =====================================================================
-SELECT '=== BONUS 2: Tim gia hop le tai mot ngay ===' AS ' ';
+SELECT '=== CAU 7: Tim gia hop le tai mot ngay ===' AS ' ';
 
 SELECT  Price AS Gia_ap_dung
 FROM    Price_History
@@ -218,12 +218,12 @@ LIMIT 1;
 
 
 -- =====================================================================  
--- CÂU 6: Top khách hàng thân thiết có tổng chi tiêu cao nhất  
+-- CÂU 8: Top khách hàng thân thiết có tổng chi tiêu cao nhất  
 -- ---------------------------------------------------------------------  
 -- Ý tưởng: Customer JOIN Invoice (tính vào doanh thu) JOIN Invoice_Line.  
 -- Tính tổng tiền thực trả (Quantity * Unit_Price - Discount - fn_line_refund) theo từng khách hàng.  
 -- =====================================================================  
-SELECT '=== CAU 6: Top khach hang co tong chi tieu cao nhat ===' AS ' ';  
+SELECT '=== CAU 8: Top khach hang co tong chi tieu cao nhat ===' AS ' ';  
 
 SELECT cu.Customer_ID AS Ma_KH,  
        cu.Name AS Ten_Khach_Hang,  
@@ -239,12 +239,12 @@ LIMIT 5;
 
 
 -- =====================================================================  
--- CÂU 7: Thống kê doanh thu theo từng Quầy tính tiền (Counter)  
+-- CÂU 9: Thống kê doanh thu theo từng Quầy tính tiền (Counter)  
 -- ---------------------------------------------------------------------  
 -- Đường đi: Shop -> Counter -> Invoice -> Invoice_Line.  
 -- Khác với Câu 2 gom theo Shop và Ngày, câu này gom theo từng quầy bán cụ thể.  
 -- =====================================================================  
-SELECT '=== CAU 7: Thong ke doanh thu theo tung Quay tinh tien ===' AS ' ';  
+SELECT '=== CAU 9: Thong ke doanh thu theo tung Quay tinh tien ===' AS ' ';  
 
 SELECT s.Shop_ID AS Ma_Cua_Hang,  
        ct.Counter_ID AS Ma_Quay,  
@@ -258,33 +258,13 @@ JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID
 GROUP BY s.Shop_ID, ct.Counter_ID, s.Address  
 ORDER BY Tong_Doanh_Thu_Quay DESC;
 
-
 -- =====================================================================  
--- CÂU 8: Hiệu suất làm việc của Thu ngân (Số hóa đơn xử lý & Tổng doanh thu)  
--- ---------------------------------------------------------------------  
--- Ý tưởng: Cashier JOIN Invoice (tính vào doanh thu) JOIN Invoice_Line.  
--- Khác với Câu 4 là tính trung bình giỏ hàng, câu này xếp hạng theo tổng lượng việc xử lý.  
--- =====================================================================  
-SELECT '=== CAU 8: Hieu suat xu ly hoa don cua tung thu ngan ===' AS ' ';  
-
-SELECT c.Cashier_ID AS Ma_Thu_Ngan,  
-       c.Name AS Ten_Thu_Ngan,  
-       COUNT(DISTINCT i.Invoice_ID) AS Tong_So_Hoa_Don_Xu_Ly,  
-       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount - fn_line_refund(l.Invoice_ID, l.Line_Number)), 0) AS Tong_Doanh_Thu_Thu_Ngan  
-FROM Cashier c  
-JOIN Invoice i ON i.Cashier_ID = c.Cashier_ID AND fn_invoice_in_revenue(i.Invoice_ID) = 1  
-JOIN Invoice_Line l ON l.Invoice_ID = i.Invoice_ID  
-GROUP BY c.Cashier_ID, c.Name  
-ORDER BY Tong_So_Hoa_Don_Xu_Ly DESC;
-
-
--- =====================================================================  
--- CÂU 9: Thống kê giá trị và số lượng theo phương thức thanh toán  
+-- CÂU 10: Thống kê giá trị và số lượng theo phương thức thanh toán  
 -- ---------------------------------------------------------------------  
 -- Kỹ thuật: Dùng CASE WHEN kết hợp LEFT JOIN các bảng con (Card, EWallet, Cash)  
 -- để phân loại chính xác hình thức khách hàng dùng để trả tiền.  
 -- =====================================================================  
-SELECT '=== CAU 9: Thong ke gia tri va so luong theo phuong thuc thanh toan ===' AS ' ';  
+SELECT '=== CAU 10: Thong ke gia tri va so luong theo phuong thuc thanh toan ===' AS ' ';  
 
 SELECT   
     CASE   
@@ -301,29 +281,6 @@ LEFT JOIN EWallet_Payment ep ON ep.Payment_ID = p.Payment_ID
 LEFT JOIN Cash_Payment csh ON csh.Payment_ID = p.Payment_ID  
 GROUP BY Phuong_Thuc_Thanh_Toan  
 ORDER BY Tong_Tien_Thanh_Toan DESC;
-
-
--- =====================================================================  
--- CÂU 10: Top sản phẩm bán chạy nhất theo tổng số lượng tiêu thụ  
--- ---------------------------------------------------------------------  
--- Ý tưởng: Product JOIN Invoice_Line JOIN Invoice (hóa đơn tính vào doanh thu).
--- Số lượng bán = số lượng mua − số lượng đã trả (fn_line_returned_qty).  
--- Gom nhóm theo sản phẩm để tìm ra mặt hàng tiêu thụ mạnh nhất.  
--- =====================================================================  
-SELECT '=== CAU 10: Top san pham ban chay nhat theo so luong ===' AS ' ';  
-
-SELECT p.Barcode AS Ma_Vach,  
-       p.Name AS Ten_SanPham,  
-       p.Unit AS Don_Vi,  
-       SUM(l.Quantity - fn_line_returned_qty(l.Invoice_ID, l.Line_Number)) AS Tong_So_Luong_Ban,  
-       ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount - fn_line_refund(l.Invoice_ID, l.Line_Number)), 0) AS Tong_Doanh_Thu_SanPham  
-FROM Product p  
-JOIN Invoice_Line l ON l.Barcode = p.Barcode  
-JOIN Invoice i ON i.Invoice_ID = l.Invoice_ID AND fn_invoice_in_revenue(i.Invoice_ID) = 1  
-GROUP BY p.Barcode, p.Name, p.Unit  
-ORDER BY Tong_So_Luong_Ban DESC  
-LIMIT 5;
-
 
 -- =====================================================================  
 -- CÂU 11: Thống kê hiệu quả giảm giá theo các chương trình khuyến mãi  
