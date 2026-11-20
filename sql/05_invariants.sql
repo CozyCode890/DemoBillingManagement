@@ -207,20 +207,37 @@ BEGIN
         'muc 3.5');
 
     -- -----------------------------------------------------------------
-    -- R11 -- ma INV-nnnn lien tuc tu 1: so hoa don khop so lon nhat.
-    --        Lech nghia la seed da bo mot ma (goi fn_next_invoice_id roi
-    --        khong dung ket qua) hoac da go tay mot ma.
-    --        INV-OLD-* khong tinh: chung khong khop '^INV-[0-9]+$', y nhu
-    --        fn_next_invoice_id bo qua chung (04_routines.sql:106).
-    --        Khong co hoa don nao: 0 = 0 -> khong vi pham.
+    -- R11 -- BR1: ma gom dung shop/quay/ngay va sequence lien tuc tu 1
+    --        rieng cho moi (Counter_ID, Date). Bat ky tien to sai, suffix
+    --        khong phai so >= 4 chu so, hoac day sequence co lo hong deu tinh.
+    --        Khong co hoa don nao: 0 vi pham.
     -- -----------------------------------------------------------------
     INSERT INTO tmp_check_seed VALUES (11, 'R11',
-        'Ma INV-nnnn lien tuc (COUNT = MAX so thu tu)',
-        (SELECT CASE WHEN COUNT(*) <> COALESCE(
-                          MAX(CAST(SUBSTRING(Invoice_ID, 5) AS UNSIGNED)), 0)
-                     THEN 1 ELSE 0 END
-         FROM   Invoice
-         WHERE  Invoice_ID REGEXP '^INV-[0-9]+$'),
+        'BR1: shop/quay/ngay + sequence lien tuc',
+        (
+            SELECT
+                (SELECT COUNT(*)
+                 FROM Invoice i
+                 JOIN Counter c ON c.Counter_ID = i.Counter_ID
+                 WHERE LEFT(i.Invoice_ID,
+                            CHAR_LENGTH(CONCAT(c.Shop_ID, '-', i.Counter_ID, '-',
+                                               DATE_FORMAT(i.`Date`, '%Y%m%d'), '-')))
+                       <> CONCAT(c.Shop_ID, '-', i.Counter_ID, '-',
+                                 DATE_FORMAT(i.`Date`, '%Y%m%d'), '-')
+                    OR CHAR_LENGTH(SUBSTRING_INDEX(i.Invoice_ID, '-', -1)) < 4
+                    OR SUBSTRING_INDEX(i.Invoice_ID, '-', -1) NOT REGEXP '^[0-9]+$')
+              + (SELECT COUNT(*)
+                 FROM (
+                     SELECT Counter_ID,
+                            `Date`,
+                            COUNT(*) AS invoice_count,
+                            MIN(CAST(SUBSTRING_INDEX(Invoice_ID, '-', -1) AS UNSIGNED)) AS min_sequence,
+                            MAX(CAST(SUBSTRING_INDEX(Invoice_ID, '-', -1) AS UNSIGNED)) AS max_sequence
+                     FROM Invoice
+                     GROUP BY Counter_ID, `Date`
+                 ) AS sequence_groups
+                 WHERE min_sequence <> 1 OR invoice_count <> max_sequence)
+        ),
         'muc 3.1');
 
     -- -----------------------------------------------------------------

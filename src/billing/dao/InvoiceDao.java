@@ -70,8 +70,7 @@ public class InvoiceDao {
      * ================================================================
      *  Java quản lý ranh giới nghiệp vụ (Business Transaction):
      *      conn.setAutoCommit(false);
-     *      - Gọi fn_next_invoice_id: sinh mã hóa đơn (nếu chỗ gọi truyền null)
-     *      - Gọi sp_create_invoice_header: ghi đầu hóa đơn
+     *      - Gọi sp_create_invoice_header: khóa quầy, sinh mã BR1 và ghi đầu hóa đơn
      *      - Gọi sp_add_invoice_line: ghi từng dòng hàng (batching)
      *      - Gọi fn_next_payment_id + sp_add_payment: ghi thanh toán
      *        (SQL tự rẽ nhánh bảng con)
@@ -79,31 +78,17 @@ public class InvoiceDao {
      *        tiền thì thủ tục SIGNAL và cả transaction ROLLBACK
      *      conn.commit();
      *
-     * @param invoiceId mã hóa đơn, hoặc {@code null} để tự sinh TRONG
-     *        transaction. Truyền {@code null} là cách dùng đúng từ khối 5: bản
-     *        cũ gọi {@link #nextInvoiceId()} trên MỘT CONNECTION KHÁC trước khi
-     *        mở transaction, nên hai cửa sổ app cùng lưu là trùng khóa chính và
-     *        thu ngân mất giỏ hàng (plan/14 lỗi #18).
+     *  sp_create_invoice_header tạo mã SHOP-COUNTER-YYYYMMDD-SEQUENCE trong
+     *  transaction và giữ khóa quầy đến khi commit. Vì vậy mã không được nhận
+     *  từ giao diện/người gọi và hai checkout đồng thời không lấy cùng sequence.
      *
-     *        <p>Khe hở còn lại -- hai transaction song song vẫn đọc được cùng
-     *        {@code MAX(...)} trước khi cái nào {@code INSERT} -- KHÔNG được bịt
-     *        ở đây, và đây là một ghi chú trung thực chứ không phải bỏ sót: bịt
-     *        đúng cách là {@code INSERT ... SELECT} hoặc một bảng cấp số, tức là
-     *        đổi {@code fn_next_invoice_id} và {@code sp_create_invoice_header}.
-     *        Cái sửa được ở đây là thu hẹp cửa sổ từ "khoảng thời gian người
-     *        dùng đọc hộp thoại" xuống "vài micro giây trong một transaction",
-     *        và làm cho lần thất bại là một {@code ROLLBACK} sạch kèm thông điệp
-     *        đọc hiểu được (plan/14 mục 5.4a).
-     *
-     * @return mã hóa đơn đã dùng (chính {@code invoiceId}, hoặc mã vừa sinh)
+     * @return mã hóa đơn do sp_create_invoice_header sinh
      */
-    public String createInvoice(String invoiceId,
-                                LocalDate date, LocalTime time,
+    public String createInvoice(LocalDate date, LocalTime time,
                                 String counterId, String cashierId, String customerId,
                                 List<CartLine> lines,
                                 List<PaymentEntry> payments) {
 
-        String fnInvId   = "{? = call fn_next_invoice_id()}";
         String fnPayId   = "{? = call fn_next_payment_id()}";
         String spHeader  = "{call sp_create_invoice_header(?, ?, ?, ?, ?, ?)}";
         String spLine    = "{call sp_add_invoice_line(?, ?, ?, ?, ?, ?)}";
@@ -112,32 +97,28 @@ public class InvoiceDao {
 
         long t0 = System.currentTimeMillis();
         Connection conn = null;
+        String invoiceId;
 
         try {
             conn = Db.getConnection();
             conn.setAutoCommit(false);          // ==== BẮT ĐẦU TRANSACTION ====
 
-            // ---- 0. Mã hóa đơn: sinh TRONG transaction ---------------
-            if (invoiceId == null) {
-                invoiceId = scalarString(conn, fnInvId);
-                SqlLog.add(fnInvId, null, 0, 1);
-            }
-
-            // ---- 1. Ghi phần đầu hóa đơn qua Stored Procedure -------
+            // ---- 0. Sinh mã BR1 và ghi đầu hóa đơn trong một thủ tục --
             try (CallableStatement cs = conn.prepareCall(spHeader)) {
-                cs.setString(1, invoiceId);
-                cs.setDate(2, Date.valueOf(date));
-                cs.setTime(3, Time.valueOf(time));
-                cs.setString(4, counterId);
-                cs.setString(5, cashierId);
+                cs.setDate(1, Date.valueOf(date));
+                cs.setTime(2, Time.valueOf(time));
+                cs.setString(3, counterId);
+                cs.setString(4, cashierId);
                 if (customerId == null) {
-                    cs.setNull(6, Types.VARCHAR);
+                    cs.setNull(5, Types.VARCHAR);
                 } else {
-                    cs.setString(6, customerId);
+                    cs.setString(5, customerId);
                 }
-                cs.executeUpdate();
-                SqlLog.add(spHeader, new Object[]{invoiceId, date, time,
-                        counterId, cashierId, customerId}, 0, 1);
+                cs.registerOutParameter(6, Types.VARCHAR);
+                cs.execute();
+                invoiceId = cs.getString(6);
+                SqlLog.add(spHeader, new Object[]{date, time, counterId,
+                        cashierId, customerId, invoiceId}, 0, 1);
             }
 
             // ---- 2. Ghi các dòng hàng qua Stored Procedure (Batch) --
@@ -233,45 +214,6 @@ public class InvoiceDao {
         }
     }
 
-    /**
-     * Sinh mã hóa đơn kế tiếp (INV-0001, INV-0002...).
-     * Ứng dụng Stored Function: fn_next_invoice_id()
-     */
-    public String nextInvoiceId() {
-        String sql = "{? = call fn_next_invoice_id()}";
-        long t0 = System.currentTimeMillis();
-
-        try (Connection c = Db.getConnection();
-             CallableStatement cs = c.prepareCall(sql)) {
-
-            cs.registerOutParameter(1, Types.VARCHAR);
-            cs.execute();
-            String nextId = cs.getString(1);
-
-            SqlLog.add(sql, null, System.currentTimeMillis() - t0, 1);
-            return nextId;
-        } catch (SQLException e) {
-            throw new RuntimeException("Cannot generate invoice id: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Gọi một Stored Function trả về chuỗi, TRÊN CONNECTION ĐANG CHO SẴN.
-     *
-     * <p>Khác {@link #nextInvoiceId()}: hàm đó tự mở Connection riêng, nên cái
-     * nó đọc được là trạng thái đã commit của người khác. Ở đây ta cần đúng
-     * Connection của transaction để thấy được những gì chính transaction này
-     * vừa ghi (plan/14 mục 4.5, 5.4a).
-     */
-    private String scalarString(Connection conn, String callSql) throws SQLException {
-        try (CallableStatement cs = conn.prepareCall(callSql)) {
-            cs.registerOutParameter(1, Types.VARCHAR);
-            cs.execute();
-            return cs.getString(1);
-        }
-    }
-
-
     // =================================================================
     //  PHẦN 2 -- ĐỌC DỮ LIỆU QUA CÁC STORED PROCEDURE
     // =================================================================
@@ -286,8 +228,8 @@ public class InvoiceDao {
      * <p>Lý do: với seed 91 ngày thì bảng này có ~550 dòng, và tab 3 không có
      * ô lọc nào (chỉ có {@code RowSorter} -- sắp xếp, không lọc). Lọc bằng
      * khoảng ngày thay vì {@code LIMIT n} để mọi hóa đơn <b>vẫn đến được</b>
-     * khi người dùng chọn <i>Tất cả</i>: {@code INV-0001} và
-     * {@code INV-OLD-*} là dữ liệu mà tài liệu trỏ vào (plan/15 mục 5.2).
+     * khi người dùng chọn <i>Tất cả</i>: hóa đơn mẫu và hai hóa đơn từ năm
+     * trước vẫn đến được cùng mọi hóa đơn khác (plan/15 mục 5.2).
      */
     public QueryResult recentInvoices(int days) {
         return QueryResult.call("{call sp_get_recent_invoices(?)}", days);

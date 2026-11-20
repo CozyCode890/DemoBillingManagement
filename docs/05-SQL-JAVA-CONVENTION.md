@@ -39,7 +39,7 @@
 ### 2.1. Phía SQL
 1. **Hàm SQL (Stored Function - trả về giá trị đơn):**
    - Bắt buộc có tiền tố: `fn_` (viết tắt của Function).
-   - Ví dụ: `fn_get_product_price(p_barcode, p_date)`, `fn_next_invoice_id()`.
+   - Ví dụ: `fn_get_product_price(p_barcode, p_date)`, `fn_next_payment_id()`.
 2. **Thủ tục SQL (Stored Procedure - trả về bảng dữ liệu hoặc thực thi logic):**
    - Bắt buộc có tiền tố: `sp_` (viết tắt của Stored Procedure).
    - Ví dụ: `sp_get_recent_invoices()`, `sp_report_daily_takings()`, `sp_add_payment()`.
@@ -176,7 +176,6 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `fn_get_product_price` | FUNCTION | `p_barcode`, `p_date` | Lấy đơn giá tại ngày bán | `ProductDao.priceOn()` |
 | `fn_active_promo_pct` | FUNCTION | `p_barcode`, `p_date` | Phần trăm giảm của khuyến mãi **tốt nhất** tại ngày bán; `0.00` nếu không có. **Bản chép thứ hai** của điều kiện chọn khuyến mãi (bản thứ nhất là `sp_get_active_promo`) — có chốt bằng số, kịch bản #76 | *(chỉ SQL — `sp_seed_demo_data` và `05_invariants.sql` gọi)* |
 | `fn_line_discount` | FUNCTION | `p_barcode`, `p_date`, `p_quantity`, `p_unit_price` | Tiền giảm của cả dòng: `ROUND(qty × price × pct / 100, 2)`. Khớp `NewInvoicePanel.lineDiscount` **từng đồng** — chốt bằng kịch bản #77 | *(chỉ SQL)* |
-| `fn_next_invoice_id` | FUNCTION | *(không)* | Tự sinh mã hóa đơn `INV-xxxx` | `InvoiceDao.nextInvoiceId()` |
 | `fn_next_payment_id` | FUNCTION | *(không)* | Tự sinh mã thanh toán `PAY-xxxx`. Gọi **trong** transaction, một lần cho mỗi dòng thanh toán | `InvoiceDao.createInvoice()` |
 | `fn_return_refund` | FUNCTION | `p_invoice_id`, `p_line_number`, `p_quantity` | **Bản duy nhất** của công thức tiền hoàn: `ROUND(n / Q * T, 2)`. Java không được tự tính | `InvoiceDao.returnRefund()` |
 | `fn_next_return_id` | FUNCTION | `p_invoice_id`, `p_line_number` | Số thứ tự lượt trả kế tiếp **trong một dòng** (không phải `AUTO_INCREMENT`) | *(chỉ SQL -- `sp_add_return` gọi)* |
@@ -192,7 +191,7 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_search_customers_by_phone` | PROCEDURE | `p_prefix` | Tìm khách theo tiền tố số điện thoại, 3 cột, `LIMIT 20`. Trả **cột riêng**, không ghép chuỗi hiển thị | `LookupDao.searchCustomersByPhone()` |
 | `sp_get_all_products` | PROCEDURE | *(không)* | Danh mục tất cả sản phẩm | `ProductDao.findAll()` |
 | `sp_get_active_promo` | PROCEDURE | `p_barcode`, `p_date` | Khuyến mãi cao nhất ngày bán | `ProductDao.activePromoOn()` |
-| `sp_get_recent_invoices` | PROCEDURE | `p_days` | Hóa đơn gần đây + tổng tiền. **Tham số `p_days` thêm ở khối 6 — đó là một đổi hợp đồng** (Quy tắc 2): `> 0` lọc theo khoảng ngày, `0`/`NULL` là **tất cả**. Lọc bằng khoảng ngày chứ không `LIMIT n`, để `INV-0001` và `INV-OLD-*` vẫn đến được | `InvoiceDao.recentInvoices(int)` |
+| `sp_get_recent_invoices` | PROCEDURE | `p_days` | Hóa đơn gần đây + tổng tiền. **Tham số `p_days` thêm ở khối 6 — đó là một đổi hợp đồng** (Quy tắc 2): `> 0` lọc theo khoảng ngày, `0`/`NULL` là **tất cả**. Lọc bằng khoảng ngày chứ không `LIMIT n`, để hóa đơn mẫu và hóa đơn từ năm trước vẫn đến được | `InvoiceDao.recentInvoices(int)` |
 | `sp_get_invoice_header` | PROCEDURE | `p_invoice_id` | Đầu hóa đơn và tổng tiền. **14 cột**: thêm ở cuối `Tien_hoan` (12) và `Tong_sau_dieu_chinh` (13) | `InvoiceDao.invoiceHeader()` |
 | `sp_get_invoice_lines` | PROCEDURE | `p_invoice_id` | Các dòng sản phẩm của hóa đơn | `InvoiceDao.invoiceLines()` |
 | `sp_get_invoice_payments` | PROCEDURE | `p_invoice_id` | Các lượt thanh toán của hóa đơn. **5 cột, đúng thứ tự** `Ma_TT, So_tien, Phuong_thuc, Chi_tiet, Tien_khach_dua`. `Tien_khach_dua` là cột **số** riêng (`NULL` cho thẻ/ví), không `CONCAT` vào `Chi_tiet` -- định dạng tiền là việc của Java | `InvoiceDao.invoicePayments()` |
@@ -206,7 +205,7 @@ QueryResult qr = QueryResult.call("{call sp_get_invoice_lines(?)}", invoiceId);
 | `sp_report_big_returns` | PROCEDURE | *(không)* | Báo cáo hóa đơn trả hàng > 50% | `ReportDao.bigReturns()` |
 | `sp_report_old_price_proof`| PROCEDURE | *(không)* | Chứng minh hóa đơn cũ giữ giá. **Đổi ở khối 6 — 6 cột, gộp theo (sản phẩm, đơn giá)**: `San_pham, Gia_ghi_tren_HD, Gia_hom_nay, So_dong_hang, Ban_tu_ngay, Ban_den_ngay`. Bản cũ không có `WHERE` nên với seed 91 ngày nó trả ~1.200 dòng cho một báo cáo mang tên *"chứng minh"* | `ReportDao.oldPriceProof()` |
 | `sp_report_price_30_days` | PROCEDURE | `p_barcode` | Giá của một sản phẩm, **số lượng 1**, từng ngày trong 30 ngày (CTE đệ quy + `LAG`) -- chứng minh giá đổi theo ngày. 5 cột: `Ngay, Don_gia, KM_phan_tram, Thanh_tien_SL1, Chenh_lech`. Seed cho 3 sản phẩm (8934005, 8934009, 8934018) đổi giá mỗi ngày | `ReportDao.price30Days()` |
-| `sp_create_invoice_header` | PROCEDURE | `(6 tham số)` | Ghi đầu hóa đơn mới, **thẳng là `PAID`** (trạng thái `OPEN` đã bị bỏ, `Status` chỉ còn `ENUM('PAID','VOIDED')`); `sp_settle_invoice` kiểm lại ở cuối transaction | `InvoiceDao.createInvoice()` |
+| `sp_create_invoice_header` | PROCEDURE | `p_date`, `p_time`, `p_counter_id`, `p_cashier_id`, `p_customer_id`, `OUT p_invoice_id` | Khóa quầy, tự sinh mã `SHOP-COUNTER-YYYYMMDD-SEQUENCE` theo BR1, rồi ghi đầu hóa đơn **thẳng là `PAID`**; `sp_settle_invoice` kiểm lại ở cuối transaction | `InvoiceDao.createInvoice()` |
 | `sp_add_invoice_line` | PROCEDURE | `(6 tham số)` | Ghi dòng chi tiết hóa đơn | `InvoiceDao.createInvoice()` |
 | `sp_add_payment` | PROCEDURE | `(6 tham số)` | Ghi thanh toán & rẽ nhánh bảng con | `InvoiceDao.createInvoice()` |
 | `sp_settle_invoice` | PROCEDURE | `p_invoice_id` | **Chốt hóa đơn**: thiếu dòng hàng hoặc `paid < due` thì `SIGNAL '45000'` và Java `ROLLBACK` -- thu thiếu tiền thì không lưu được. Không trả ResultSet | `InvoiceDao.createInvoice()` |

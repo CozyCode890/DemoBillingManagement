@@ -12,7 +12,18 @@ USE retail_billing;
 -- Ý tưởng: Invoice_Line JOIN Product để lấy tên sản phẩm.
 -- Thành tiền mỗi dòng = Quantity * Unit_Price - Discount.
 -- =====================================================================
-SELECT '=== CAU 1: Chi tiet hoa don INV-0001 ===' AS ' ';
+-- Hóa đơn mẫu đầu tiên của seed: ngày CURDATE() - 90, quầy C01.
+SET @sample_invoice_id = (
+    SELECT Invoice_ID
+    FROM Invoice
+    WHERE `Date` = DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+      AND Counter_ID = 'C01'
+    ORDER BY `Time`, Invoice_ID
+    LIMIT 1
+);
+
+SELECT CONCAT('=== CAU 1: Chi tiet hoa don ',
+              COALESCE(@sample_invoice_id, '(chua nap seed)'), ' ===') AS ' ';
 
 SELECT  l.Line_Number                              AS Dong,
         p.Name                                     AS San_pham,
@@ -23,7 +34,7 @@ SELECT  l.Line_Number                              AS Dong,
         (l.Quantity * l.Unit_Price - l.Discount)   AS Thanh_tien
 FROM    Invoice_Line l
 JOIN    Product      p ON p.Barcode = l.Barcode
-WHERE   l.Invoice_ID = 'INV-0001'
+WHERE   l.Invoice_ID = @sample_invoice_id
 ORDER BY l.Line_Number;
 
 -- Phần tổng của hóa đơn đó
@@ -42,7 +53,7 @@ JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
 JOIN    Cashier      c  ON c.Cashier_ID  = i.Cashier_ID
 LEFT JOIN Customer   cu ON cu.Customer_ID = i.Customer_ID   -- LEFT vi khach co the NULL
 JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
-WHERE   i.Invoice_ID = 'INV-0001'
+WHERE   i.Invoice_ID = @sample_invoice_id
 GROUP BY i.Invoice_ID, i.`Date`, i.`Time`, s.Shop_ID, c.Name, cu.Name;
 
 
@@ -179,11 +190,12 @@ ORDER BY Phan_tram_tra DESC;
 -- hỏi của đề bài: "có bao nhiêu dòng hàng đang ghi giá này, và giá hôm nay
 -- là bao nhiêu".
 --
--- Bản cũ lọc `LIKE 'INV-OLD%'` còn bản trong `sp_report_old_price_proof`
--- KHÔNG có `WHERE` nào -- hai bản chép của cùng một báo cáo đã lệch nhau.
+-- Bản cũ từng lọc theo mã hóa đơn của hai hóa đơn năm trước, còn bản trong
+-- sp_report_old_price_proof KHÔNG có WHERE nào -- hai bản chép của cùng một
+-- báo cáo đã lệch nhau.
 -- Nay cả hai lọc theo "đơn giá khác giá hôm nay", tức là theo ĐỊNH NGHĨA
 -- của "giữ giá cũ" thay vì theo một tiền tố mã hóa đơn (plan/15 mục 5.3).
--- Hai hóa đơn INV-OLD-* vẫn nằm trong kết quả, chỉ là không còn là bằng
+-- Hai hóa đơn từ năm trước vẫn nằm trong kết quả, chỉ là không còn là bằng
 -- chứng duy nhất.
 -- =====================================================================
 SELECT '=== BONUS: Hoa don cu van giu gia cu ===' AS ' ';

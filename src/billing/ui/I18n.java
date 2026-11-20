@@ -156,8 +156,8 @@ public final class I18n {
             "Tat ca", "All",
             "Khoang ngay:", "Date range:",
             "Tai lai danh sach", "Reload list",
-            "Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don INV-OLD-* tu nam truoc.",
-                "Filter by sale date. 'All' loads every invoice, including the two INV-OLD-* invoices from last year.",
+            "Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don tu nam truoc.",
+                "Filter by sale date. 'All' loads every invoice, including the two invoices from last year.",
             "Danh sach hoa don (bam de xem chi tiet)", "Invoices (select one to view details)",
             "Thong tin chung + tong tien", "Summary and total",
             "Cac dong hang (Invoice_Line)", "Items (Invoice_Line)",
@@ -535,8 +535,8 @@ public final class I18n {
                 "A common mistake: averaging Invoice_Line gives an average per ITEM, not per INVOICE. Calculate each invoice total first in a subquery, then average by cashier.",
             "Hai subquery: mot tinh tong hoa don, mot tinh tien tra lai. Tien tra lai tinh theo TY LE (SL tra / SL mua) nhan thanh tien, de phan giam gia cung duoc hoan dung ty le.",
                 "Two subqueries calculate the invoice total and refund amount. Refunds are proportional (qty returned / qty purchased × line total), so discounts are refunded at the same rate.",
-            "Cot 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: 'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai hoa don INV-OLD-* tu nam truoc.",
-                "'Gia_ghi_tren_HD' comes from Invoice_Line and is frozen at the time of sale. 'Gia_hom_nay' calls fn_get_product_price(barcode, CURDATE()). The report groups by product and frozen price; each row shows how many items were sold at that price, the date range, and today's price. The oldest 'Ban_tu_ngay' rows are the two INV-OLD-* invoices from last year."
+            "Cot 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: 'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai hoa don tu nam truoc.",
+                "'Gia_ghi_tren_HD' comes from Invoice_Line and is frozen at the time of sale. 'Gia_hom_nay' calls fn_get_product_price(barcode, CURDATE()). The report groups by product and frozen price; each row shows how many items were sold at that price, the date range, and today's price. The oldest 'Ban_tu_ngay' rows are the two invoices from last year."
         );
 
         pairs(
@@ -1041,8 +1041,8 @@ public final class I18n {
         marks(
             " trong config.properties khong dang nhap duoc.\nCo the mat khau trong bang Account da bi doi.\n\nPhien hien tai van duoc giu nguyen.",
                 " trong config.properties không đăng nhập được.\nCó thể mật khẩu trong bảng Account đã bị đổi.\n\nPhiên hiện tại vẫn được giữ nguyên.",
-            "Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don INV-OLD-* tu nam truoc.",
-                "Lọc theo ngày bán. 'Tất cả' nạp mọi hóa đơn, kể cả hai hóa đơn INV-OLD-* từ năm trước.",
+            "Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don tu nam truoc.",
+                "Lọc theo ngày bán. 'Tất cả' nạp mọi hóa đơn, kể cả hai hóa đơn từ năm trước.",
             "Chuc nang nay bi khoa voi Thu ngan (Cashier). Chi Quan ly (Manager) moi co quyen.",
                 "Chức năng này bị khóa với Thu ngân (Cashier). Chỉ Quản lý (Manager) mới có quyền.",
             "Chinh sua thong tin hoa don truc tiep trong DB", "Chỉnh sửa thông tin hóa đơn trực tiếp trong DB",
@@ -1131,8 +1131,8 @@ public final class I18n {
                 "Bẫy phổ biến: AVG thẳng trên Invoice_Line sẽ ra trung bình mỗi DÒNG chứ không phải mỗi HÓA ĐƠN. Phải tính tổng tiền từng hóa đơn trước (subquery), rồi mới AVG theo thu ngân.",
             "Hai subquery: mot tinh tong hoa don, mot tinh tien tra lai. Tien tra lai tinh theo TY LE (SL tra / SL mua) nhan thanh tien, de phan giam gia cung duoc hoan dung ty le.",
                 "Hai subquery: một tính tổng hóa đơn, một tính tiền trả lại. Tiền trả lại tính theo TỶ LỆ (SL trả / SL mua) nhân thành tiền, để phần giảm giá cũng được hoàn đúng tỷ lệ.",
-            "Cot 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: 'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai hoa don INV-OLD-* tu nam truoc.",
-                "Cột 'Gia_ghi_tren_HD' lấy từ Invoice_Line (đã đóng băng lúc bán). Cột 'Gia_hom_nay' gọi fn_get_product_price(barcode, CURDATE()). Báo cáo GOM theo (sản phẩm, đơn giá đã đóng băng), nên mỗi dòng trả lời: 'có bao nhiêu dòng hàng đang ghi giá này, bán từ ngày nào đến ngày nào, và giá hôm nay là bao nhiêu'. Dòng có 'Ban_tu_ngay' xa nhất chính là hai hóa đơn INV-OLD-* từ năm trước.",
+            "Cot 'Gia_ghi_tren_HD' lay tu Invoice_Line (da dong bang luc ban). Cot 'Gia_hom_nay' goi fn_get_product_price(barcode, CURDATE()). Bao cao GOM theo (san pham, don gia da dong bang), nen moi dong tra loi: 'co bao nhieu dong hang dang ghi gia nay, ban tu ngay nao den ngay nao, va gia hom nay la bao nhieu'. Dong co 'Ban_tu_ngay' xa nhat chinh la hai hoa don tu nam truoc.",
+                "Cột 'Gia_ghi_tren_HD' lấy từ Invoice_Line (đã đóng băng lúc bán). Cột 'Gia_hom_nay' gọi fn_get_product_price(barcode, CURDATE()). Báo cáo GOM theo (sản phẩm, đơn giá đã đóng băng), nên mỗi dòng trả lời: 'có bao nhiêu dòng hàng đang ghi giá này, bán từ ngày nào đến ngày nào, và giá hôm nay là bao nhiêu'. Dòng có 'Ban_tu_ngay' xa nhất chính là hai hóa đơn từ năm trước.",
             " khoi hoa don ", " khỏi hóa đơn ",
             ") da co trong danh sach se tra.\n\nMuon doi so luong: chon muc do o bang ben phai, bam '<< Xoa',\nroi 'Them >>' lai voi so luong khac.",
                 ") đã có trong danh sách sẽ trả.\n\nMuốn đổi số lượng: chọn mục đó ở bảng bên phải, bấm '<< Xóa',\nrồi 'Thêm >>' lại với số lượng khác.",

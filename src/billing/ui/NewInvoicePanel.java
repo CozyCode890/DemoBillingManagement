@@ -1513,8 +1513,8 @@ public class NewInvoicePanel extends JPanel {
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() {
-                // invoiceId = null: thu tuc tu sinh ma TRONG transaction (loi #18)
-                return invoiceDao.createInvoice(null, date, time,
+                // SQL khóa quầy và tự sinh mã BR1 trong transaction.
+                return invoiceDao.createInvoice(date, time,
                         counter.id, cashier.id,
                         cus == null ? null : cus.id,       // null = khach vang lai
                         lines, pays);

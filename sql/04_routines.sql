@@ -175,25 +175,6 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.4 fn_next_invoice_id: Tự động sinh mã hóa đơn tiếp theo (INV-xxxx)
--- ---------------------------------------------------------------------
-CREATE FUNCTION fn_next_invoice_id()
-RETURNS VARCHAR(30)
-DETERMINISTIC
-READS SQL DATA
-BEGIN
-    DECLARE v_max_seq INT DEFAULT 0;
-
-    SELECT COALESCE(MAX(CAST(SUBSTRING(Invoice_ID, 5) AS UNSIGNED)), 0)
-    INTO   v_max_seq
-    FROM   Invoice
-    WHERE  Invoice_ID REGEXP '^INV-[0-9]+$';
-
-    RETURN CONCAT('INV-', LPAD(v_max_seq + 1, 4, '0'));
-END$$
-
-
--- ---------------------------------------------------------------------
 -- 1.5 fn_next_payment_id: Tự động sinh mã thanh toán tiếp theo (PAY-xxxx)
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_next_payment_id()
@@ -220,11 +201,10 @@ END$$
 --     sp_get_invoice_returns va sp_report_big_returns deu goi vao day.
 --
 --     Luu y cho nguoi hoc: tien hoan KHONG bang SL_tra * Don_gia khi dong co
---     giam gia. Vi du INV-0001 dong 1 cua seed (mua 2, don gia 28.000, giam
---     4.480 -- thanh tien 51.520): tra 1 don vi hoan 25.760 chu khong phai
---     23.520. INV-0001 la hoa don mau cua ca du an va seed ep no o trang thai
---     'PAID' co 3 dong (02_seed.sql, tim 'v_sample'), nen vi du nay CHAY DUOC
---     tren seed moi nap -- khong chi la mot con so trong comment.
+--     giam gia. Hoa don mau trong seed mua 2 san pham 8934001, don gia 28.000,
+--     giam 4.480 -- thanh tien 51.520: tra 1 don vi hoan 25.760 chu khong phai
+--     23.520. Seed ep hoa don mau o trang thai 'PAID' co 3 dong, nen vi du nay
+--     CHAY DUOC tren seed moi nap -- khong chi la mot con so trong comment.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_return_refund(
     p_invoice_id  VARCHAR(30),
@@ -577,9 +557,9 @@ END$$
 --     Vi sao la KHOANG NGAY chu khong phai LIMIT n: "gan day" cua mot danh
 --     sach hoa don la mot khoang thoi gian, va thu tuc da ten la 'recent'.
 --     Quan trong hon: voi LIMIT 200 thi ~350 hoa don cu nhat KHONG DEN DUOC
---     bang giao dien, trong do co INV-0001 (03_queries.sql CAU 1 lay lam vi
---     du mau) va hai hoa don INV-OLD-* ma bao cao bonus noi ve. Voi p_days
---     thi chon "Tat ca" la moi hoa don van den duoc.
+--     bang giao dien, trong do co hoa don mau (03_queries.sql CAU 1) va hai
+--     hoa don tu nam truoc ma bao cao bonus noi ve. Voi p_days thi chon
+--     "Tat ca" la moi hoa don van den duoc.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_recent_invoices(
     IN p_days INT
@@ -951,7 +931,7 @@ END$$
 --        mang ten "chung minh" (plan/15 loi #19). Dieu kien dung la "don
 --        gia tren hoa don KHAC gia hom nay": do chinh la dinh nghia cua
 --        "giu gia cu".
---        (Ban trong 03_queries.sql phan BONUS co WHERE ... LIKE 'INV-OLD%'
+--        (Ban trong 03_queries.sql phan BONUS tung loc theo tien to ma hoa don
 --         -- hai ban chep da lech nhau TU TRUOC khoi 6. Nay ca hai deu loc
 --         theo "gia khac gia hom nay", nen chung noi cung mot chuyen.)
 --
@@ -1035,7 +1015,9 @@ END$$
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 5.1 sp_create_invoice_header: Tạo thông tin đầu hóa đơn
+-- 5.1 sp_create_invoice_header: Sinh mã BR1 và tạo thông tin đầu hóa đơn
+--     Ma gom shop/quay/ngay/sequence. Khoa dong Counter den het transaction
+--     de hai checkout dong thoi tai cung quay khong lay cung sequence.
 --     Trang thai 'OPEN' DA BI BO (01_schema.sql muc 9): hoa don chi co
 --     PAID va VOIDED. Dau hoa don duoc ghi THANG la 'PAID', va
 --     sp_settle_invoice o CUOI transaction kiem lai "co dong hang + thu du
@@ -1044,16 +1026,75 @@ END$$
 --     (InnoDB, REPEATABLE READ), nen "PAID nhung chua co tien" khong lo ra.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_create_invoice_header(
-    IN p_invoice_id  VARCHAR(30),
     IN p_date        DATE,
     IN p_time        TIME,
     IN p_counter_id  VARCHAR(10),
     IN p_cashier_id  VARCHAR(10),
-    IN p_customer_id VARCHAR(15)
+    IN p_customer_id VARCHAR(15),
+    OUT p_invoice_id VARCHAR(30)
 )
 BEGIN
+    DECLARE v_shop_id        VARCHAR(10) DEFAULT NULL;
+    DECLARE v_prefix         VARCHAR(64);
+    DECLARE v_last_invoice   VARCHAR(30) DEFAULT NULL;
+    DECLARE v_max_sequence   BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_next_sequence  BIGINT UNSIGNED;
+    DECLARE v_generated_id   VARCHAR(64);
+    DECLARE v_not_found      BOOLEAN DEFAULT FALSE;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_not_found = TRUE;
+
+    IF p_date IS NULL OR p_counter_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice date and counter are required for BR1 code generation';
+    END IF;
+
+    -- Counter is the serialization point: retain this lock until the caller
+    -- commits, so concurrent checkouts at this counter receive distinct IDs.
+    SELECT Shop_ID INTO v_shop_id
+    FROM Counter
+    WHERE Counter_ID = p_counter_id
+    FOR UPDATE;
+
+    IF v_not_found OR v_shop_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot generate invoice code: counter has no shop';
+    END IF;
+
+    SET v_prefix = CONCAT(v_shop_id, '-', p_counter_id, '-',
+                          DATE_FORMAT(p_date, '%Y%m%d'), '-');
+    SET v_not_found = FALSE;
+    SET v_max_sequence = 0;
+
+    -- Locking read sees the newest matching invoice, even if the transaction
+    -- established a consistent-read snapshot before this procedure was called.
+    SELECT i.Invoice_ID INTO v_last_invoice
+    FROM Invoice AS i
+    WHERE i.Counter_ID = p_counter_id
+      AND i.`Date` = p_date
+      AND LEFT(i.Invoice_ID, CHAR_LENGTH(v_prefix)) = v_prefix
+    ORDER BY CAST(SUBSTRING_INDEX(i.Invoice_ID, '-', -1) AS UNSIGNED) DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT v_not_found THEN
+        SET v_max_sequence = CAST(SUBSTRING_INDEX(v_last_invoice, '-', -1) AS UNSIGNED);
+    END IF;
+
+    SET v_next_sequence = v_max_sequence + 1;
+    SET v_generated_id = CONCAT(
+        v_prefix,
+        LPAD(CAST(v_next_sequence AS CHAR),
+             GREATEST(4, CHAR_LENGTH(CAST(v_next_sequence AS CHAR))), '0')
+    );
+
+    IF CHAR_LENGTH(v_generated_id) > 30 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Generated invoice code exceeds Invoice.Invoice_ID VARCHAR(30)';
+    END IF;
+
+    SET p_invoice_id = v_generated_id;
     INSERT INTO Invoice (Invoice_ID, `Date`, `Time`, Status, Counter_ID, Cashier_ID, Customer_ID)
-    VALUES (p_invoice_id, p_date, p_time, 'PAID', p_counter_id, p_cashier_id, p_customer_id);
+    VALUES (v_generated_id, p_date, p_time, 'PAID', p_counter_id, p_cashier_id, p_customer_id);
 END$$
 
 
@@ -1563,8 +1604,8 @@ END$$
 -- 6.1 sp_wipe_transactions: xoa 7 bang GIAO DICH, giu 9 bang danh muc
 --     (ranh gioi cua docs/05 muc 8.1). Khong the vi pham khoa ngoai:
 --     khoa ngoai chi tro tu giao dich sang danh muc, khong co chieu nguoc.
---     Xoa xong, fn_next_invoice_id / fn_next_payment_id tu quay ve
---     INV-0001 / PAY-0001 vi chung lay MAX(...) + 1.
+--     Xoa xong, sequence hoa don theo (quay, ngay) va fn_next_payment_id
+--     deu bat dau lai tu 0001 vi chung lay MAX(...) + 1.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_wipe_transactions()
 BEGIN
