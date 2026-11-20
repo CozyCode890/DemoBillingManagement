@@ -29,8 +29,8 @@
 --     để đi qua. Đây cũng là phần người học ĐỌC, nên nó giữ lối viết dày
 --     comment như cũ.
 --
---  3. BỐN CON SỐ KHÔNG AI ĐƯỢC GÕ TAY: Status, Unit_Price, Discount,
---     Return_ID. Chủ của chúng là SQL:
+--  3. CÁC GIÁ TRỊ GIAO DỊCH KHÔNG GÕ TAY. Chủ của chúng là SQL:
+--       Invoice_ID <- sp_seed_next_invoice_id(shop, counter, date)
 --       Status     <- sp_settle_invoice / sp_void_invoice
 --       Unit_Price <- fn_get_product_price(barcode, ngày bán)
 --       Discount   <- fn_line_discount(barcode, ngày bán, SL, đơn giá)
@@ -367,9 +367,9 @@ INSERT INTO Account (Username, Password, Role, Full_Name, Cashier_ID) VALUES
 --  @new_day nằm giữa cửa sổ 91 ngày, nên "giá cũ trên hóa đơn cũ" xảy ra ở
 --  hàng trăm dòng mà người dùng thấy được trong tab 3 (plan/15 mục 3.2).
 --
---  Tạo QUA THỦ TỤC như mọi hóa đơn khác. Mã được lấy bằng
---  fn_next_invoice_id(), nên cả hai hóa đơn cũ này và vòng lặp đều theo
---  đúng một quy tắc BR1.
+--  Tạo QUA THỦ TỤC như mọi hóa đơn khác. Mã được sinh tự động bằng
+--  sp_seed_next_invoice_id(): SHOP-COUNTER-YYYYMMDD-SEQUENCE. Shop code
+--  được tra từ Counter theo schema; sequence tăng riêng cho mỗi quầy/ngày.
 --
 --  Đơn giá KHÔNG gõ tay: fn_get_product_price('8934001', @old_day) trả về
 --  28.000 vì mốc giá cũ nằm ĐÚNG ở @old_day và hàm so '<=' (biên bằng nhau
@@ -377,7 +377,57 @@ INSERT INTO Account (Username, Password, Role, Full_Name, Cashier_ID) VALUES
 -- =====================================================================
 SET @old_inv_date = DATE_SUB(CURDATE(), INTERVAL 400 DAY);
 
-SET @old_inv_01_id = fn_next_invoice_id();
+-- Bộ sinh mã chỉ tồn tại trong lúc nạp seed. Shop_ID được suy ra từ Counter,
+-- còn số thứ tự lấy MAX + 1 trong đúng nhóm quầy/ngày; không có Invoice_ID
+-- nào được viết tay. VARCHAR(30) khớp với Invoice.Invoice_ID trong schema.
+DROP PROCEDURE IF EXISTS sp_seed_next_invoice_id;
+DELIMITER $$
+CREATE PROCEDURE sp_seed_next_invoice_id(
+    IN  p_counter_id VARCHAR(10),
+    IN  p_date       DATE,
+    OUT p_invoice_id VARCHAR(30)
+)
+BEGIN
+    DECLARE v_shop_id      VARCHAR(10);
+    DECLARE v_prefix       VARCHAR(64);
+    DECLARE v_invoice_id   VARCHAR(64);
+    DECLARE v_next_sequence BIGINT UNSIGNED;
+
+    SELECT Shop_ID INTO v_shop_id
+    FROM Counter
+    WHERE Counter_ID = p_counter_id;
+
+    IF v_shop_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cannot generate invoice code: counter has no shop';
+    END IF;
+
+    SET v_prefix = CONCAT(v_shop_id, '-', p_counter_id, '-',
+                          DATE_FORMAT(p_date, '%Y%m%d'), '-');
+
+    SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(Invoice_ID, '-', -1) AS UNSIGNED)), 0) + 1
+    INTO v_next_sequence
+    FROM Invoice
+    WHERE Counter_ID = p_counter_id
+      AND `Date` = p_date
+      AND LEFT(Invoice_ID, CHAR_LENGTH(v_prefix)) = v_prefix;
+
+    SET v_invoice_id = CONCAT(
+        v_prefix,
+        LPAD(CAST(v_next_sequence AS CHAR),
+             GREATEST(4, CHAR_LENGTH(CAST(v_next_sequence AS CHAR))), '0')
+    );
+
+    IF CHAR_LENGTH(v_invoice_id) > 30 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Generated invoice code exceeds Invoice.Invoice_ID VARCHAR(30)';
+    END IF;
+
+    SET p_invoice_id = v_invoice_id;
+END$$
+DELIMITER ;
+
+CALL sp_seed_next_invoice_id('C01', @old_inv_date, @old_inv_01_id);
 CALL sp_create_invoice_header(@old_inv_01_id, @old_inv_date, '09:00:00', 'C01', 'E02', NULL);
 CALL sp_add_invoice_line(@old_inv_01_id, 1, '8934001', 2.000,
         fn_get_product_price('8934001', @old_inv_date),
@@ -394,7 +444,7 @@ CALL sp_add_payment(fn_next_payment_id(), @old_inv_01_id, @due, 'CASH',
                     CAST(CEILING(@due / 10000) * 10000 AS CHAR), NULL);
 CALL sp_settle_invoice(@old_inv_01_id);
 
-SET @old_inv_02_id = fn_next_invoice_id();
+CALL sp_seed_next_invoice_id('C03', @old_inv_date, @old_inv_02_id);
 CALL sp_create_invoice_header(@old_inv_02_id, @old_inv_date, '15:30:00', 'C03', 'E03', NULL);
 CALL sp_add_invoice_line(@old_inv_02_id, 1, '8934006', 3.000,
         fn_get_product_price('8934006', @old_inv_date),
@@ -439,8 +489,9 @@ CREATE PROCEDURE sp_seed_demo_data(
     -- So hoa don moi ngay. 6 = 2 moi shop (co 6 quay, 2 quay moi shop),
     -- nen bang cheo cua bao cao cau 2 khong co o rong nao.
     -- CAN THAN KHI TANG: fn_next_payment_id dung LPAD(..., 4, '0') nen
-    -- PAY-10000 can duoc kiem tra thu tu chuoi. Ma hoa don dung BIGINT
-    -- UNSIGNED lam so thu tu va khong bi cat sau 4 chu so. Cau hinh 90 x 6
+    -- PAY-10000 can duoc kiem tra thu tu chuoi. Invoice_ID theo schema la
+    -- VARCHAR(30), gom shop/quay/ngay/so thu tu; sequence tu mo rong qua 4 so.
+    -- Cau hinh 90 x 6
     -- dung ~550 hoa don va ~700 thanh toan. Khi tang den ~10.000 payment,
     -- sp_get_invoice_payments sap theo
     -- CHUOI (ORDER BY p.Payment_ID) nen PAY-10000 se dung TRUOC PAY-9999
@@ -450,7 +501,7 @@ CREATE PROCEDURE sp_seed_demo_data(
 BEGIN
     DECLARE v_d, v_k, v_j, v_lines, v_ln  INT;
     DECLARE v_counters   INT;
-    DECLARE v_id         VARCHAR(60);
+    DECLARE v_id         VARCHAR(30);
     DECLARE v_pay_id     VARCHAR(20);
     DECLARE v_date       DATE;
     DECLARE v_time       TIME;
@@ -528,9 +579,9 @@ BEGIN
                 SET v_lines = 3;
             END IF;
 
-            -- Sinh ma truoc khi goi thu tuc; sp_create_invoice_header chi ghi
-            -- ma duoc truyen vao, khong tu cap ma.
-            SET v_id = fn_next_invoice_id();
+            -- Sinh mã từ shop của quầy, quầy, ngày và sequence kế tiếp trước
+            -- khi tạo header: SHOP-COUNTER-YYYYMMDD-SEQUENCE (BR1).
+            CALL sp_seed_next_invoice_id(v_counter, v_date, v_id);
             CALL sp_create_invoice_header(v_id, v_date, v_time,
                                          v_counter, v_cashier, v_customer);
 
@@ -783,6 +834,7 @@ CALL sp_seed_demo_data(90, 6);
 -- (ai goi hai lan la du lieu nhan doi), va no khong thuoc hop dong nao
 -- trong docs/05 muc 6 vi app khong bao gio goi no.
 DROP PROCEDURE sp_seed_demo_data;
+DROP PROCEDURE sp_seed_next_invoice_id;
 
 
 SELECT 'Da nap du lieu mau 91 ngay!'        AS ket_qua,
