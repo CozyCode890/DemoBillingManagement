@@ -71,7 +71,6 @@ DROP PROCEDURE IF EXISTS sp_delete_invoice;
 DROP PROCEDURE IF EXISTS sp_update_invoice_header;
 DROP PROCEDURE IF EXISTS sp_update_invoice_line;
 DROP PROCEDURE IF EXISTS sp_delete_invoice_line;
-DROP PROCEDURE IF EXISTS sp_authenticate_account;
 
 DROP PROCEDURE IF EXISTS sp_wipe_transactions;
 DROP PROCEDURE IF EXISTS sp_wipe_all_data;
@@ -100,6 +99,8 @@ DROP TRIGGER IF EXISTS trg_ewallet_payment_bi;
 DROP TRIGGER IF EXISTS trg_ewallet_payment_bu;
 DROP TRIGGER IF EXISTS trg_ewallet_payment_bd;
 
+DROP VIEW IF EXISTS vw_cash_change_due;
+DROP VIEW IF EXISTS vw_invoice_line_total;
 DELIMITER $$
 
 -- =====================================================================
@@ -1877,5 +1878,26 @@ CREATE TRIGGER trg_ewallet_payment_bd BEFORE DELETE ON EWallet_Payment FOR EACH 
 BEGIN IF COALESCE(@retail_maintenance, 0) <> 1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records cannot be deleted outside maintenance'; END IF; END$$
 
 DELIMITER ;
+
+-- View 1: Change_Due theo từng giao dịch thanh toán tiền mặt
+CREATE OR REPLACE VIEW vw_cash_change_due AS
+SELECT ca.Payment_ID,
+       p.Invoice_ID,
+       ca.Tendered_Amount,
+       p.Amount                                 AS Paid_Amount,
+       (ca.Tendered_Amount - p.Amount)          AS Change_Due
+FROM Cash_Payment ca
+JOIN Payment p ON p.Payment_ID = ca.Payment_ID;
+
+-- View 2: Total theo từng dòng hóa đơn
+CREATE OR REPLACE VIEW vw_invoice_line_total AS
+SELECT l.Invoice_ID,
+       l.Line_Number,
+       l.Barcode,
+       l.Quantity,
+       l.Unit_Price,
+       l.Discount,
+       (l.Quantity * l.Unit_Price - l.Discount) AS Total
+FROM Invoice_Line l;
 
 SELECT '04_routines.sql created successfully' AS ket_qua;
