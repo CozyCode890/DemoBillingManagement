@@ -548,13 +548,13 @@ BEGIN
                CURDATE()
            );
 
-    -- Dong bo lai gia & khuyen mai lich su (BR8) cho cac hoa don ban truoc @new_day
+    -- Dong bo lai gia & khuyen mai lich su (BR8) cho cac hoa don ban truoc hom nay
     UPDATE Invoice_Line l
     JOIN   Invoice i ON i.Invoice_ID = l.Invoice_ID
     SET    l.Unit_Price = fn_get_product_price(l.Barcode, i.`Date`),
            l.Discount   = fn_line_discount(l.Barcode, i.`Date`, l.Quantity,
                                            fn_get_product_price(l.Barcode, i.`Date`))
-    WHERE  i.`Date` < @new_day;
+    WHERE  i.`Date` < CURDATE();
 
     -- Dong bo lai Payment & Cash_Payment cho hoa don bi doi gia lich su (< @new_day)
     DROP TEMPORARY TABLE IF EXISTS tmp_inv_recalc_pay;
@@ -568,7 +568,7 @@ BEGIN
            COUNT(*) OVER (PARTITION BY p.Invoice_ID) AS Cnt
     FROM   Payment p
     JOIN   Invoice i ON i.Invoice_ID = p.Invoice_ID
-    WHERE  i.`Date` < @new_day;
+    WHERE  i.`Date` < CURDATE();
 
     DROP TEMPORARY TABLE IF EXISTS tmp_inv_pay_split;
     CREATE TEMPORARY TABLE tmp_inv_pay_split AS
