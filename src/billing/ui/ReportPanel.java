@@ -64,10 +64,10 @@ public class ReportPanel extends JPanel {
         buttons.setBorder(BorderFactory.createTitledBorder(I18n.text("Chọn báo cáo", "Choose a report")));
 
         row1.add(makeButton(I18n.text("2. Doanh thu 7 ngày / cửa hàng", "2. 7-day revenue by shop"),
-                I18n.text("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất. "
-                        + "Hóa đơn đã trả hàng chỉ tính phần khách còn giữ; hóa đơn bị hủy không tính.",
-                          "Revenue for each SHOP on each DAY of the last 7 days. "
-                        + "Invoices with returns count only what the customer kept; voided invoices are excluded."),
+                I18n.text("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất (không tính hôm nay). "
+                        + "Hóa đơn đã trả hàng tính doanh thu ròng sau hoàn tiền; hóa đơn bị hủy không tính.",
+                          "Revenue for each SHOP on each DAY of the last 7 completed days (excluding today). "
+                        + "Invoices with returns count net revenue after refunds; voided invoices are excluded."),
                 dao::dailyTakings));
 
         row1.add(makeButton(I18n.text("3. Sản phẩm tăng giá > 10%", "3. Price rises > 10%"),

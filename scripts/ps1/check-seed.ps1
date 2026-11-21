@@ -1,5 +1,5 @@
 # =====================================================================
-#  check-seed.ps1 -- chot bang so cho DU LIEU (14 bat bien)
+#  check-seed.ps1 -- chot bang so cho DU LIEU (17 bat bien)
 # ---------------------------------------------------------------------
 #  Khoi 5 chot bon hop dong cua GIAO DIEN bang code (check-contracts.ps1).
 #  Khoi 6 chot nam hop dong cua DU LIEU bang SQL: sql/05_invariants.sql.
@@ -12,7 +12,7 @@
 #  Yeu cau: MySQL dang chay va database retail_billing ton tai. Script TU
 #  NAP sql/05_invariants.sql truoc khi goi -- xem khoi comment o buoc 1.
 #
-#  Exit 0 = ca 14 quy tac deu 0 vi pham. Exit 1 = co vi pham (hoac khong
+#  Exit 0 = ca 17 quy tac deu 0 vi pham. Exit 1 = co vi pham (hoac khong
 #  nap duoc file). KHONG ghi mot dong DU LIEU nao vao database (chi tao lai
 #  thu tuc sp_check_seed).
 # =====================================================================
@@ -62,7 +62,7 @@ if (-not (Get-Process mysqld -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-Write-Host "--- Kiem 14 bat bien cua du lieu (sp_check_seed) ---" -ForegroundColor Cyan
+Write-Host "--- Kiem 17 bat bien cua du lieu (sp_check_seed) ---" -ForegroundColor Cyan
 $env:MYSQL_PWD = $pw
 
 try {
@@ -118,7 +118,7 @@ if ($null -eq $total) {
     exit 1
 }
 if ($total -eq 0) {
-    Write-Host "[OK] Ca 14 bat bien deu dat (0 vi pham)." -ForegroundColor Green
+    Write-Host "[OK] Ca 17 bat bien deu dat (0 vi pham)." -ForegroundColor Green
     exit 0
 }
 Write-Host "[LOI] Co $total vi pham -- xem cac dong 'SAI' o bang tren." -ForegroundColor Red

@@ -199,8 +199,7 @@ public class Ui {
      * <p>Vì sao cần hai biến thể: một dòng thanh toán 0 đồng là vô nghĩa (ô
      * tiền ở tab 1 phải từ chối), nhưng {@code Invoice_Line.Discount = 0.00}
      * là giá trị <b>bình thường nhất</b> của cột đó -- phần lớn dòng hàng
-     * không có khuyến mãi. {@code Unit_Price} cũng vậy: bản trước khối 5 của
-     * {@code EditLineDialog} nhận {@code >= 0} cho cả hai ô, và đó là đúng.
+     * không có khuyến mãi; nhận {@code >= 0} là đúng.
      */
     public static BigDecimal readMoneyAllowZero(Component parent, String input, String fieldLabel) {
         return readMoneyInternal(parent, input, fieldLabel, true);
@@ -267,9 +266,8 @@ public class Ui {
      *
      * <p>Bản dời của {@code InvoiceViewPanel.readQuantity} (khối 3) lên chỗ
      * dùng chung được: trước khối 5 nó là {@code private} của một lớp, nên tab
-     * 1 và {@code EditLineDialog} không dùng được và cả hai đang nhận
-     * {@code 1.2345} để MySQL âm thầm làm tròn thành {@code 1.235}
-     * (plan/14 lỗi #23).
+     * 1 không dùng được và nhận {@code 1.2345} để MySQL âm thầm làm tròn thành
+     * {@code 1.235} (plan/14 lỗi #23).
      *
      * <p>Ba quy tắc của plan/12 mục 3.2:
      * <ol>

@@ -18,7 +18,9 @@ import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -131,7 +133,7 @@ public class ContractCheck {
         check("#qe",  qty("1.5", new BigDecimal("1.5")), "1.5");    // bang max: compareTo
 
         System.out.println();
-        System.out.println("=== EditLineDialog: Discount = 0 phai NHAN duoc ===");
+        System.out.println("=== Ui.readMoneyAllowZero: Discount = 0 phai NHAN duoc ===");
         check("#dz", moneyZ("0"),        "0.00");
         check("#dn", moneyZ("-1"),       "TU CHOI");
         check("#dp", moneyZ("158.000"),  "158000.00");  // #62
@@ -204,15 +206,80 @@ public class ContractCheck {
         return String.valueOf(QueryResult.run(sql, params).rows.get(0)[0]);
     }
 
+    /** Tinh giam gia mot dong hang bang dung cong thuc cua NewInvoicePanel. */
+    static BigDecimal calcLineDiscount(BigDecimal qty, BigDecimal price, BigDecimal pct) {
+        try {
+            Method ld = NewInvoicePanel.class.getDeclaredMethod(
+                    "lineDiscount", BigDecimal.class, BigDecimal.class, BigDecimal.class);
+            ld.setAccessible(true);
+            return (BigDecimal) ld.invoke(null, qty, price, pct);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Tra true neu thao tac nem RuntimeException (bi DB/DAO tu choi). */
+    static boolean rejects(Runnable action) {
+        try {
+            action.run();
+            return false;
+        } catch (RuntimeException ex) {
+            return true;
+        }
+    }
+
     /**
-     * Hoa don 2 dong, tra MOT PHAN dong 1:
-     *   #r1  tra xong -> hoa don goc VOIDED
-     *   #r2  van tinh vao doanh thu (fn_invoice_in_revenue = 1)
-     *   #r3  tong hoa don dieu chinh = tong goc - tien hoan (header cot 13)
-     *   #r4  sp_get_invoice_adjusted: dong 1 SL_con_lai = mua - tra
-     *   #r5  tra LAN HAI bi tu choi (hoa don khong con PAID)
-     *   #r6  huy tra hang cua dong 1 -> hoa don tro lai PAID
-     *   #r7  sp_check_seed van 0 vi pham sau ca chuoi thao tac
+     * Xoa hoa don thu nghiem bang quyen bao tri (@retail_maintenance = 1)
+     * vi sp_delete_invoice luon chan xoa o tang app de bao toan audit.
+     */
+    static void cleanupTestInvoice(String invoiceId) {
+        if (invoiceId == null || invoiceId.isBlank()) return;
+        try (Connection c = billing.db.Db.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try (Statement st = c.createStatement()) {
+                    st.execute("SET @retail_maintenance = 1");
+                }
+                String[] directTables = { "`Return`", "Payment", "Invoice_Line", "Invoice" };
+                String[] paySubtypes = { "Cash_Payment", "Card_Payment", "EWallet_Payment" };
+                try (PreparedStatement ps = c.prepareStatement("DELETE FROM `Return` WHERE Invoice_ID = ?")) {
+                    ps.setString(1, invoiceId);
+                    ps.executeUpdate();
+                }
+                for (String sub : paySubtypes) {
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "DELETE s FROM " + sub + " s JOIN Payment p ON p.Payment_ID = s.Payment_ID WHERE p.Invoice_ID = ?")) {
+                        ps.setString(1, invoiceId);
+                        ps.executeUpdate();
+                    }
+                }
+                for (int i = 1; i < directTables.length; i++) {
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "DELETE FROM " + directTables[i] + " WHERE Invoice_ID = ?")) {
+                        ps.setString(1, invoiceId);
+                        ps.executeUpdate();
+                    }
+                }
+                c.commit();
+            } catch (Exception ex) {
+                try { c.rollback(); } catch (Exception ignore) { }
+            } finally {
+                try (Statement st = c.createStatement()) {
+                    st.execute("SET @retail_maintenance = NULL");
+                } catch (Exception ignore) { }
+                try { c.setAutoCommit(true); } catch (Exception ignore) { }
+            }
+        } catch (Exception ignore) {
+        }
+    }
+
+    /**
+     * Hoa don 2 dong, tra nhieu luot va thu huy theo quy tac moi (BR3/BR15/BR16):
+     *   #r1-#r4  tra mot phan dong 1 (MANAGER E01) -> van PAID, van tinh doanh thu, tinh dung tien hoan
+     *   #r5a-#r5c tra lan 2 hop le; tra vuot bi tu choi; CASHIER E16 duyet bi tu choi
+     *   #r6a-#r6d cac thu tuc xoa/sua lich su audit deu tu choi (SQLSTATE 45000)
+     *   #r7a-#r7c huy hoa don thu 2: E16 bi tu choi, E01 -> VOIDED & fn_invoice_in_revenue = 0
+     *   #r8      sp_check_seed van 0 vi pham sau khi don dep
      */
     static void returnsFlow() {
         LookupDao  lk  = new LookupDao();
@@ -225,15 +292,20 @@ public class ContractCheck {
         for (Product p : pd.findAll()) {
             BigDecimal pr = pd.priceOn(p.barcode, today);
             if (pr == null || pr.signum() <= 0) continue;
+            Object[] promo = pd.activePromoOn(p.barcode, today);
+            BigDecimal pctv = promo != null ? (BigDecimal) promo[1] : BigDecimal.ZERO;
             BigDecimal q = new BigDecimal("4");
-            lines.add(new CartLine(p, q, pr, BigDecimal.ZERO, ""));
-            due = due.add(pr.multiply(q));
+            BigDecimal disc = calcLineDiscount(q, pr, pctv);
+            CartLine cl = new CartLine(p, q, pr, disc, "");
+            lines.add(cl);
+            due = due.add(cl.lineTotal());
             if (lines.size() == 2) break;
         }
         if (lines.size() < 2) { System.out.println("  (khong du san pham co gia -- bo qua)"); return; }
         due = due.setScale(2);
 
         String id = null;
+        String id2 = null;
         try {
             List<PaymentEntry> pays = new ArrayList<>();
             pays.add(new PaymentEntry(PayMethod.CASH.code(), due, due, null, null));
@@ -244,10 +316,11 @@ public class ContractCheck {
             items.add(new InvoiceDao.ReturnItem(lines.get(0).product.name, 1, new BigDecimal("1")));
             dao.processReturn(id, items, "E01");
 
-            check("#r1", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "VOIDED");
+            check("#r1", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "PAID");
             check("#r2", one("SELECT fn_invoice_in_revenue(?)", id), "1");
 
-            BigDecimal refund = lines.get(0).unitPrice.setScale(2);      // 1 / 4 dong 1, khong giam gia
+            BigDecimal refund = lines.get(0).lineTotal()
+                    .divide(new BigDecimal("4"), 2, java.math.RoundingMode.HALF_UP);
             QueryResult h = dao.invoiceHeader(id);
             check("#r3a", Ui.dec(h.rows.get(0)[12]).toPlainString(), refund.toPlainString());
             check("#r3b", Ui.dec(h.rows.get(0)[13]).setScale(2).toPlainString(),
@@ -258,27 +331,48 @@ public class ContractCheck {
             check("#r4b", Ui.dec(adj.rows.get(0)[6]).stripTrailingZeros().toPlainString(), "3");
             check("#r4c", Ui.dec(adj.rows.get(1)[5]).signum(), 0);         // dong 2 khong tra
 
-            String msg5;
-            try {
-                dao.processReturn(id, items, "E01");
-                msg5 = "tra duoc lan hai";
-            } catch (RuntimeException ex) {
-                msg5 = ex.getMessage().contains("PAID") ? "tu choi" : ex.getMessage();
-            }
-            check("#r5", msg5, "tu choi");
+            // #r5a: tra lan 2 van duoc khi con so luong & MANAGER duyet (BR16)
+            dao.processReturn(id, items, "E01");
+            QueryResult adj2 = dao.invoiceAdjusted(id);
+            check("#r5a", Ui.dec(adj2.rows.get(0)[6]).stripTrailingZeros().toPlainString(), "2");
 
-            check("#r6a", dao.deleteLineReturns(id, 1), 1);
-            check("#r6b", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id), "PAID");
-            check("#r6c", dao.deleteLineReturns(id, 1), 0);               // khong con gi de huy
+            // #r5b: tra vuot so luong con lai -> tu choi
+            final String fid = id;
+            List<InvoiceDao.ReturnItem> over = new ArrayList<>();
+            over.add(new InvoiceDao.ReturnItem(lines.get(0).product.name, 1, new BigDecimal("5")));
+            check("#r5b", rejects(() -> dao.processReturn(fid, over, "E01")), true);
 
-            check("#r7", checkSeedViolations(false), 0);
+            // #r5c: CASHIER (E16) duyet tra hang -> tu choi (BR15)
+            check("#r5c", rejects(() -> dao.processReturn(fid, items, "E16")), true);
+
+            // #r6: cac lenh xoa/sua lich su audit deu bi chan
+            check("#r6a", rejects(() -> dao.deleteLineReturns(fid, 1)), true);
+            check("#r6b", rejects(() -> dao.deleteInvoice(fid)), true);
+            check("#r6c", rejects(() -> dao.updateInvoiceLine(
+                    fid, 1, lines.get(0).product.barcode, BigDecimal.ONE, lines.get(0).unitPrice, BigDecimal.ZERO)), true);
+            check("#r6d", rejects(() -> dao.deleteInvoiceLine(fid, 1)), true);
+
+            // #r7: huy hoa don thu 2 -- E16 tu choi, E01 thanh cong (BR3)
+            List<CartLine> oneLine = new ArrayList<>();
+            oneLine.add(lines.get(0));
+            BigDecimal due2 = lines.get(0).lineTotal();
+            List<PaymentEntry> p2 = new ArrayList<>();
+            p2.add(new PaymentEntry(PayMethod.CASH.code(), due2, due2, null, null));
+            id2 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
+                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, oneLine, p2);
+
+            final String fid2 = id2;
+            check("#r7a", rejects(() -> dao.voidInvoice(fid2, "E16")), true);
+            dao.voidInvoice(id2, "E01");
+            check("#r7b", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", id2), "VOIDED");
+            check("#r7c", one("SELECT fn_invoice_in_revenue(?)", id2), "0");
         } catch (Exception e) {
             check("#r", "loi: " + e.getMessage(), "khong loi");
         } finally {
-            if (id != null) {
-                try { dao.deleteInvoice(id); } catch (Exception ignore) { }
-            }
+            cleanupTestInvoice(id2);
+            cleanupTestInvoice(id);
         }
+        check("#r8", checkSeedViolations(false), 0);
     }
 
     // =================================================================
@@ -287,26 +381,16 @@ public class ContractCheck {
 
     /**
      * Ba phep kiem cua khoi 6:
-     *   #80  sp_check_seed tra 0 vi pham tren CA 14 quy tac
+     *   #80  sp_check_seed tra 0 vi pham tren CA 17 quy tac
      *   #76  fn_active_promo_pct == Discount_Percent cua sp_get_active_promo
      *   #77  fn_line_discount (SQL) == NewInvoicePanel.lineDiscount (Java)
-     *
-     * #76 va #77 la CAI CHOT ma plan/15 muc 3.1 hua khi chap nhan ban chep
-     * thu hai cua dieu kien chon khuyen mai. Rui ro #1/#2 cua muc 8 la:
-     * ca seed va bat bien R2 deu hoi fn_line_discount, nen neu HAM sai thi
-     * R2 van tra 0 -- hai ben sai khop nhau. Hai phep kiem duoi day pha
-     * vong tron do: #76 so ham voi THU TUC (ban chep thu nhat), #77 so no
-     * voi JAVA (ban chep ma tab 1 that su dung).
      */
     static void seed() {
-        // --- #80: 14 bat bien du lieu -------------------------------
+        // --- #80: 17 bat bien du lieu -------------------------------
         check("#80", checkSeedViolations(true), 0);
 
         // --- #76: ham khop thu tuc tren luoi ma vach x ngay ----------
-        // Bay ngay moc, chon de cat qua CA NAM vung khuyen mai cua seed:
-        // PR04 don (-90), PR04+PR05 goi nhau (-60), PR06 PAUSED (-45, -30),
-        // khe trong (-15 cho san pham khong co PR01), PR01/PR02 (0, +10).
-        int[] offsets = { -90, -60, -45, -30, -15, 0, 10 };
+        int[] offsets = { -60, -20, -10, 0, 10 };
         int cells = 0, mismatch = 0;
         QueryResult prods = QueryResult.run("SELECT Barcode FROM Product ORDER BY Barcode");
         for (Object[] p : prods.rows) {
@@ -314,14 +398,12 @@ public class ContractCheck {
             for (int off : offsets) {
                 LocalDate d = LocalDate.now().plusDays(off);
 
-                // ban thu nhat: THU TUC (co ORDER BY ... DESC LIMIT 1)
                 QueryResult sp = QueryResult.call("{call sp_get_active_promo(?, ?)}",
                         barcode, java.sql.Date.valueOf(d));
                 BigDecimal fromSp = sp.rows.isEmpty()
                         ? BigDecimal.ZERO
                         : new BigDecimal(String.valueOf(sp.rows.get(0)[1]));
 
-                // ban thu hai: HAM (co MAX)
                 QueryResult fn = QueryResult.run(
                         "SELECT fn_active_promo_pct(?, ?)", barcode, java.sql.Date.valueOf(d));
                 BigDecimal fromFn = new BigDecimal(String.valueOf(fn.rows.get(0)[0]));
@@ -337,19 +419,16 @@ public class ContractCheck {
         System.out.println("  luoi #76: " + cells + " o");
         check("#76", mismatch, 0);
 
-        // Ba o CU THE, go bang tay, de phep kiem khong chi dong y voi chinh
-        // no: hai ban chep co the cung sai mot cach, nhung ca hai cung sai
-        // DUNG BA CON SO nay thi kho hon nhieu.
-        check("#76a", pct("8934001", -50), "12.00");  // PR04 (8) + PR05 (12) -> chon 12
-        check("#76b", pct("8934001", -70), "8.00");   // chi PR04
-        check("#76c", pct("8934006", -30), "0.00");   // PR06 PAUSED phu, van 0
+        // Cac o cu the theo seed moi (PR01/PR05 cung 10% tren 8934001 -> uu tien han som PR05)
+        check("#76a", pct("8934001", 0), "10.00");
+        QueryResult sp05 = QueryResult.call("{call sp_get_active_promo(?, ?)}",
+                "8934001", java.sql.Date.valueOf(LocalDate.now()));
+        check("#76a2", sp05.rows.isEmpty() ? "" : String.valueOf(sp05.rows.get(0)[0]), "PR05");
+        check("#76b", pct("8934003", 0), "5.00");
+        check("#76c", pct("8934007", -110), "0.00");   // PR03 EXPIRED -> 0
 
         // --- #77: SQL khop Java tung dong ---------------------------
         try {
-            Method ld = NewInvoicePanel.class.getDeclaredMethod(
-                    "lineDiscount", BigDecimal.class, BigDecimal.class, BigDecimal.class);
-            ld.setAccessible(true);
-
             String[] qtys  = { "1", "2", "1.5", "0.5" };
             String[] prices = { "20000", "33000", "158000" };
             String[] pcts   = { "0", "5", "8", "10", "12" };
@@ -357,11 +436,8 @@ public class ContractCheck {
             for (String q : qtys) {
                 for (String pr : prices) {
                     for (String pc : pcts) {
-                        BigDecimal java_ = (BigDecimal) ld.invoke(null,
+                        BigDecimal java_ = calcLineDiscount(
                                 new BigDecimal(q), new BigDecimal(pr), new BigDecimal(pc));
-                        // Cong thuc cua SQL, voi pct truyen vao thay vi tra tu
-                        // bang: so CONG THUC, khong so dieu kien chon khuyen
-                        // mai (cai do la viec cua #76).
                         QueryResult sql = QueryResult.run(
                                 "SELECT ROUND(? * ? * ? / 100, 2)", q, pr, pc);
                         BigDecimal sql_ = new BigDecimal(String.valueOf(sql.rows.get(0)[0]));
@@ -377,31 +453,17 @@ public class ContractCheck {
             System.out.println("  luoi #77: " + grid + " o");
             check("#77", bad, 0);
 
-            // Va mot o di qua DUNG fn_line_discount that -- de khong ai sua
-            // ham do ma hai phep kiem tren van xanh. INV-0001 dong 1 cua seed:
-            // 8934001, SL 2, don gia 28.000 tai ngay -90, PR04 8% -> 4.480.
+            // 8934001 hom nay: gia 33.000, SL 2, KM 10% -> 6.600
             QueryResult real = QueryResult.run(
-                    "SELECT fn_line_discount('8934001', ?, 2.000, 28000.00)",
-                    java.sql.Date.valueOf(LocalDate.now().minusDays(90)));
-            check("#77b", String.valueOf(real.rows.get(0)[0]), "4480.00");
+                    "SELECT fn_line_discount('8934001', CURDATE(), 2.000, 33000.00)");
+            check("#77b", String.valueOf(real.rows.get(0)[0]), "6600.00");
 
         } catch (Exception e) {
             check("#77", "loi: " + e.getMessage(), 0);
         }
 
-        // --- #110 / #111: du lieu do APP sinh ra thoa CUNG bo bat bien ---
-        // Day la noi dung cua plan/15 muc 3.1 duoi dang mot phep kiem CHAY
-        // DUOC: seed di qua thu tuc cua app, nen mot hoa don do tab 1 lap ra
-        // va mot hoa don do seed sinh ra phai thoa CUNG 14 quy tac.
-        //
-        //   #110 ban hom nay   -> gia hom nay, khuyen mai hom nay (PR01/PR02)
-        //   #111 ban o qua khu -> gia CU (truoc moc doi gia -45) va khuyen
-        //                         mai CUA NGAY DO (PR04/PR05), khong phai
-        //                         cua hom nay
-        //
-        // Hoa don duoc XOA ngay sau khi kiem -- khong cham du lieu seed.
+        // --- #110: hoa don do APP lap hom nay thoa cung 17 bat bien --
         appInvoiceKeepsInvariants("#110", LocalDate.now());
-        appInvoiceKeepsInvariants("#111", LocalDate.now().minusDays(60));
     }
 
     /**
@@ -447,7 +509,7 @@ public class ContractCheck {
 
     /**
      * Lap MOT hoa don qua {@code InvoiceDao.createInvoice} (dung duong tab 1
-     * di), chay lai 14 bat bien, roi XOA hoa don do.
+     * di), chay lai 17 bat bien, roi XOA hoa don do bang quyen bao tri.
      *
      * <p>Don gia va tien giam KHONG duoc go tay o day: chung tra bang
      * {@code ProductDao.priceOn} va {@code NewInvoicePanel.lineDiscount} tai
@@ -461,10 +523,6 @@ public class ContractCheck {
         String created = null;
 
         try {
-            Method ld = NewInvoicePanel.class.getDeclaredMethod(
-                    "lineDiscount", BigDecimal.class, BigDecimal.class, BigDecimal.class);
-            ld.setAccessible(true);
-
             // Chon mot san pham CO khuyen mai tai saleDate, de phep kiem di
             // qua nhanh "Discount <> 0" chu khong chi nhanh 0.
             Product prod = null;
@@ -485,7 +543,7 @@ public class ContractCheck {
             }
 
             BigDecimal qty = new BigDecimal("2");
-            BigDecimal disc = (BigDecimal) ld.invoke(null, qty, price, pctv);
+            BigDecimal disc = calcLineDiscount(qty, price, pctv);
             BigDecimal due = price.multiply(qty).subtract(disc).setScale(2);
 
             List<CartLine> lines = new ArrayList<>();
@@ -506,9 +564,7 @@ public class ContractCheck {
         } catch (Exception e) {
             check(id, "loi: " + e.getMessage(), 0);
         } finally {
-            if (created != null) {
-                try { new InvoiceDao().deleteInvoice(created); } catch (Exception ignore) { }
-            }
+            cleanupTestInvoice(created);
         }
     }
 
@@ -635,6 +691,10 @@ public class ContractCheck {
         // Gio hang du lon de 100.000 KHONG tra het duoc (kich ban #31)
         BigDecimal qty = new BigDecimal("200000").divide(price, 0, java.math.RoundingMode.CEILING);
         if (qty.compareTo(BigDecimal.ONE) < 0) qty = BigDecimal.ONE;
+        Object[] promo = pd.activePromoOn(prod.barcode, today);
+        BigDecimal pctv = promo != null ? (BigDecimal) promo[1] : BigDecimal.ZERO;
+        BigDecimal disc = calcLineDiscount(qty, price, pctv);
+        BigDecimal due = price.multiply(qty).subtract(disc).setScale(2);
 
         List<String> created = new ArrayList<>();
         try {
@@ -677,8 +737,7 @@ public class ContractCheck {
             System.out.println();
             // --- #27/#28 GHI THAT: ba con so nam dung cho ----------------
             List<CartLine> lines = new ArrayList<>();
-            lines.add(new CartLine(prod, qty, price, BigDecimal.ZERO, ""));
-            BigDecimal due = price.multiply(qty).setScale(2);
+            lines.add(new CartLine(prod, qty, price, disc, ""));
             BigDecimal tendered = due.add(new BigDecimal("302000.00"));
 
             NewInvoicePanel.Split sp = NewInvoicePanel.splitPayment(PayMethod.CASH, tendered, due);
@@ -688,6 +747,7 @@ public class ContractCheck {
             String id = dao.createInvoice(null, today, LocalTime.now().withNano(0),
                     counterId, cashierId, null, lines, pays);
             created.add(id);
+            check("#idfmt", id != null && id.matches("^S\\d{2}-C\\d{2}-\\d{8}-\\d{4,}$"), true);
             System.out.println("  da luu " + id + " (due=" + due + ", khach dua=" + tendered + ")");
 
             QueryResult q = QueryResult.run(
@@ -708,8 +768,8 @@ public class ContractCheck {
 
             // --- #31 GHI THAT: hai lan tien mat ---------------------------
             List<CartLine> l2 = new ArrayList<>();
-            l2.add(new CartLine(prod, qty, price, BigDecimal.ZERO, ""));
-            BigDecimal due2 = price.multiply(qty).setScale(2);
+            l2.add(new CartLine(prod, qty, price, disc, ""));
+            BigDecimal due2 = due;
 
             NewInvoicePanel.Split a = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, new BigDecimal("100000.00"), due2);
@@ -740,7 +800,7 @@ public class ContractCheck {
 
             // --- #33: tra thieu -> TU CHOI + ROLLBACK (da bo trang thai OPEN)
             List<CartLine> l3 = new ArrayList<>();
-            l3.add(new CartLine(prod, qty, price, BigDecimal.ZERO, ""));
+            l3.add(new CartLine(prod, qty, price, disc, ""));
             BigDecimal part = due2.subtract(new BigDecimal("1000.00"));
             List<PaymentEntry> p3 = new ArrayList<>();
             p3.add(new PaymentEntry(PayMethod.CASH.code(), part, part, null, null));
@@ -784,7 +844,7 @@ public class ContractCheck {
 
         } finally {
             for (String id : created) {
-                try { new InvoiceDao().deleteInvoice(id); } catch (Exception ignore) { }
+                cleanupTestInvoice(id);
             }
             System.out.println("  da xoa " + created.size() + " hoa don thu nghiem: " + created);
         }

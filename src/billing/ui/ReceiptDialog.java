@@ -332,19 +332,16 @@ public class ReceiptDialog {
         InvoiceStatus st = InvoiceStatus.of(statusRaw);
         String text;
         String color;
-        if (st == InvoiceStatus.PAID) {
+        if (st == InvoiceStatus.PAID && refund.signum() > 0) {
+            text  = I18n.msg("ĐÃ THANH TOÁN (CÓ TRẢ HÀNG)", "PAID (WITH RETURNS)");
+            color = "#d35400";
+        } else if (st == InvoiceStatus.PAID) {
             text  = I18n.msg("ĐÃ THANH TOÁN", "PAID");
             color = "#1b7f1b";
             if (missing.signum() > 0) {
                 text += I18n.msg(" -- còn thiếu ", " -- remaining ") + Ui.money(missing);
                 color = "#d35400";
             }
-        } else if (st == InvoiceStatus.VOIDED && refund.signum() > 0) {
-            // VOIDED vi TRA HANG, khong phai bi huy: in "Da huy" o day la noi
-            // sai -- doanh thu cua hoa don nay van duoc tinh (phan con lai).
-            text  = I18n.msg("ĐÃ TRẢ HÀNG -- XEM TỔNG SAU ĐIỀU CHỈNH",
-                             "ITEMS RETURNED -- SEE TOTAL AFTER RETURNS");
-            color = "#d35400";
         } else if (st == InvoiceStatus.VOIDED) {
             text  = I18n.msg("ĐÃ HỦY", "VOIDED");
             color = "#c0392b";
