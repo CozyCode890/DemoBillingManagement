@@ -753,7 +753,7 @@ BEGIN
     JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
     JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
     WHERE   fn_invoice_in_revenue(i.Invoice_ID) = 1
-      AND   i.`Date` >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      AND   i.`Date` BETWEEN DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND DATE_SUB(CURDATE(), INTERVAL 1 DAY)
     GROUP BY s.Shop_ID, s.Address, i.`Date`
     ORDER BY i.`Date` DESC, s.Shop_ID;
 END$$
