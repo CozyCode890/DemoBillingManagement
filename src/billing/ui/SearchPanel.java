@@ -946,9 +946,9 @@ public class SearchPanel extends JPanel {
         // SQL. Cach doan do khong sai, no chi khong duoc phep tu dung
         // DecimalFormat rieng (plan/14 muc 5.9c).
 
-        // Tax_Rate la PHAN TRAM, va day tung la ban DUY NHAT biet dinh dang
-        // phan tram trong ca du an -- nhung di qua double.
-        if (columnName != null && columnName.equalsIgnoreCase("Tax_Rate")) {
+        // Tax_Rate va Discount_Percent la PHAN TRAM, dinh dang qua Ui.percent.
+        if (columnName != null && (columnName.equalsIgnoreCase("Tax_Rate")
+                || columnName.equalsIgnoreCase("Discount_Percent"))) {
             return Ui.percent(value);
         }
 
