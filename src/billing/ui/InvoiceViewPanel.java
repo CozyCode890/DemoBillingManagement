@@ -4,10 +4,9 @@ import billing.dao.InvoiceDao;
 import billing.dao.InvoiceDao.ReturnItem;
 import billing.dao.LookupDao;
 import billing.db.QueryResult;
-import billing.model.Account;
 import billing.model.IdName;
 import billing.model.InvoiceStatus;
-import billing.model.UserSession;
+import billing.util.CashRules;
 
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
@@ -25,22 +24,17 @@ import java.util.function.Consumer;
  * ====================================================================
  *  MÀN HÌNH 2 -- XEM HÓA ĐƠN & THAO TÁC TRỰC TIẾP DATABASE
  * ====================================================================
- *  Bên trái: danh sách hóa đơn + nút "Sửa hóa đơn", "Hủy hóa đơn", "Xóa hóa đơn".
- *  ("Hủy" đổi Status sang VOIDED và giữ nguyên dữ liệu; "Xóa" xóa sạch 7 bảng.)
+ *  Bên trái: danh sách hóa đơn + nút "Sửa khách hàng", "Hủy hóa đơn".
+ *  ("Hủy" đổi Status sang VOIDED với xác nhận quản lý và giữ nguyên dữ liệu.)
  *  Bên phải:
  *    1. Thông tin chung + tổng tiền
- *    2. Các dòng hàng (Invoice_Line) + nút "Sửa dòng", "Xóa dòng", "Thử xóa (Set NULL)"
+ *    2. Các dòng hàng (Invoice_Line)
  *    3. Thanh toán (Payment + bảng con)
- *    4. Trả hàng (Return) + nút "Trả hàng", "Hủy lượt trả"
- *
- *  PHÂN QUYỀN TRÊN UI (UI LOCKING):
- *  - Thu ngân (cashier): Các nút sửa/xóa/trả hàng bị khóa (disable).
- *  - Quản lý (manager): Các nút được kích hoạt (enable).
- *  (Lưu ý: Tầng DAO không khóa để phục vụ các mục đích nghiệp vụ phía sau).
+ *    4. Trả hàng (Return) + nút "Trả hàng" (cần quản lý duyệt, hóa đơn vẫn PAID)
  *
  *  TIỀN HOÀN KHI TRẢ HÀNG: lớp này KHÔNG tự tính, dù chỉ một phép nhân.
  *  Công thức chỉ tồn tại ở một chỗ trong cả dự án và chỗ đó là SQL
- *  (fn_return_refund) -- xem plan/12 mục 2.2.
+ *  (fn_return_refund).
  */
 public class InvoiceViewPanel extends JPanel {
 
@@ -60,21 +54,12 @@ public class InvoiceViewPanel extends JPanel {
     private final JTextArea taHeader = new JTextArea(8, 40);
 
     // Các button thao tác hóa đơn (bên trái)
-    private final JButton btEditInvoice   = new JButton("Sua hoa don");
-    // Huỷ KHÁC xoá: nút này đổi Status sang VOIDED và để nguyên dữ liệu;
-    // btDeleteInvoice xoá sạch khỏi 7 bảng (plan/13 mục 3.1).
-    private final JButton btVoidInvoice   = new JButton("Huy hoa don");
-    private final JButton btDeleteInvoice = new JButton("Xoa hoa don");
+    private final JButton btEditInvoice   = new JButton(I18n.text("Sửa khách hàng", "Edit customer"));
+    // Huỷ KHÁC xoá: nút này đổi Status sang VOIDED và để nguyên dữ liệu
+    private final JButton btVoidInvoice   = new JButton(I18n.text("Hủy hóa đơn", "Void invoice"));
 
-    // Các button thao tác dòng hàng trong hóa đơn (bên phải)
-    private final JButton btEditLine   = new JButton("Sua dong hang");
-    private final JButton btDeleteLine = new JButton("Xoa dong hang");
-    private final JButton btReturnLine = new JButton("Tra hang");
-
-    // Button thao tác trên bảng "Hoa don dieu chinh": hủy phần trả của MỘT
-    // dòng. Return_ID vẫn là khóa trong DB nhưng không hiện ra nữa, nên thao
-    // tác đi theo dòng hóa đơn (sp_delete_return).
-    private final JButton btDeleteReturn   = new JButton(I18n.text("Hủy trả hàng dòng này", "Cancel return of this line"));
+    // Nút thao tác dòng hàng trong hóa đơn (bên phải)
+    private final JButton btReturnLine = new JButton(I18n.text("Trả hàng", "Process return"));
 
     // =================================================================
     //  Ô CHỌN KHOẢNG NGÀY + NHÃN SỐ DÒNG (khối 6)
@@ -198,19 +183,21 @@ public class InvoiceViewPanel extends JPanel {
 
         JPanel pnlInvoiceActions = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 4));
         btEditInvoice.setFont(Ui.BOLD);
+        btEditInvoice.setToolTipText(I18n.text(
+                "Cập nhật khách hàng của hóa đơn (các thông tin khác bất biến)",
+                "Update invoice customer (other fields are immutable)"));
         btVoidInvoice.setFont(Ui.BOLD);
-        // Cam (không phải đỏ) để mắt phân biệt được ngay với nút xoá vĩnh viễn.
+        // Cam (không phải đỏ) để mắt phân biệt được nghĩa Hủy hóa đơn.
         btVoidInvoice.setForeground(new Color(190, 110, 20));
-        btDeleteInvoice.setFont(Ui.BOLD);
-        btDeleteInvoice.setForeground(new Color(180, 40, 40));
+        btVoidInvoice.setToolTipText(I18n.text(
+                "Hủy hóa đơn (cần chọn Quản lý duyệt): dữ liệu vẫn còn nhưng không tính vào doanh thu",
+                "Void invoice (requires Manager approval): data is kept but excluded from revenue"));
 
         btEditInvoice.addActionListener(e -> onEditInvoice());
         btVoidInvoice.addActionListener(e -> onVoidInvoice());
-        btDeleteInvoice.addActionListener(e -> onDeleteInvoice());
 
         pnlInvoiceActions.add(btEditInvoice);
         pnlInvoiceActions.add(btVoidInvoice);
-        pnlInvoiceActions.add(btDeleteInvoice);
 
         JPanel pnlInvoiceSouth = new JPanel(new BorderLayout());
         pnlInvoiceSouth.add(lbInvoiceCount, BorderLayout.NORTH);
@@ -223,34 +210,24 @@ public class InvoiceViewPanel extends JPanel {
         left.setBorder(BorderFactory.createTitledBorder("Danh sach hoa don (bam de xem chi tiet)"));
 
         // --- Cột phải: Chi tiết hóa đơn ---
-        // Panel riêng cho dòng hàng kèm các nút thao tác dòng
+        // Panel riêng cho dòng hàng kèm nút Trả hàng
         JPanel pnlLineActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
-        btEditLine.setFont(Ui.BOLD);
-        btDeleteLine.setForeground(new Color(180, 40, 40));
         btReturnLine.setFont(Ui.BOLD);
+        btReturnLine.setToolTipText(I18n.text(
+                "Trả hàng cho các dòng của hóa đơn đang chọn (cần chọn Quản lý duyệt)",
+                "Return items from the selected invoice (requires Manager approval)"));
 
-        btEditLine.addActionListener(e -> onEditLine());
-        btDeleteLine.addActionListener(e -> onDeleteLine());
         btReturnLine.addActionListener(e -> onReturnLine());
 
-        pnlLineActions.add(btEditLine);
-        pnlLineActions.add(btDeleteLine);
         pnlLineActions.add(btReturnLine);
 
         JPanel pnlLinesContainer = new JPanel(new BorderLayout(2, 2));
         pnlLinesContainer.add(new JScrollPane(tbLines), BorderLayout.CENTER);
         pnlLinesContainer.add(pnlLineActions, BorderLayout.SOUTH);
 
-        // Hóa đơn điều chỉnh: THAY cho bảng "Tra hang (Return)" cũ, và đặt
-        // SONG SONG với hóa đơn gốc -- hai bảng cùng thứ tự Dong nên đọc ngang
-        // được: trái là đã mua, phải là sau khi trả.
-        JPanel pnlReturnActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
-        btDeleteReturn.setForeground(new Color(180, 40, 40));
-        btDeleteReturn.addActionListener(e -> onDeleteReturn());
-        pnlReturnActions.add(btDeleteReturn);
-
+        // Hóa đơn điều chỉnh: đặt SONG SONG với hóa đơn gốc -- hai bảng cùng
+        // thứ tự dòng nên đọc ngang được: trái là đã mua, phải là sau khi trả.
         pnlAdjustedContainer.add(new JScrollPane(tbAdjusted), BorderLayout.CENTER);
-        pnlAdjustedContainer.add(pnlReturnActions, BorderLayout.SOUTH);
         pnlAdjustedContainer.setBorder(adjustedBorder);
 
         JSplitPane linesSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
@@ -312,64 +289,6 @@ public class InvoiceViewPanel extends JPanel {
             }
         });
 
-        // Áp dụng phân quyền giao diện theo phiên làm việc hiện tại
-        applyRolePermissions();
-    }
-
-    /**
-     * ================================================================
-     *  PHÂN QUYỀN TRÊN GIAO DIỆN (UI ROLE LOCKING)
-     * ================================================================
-     *  Kiểm tra tài khoản hiện tại từ UserSession:
-     *  - Nếu là 'cashier' -> Toàn bộ nút Sửa/Xóa/Trả hàng bị khóa (disabled)
-     *  - Nếu là 'manager' -> Toàn bộ nút được mở khóa (enabled)
-     *  (Tuyệt đối không chặn ở DAO/Service theo yêu cầu của bạn)
-     *
-     *  MainWindow.switchRole() gọi lại đúng hàm này, nên đổi vai trò tại chỗ
-     *  cũng tự đúng (plan/11 mục 4.4).
-     *
-     *  Nút "Tra hang" nằm trong danh sách này từ khối 3: cột được ghi tên là
-     *  Approved_By -- NGƯỜI DUYỆT. Một nút ghi vào ô "người duyệt" mà ai cũng
-     *  bấm được thì ô đó không duyệt gì cả.
-     *
-     *  Nút "Huy hoa don" vào danh sách từ khối 4 -- thành 8 nút. Huỷ hoá đơn
-     *  là hành động nghiệp vụ của quản lý, không phải một lần sửa trường.
-     */
-    public void applyRolePermissions() {
-        Account user = UserSession.getCurrentUser();
-        boolean isManager = (user != null && user.isManager());
-
-        btEditInvoice.setEnabled(isManager);
-        btVoidInvoice.setEnabled(isManager);
-        btDeleteInvoice.setEnabled(isManager);
-        btEditLine.setEnabled(isManager);
-        btDeleteLine.setEnabled(isManager);
-        btReturnLine.setEnabled(isManager);
-        btDeleteReturn.setEnabled(isManager);
-
-        if (!isManager) {
-            String lockHint = I18n.text("Chức năng này bị khóa với Thu ngân. Chỉ Quản lý mới có quyền.",
-                                        "This function is locked for Cashiers. Only Managers have permission.");
-            btEditInvoice.setToolTipText(lockHint);
-            btVoidInvoice.setToolTipText(lockHint);
-            btDeleteInvoice.setToolTipText(lockHint);
-            btEditLine.setToolTipText(lockHint);
-            btDeleteLine.setToolTipText(lockHint);
-            btReturnLine.setToolTipText(lockHint);
-            btDeleteReturn.setToolTipText(lockHint);
-        } else {
-            btEditInvoice.setToolTipText(I18n.text("Sửa thông tin hóa đơn", "Edit the invoice details"));
-            btVoidInvoice.setToolTipText(I18n.text("Hủy hóa đơn: hóa đơn vẫn còn nhưng không tính vào doanh thu",
-                                                   "Void the invoice: it is kept but no longer counted in revenue"));
-            btDeleteInvoice.setToolTipText(I18n.text("Xóa hẳn hóa đơn cùng hàng, thanh toán và trả hàng của nó",
-                                                     "Delete the invoice with all its items, payments and returns"));
-            btEditLine.setToolTipText(I18n.text("Sửa số lượng, đơn giá của dòng hàng", "Edit the quantity or unit price of the line"));
-            btDeleteLine.setToolTipText(I18n.text("Xóa dòng hàng", "Delete the line"));
-            btReturnLine.setToolTipText(I18n.text("Trả hàng cho các dòng của hóa đơn đang chọn",
-                                                  "Return items from the selected invoice"));
-            btDeleteReturn.setToolTipText(I18n.text("Hủy phần trả hàng của dòng đang chọn trong bảng Hóa đơn điều chỉnh",
-                                                    "Cancel the return of the selected line in the Adjusted invoice table"));
-        }
     }
 
     public void reload() {
@@ -559,14 +478,10 @@ public class InvoiceViewPanel extends JPanel {
     }
 
     /**
-     * Hủy một hóa đơn (Status -> VOIDED).
+     * Hủy một hóa đơn (Status -> VOIDED) với xác nhận của Quản lý (BR3/BR15).
      *
-     * ĐÂY KHÔNG PHẢI XÓA. Hộp thoại xác nhận phải dạy được sự khác nhau, vì
-     * hai nút nằm cạnh nhau và "huỷ" là từ dễ bị hiểu thành "xoá" (plan/13
-     * rủi ro #7).
-     *
-     * Chạy NGOÀI EDT: sp_void_invoice có SELECT ... FOR UPDATE, MySQL chậm
-     * hoặc dòng đang bị khóa bởi cửa sổ khác là cả cửa sổ đứng hình.
+     * Hóa đơn đã phát sinh trả hàng không được phép hủy (giữ PAID theo BR16 / R9).
+     * Chạy NGOÀI EDT vì sp_void_invoice dùng SELECT ... FOR UPDATE.
      */
     private void onVoidInvoice() {
         final String invoiceId = getSelectedInvoiceId();
@@ -576,32 +491,80 @@ public class InvoiceViewPanel extends JPanel {
             return;
         }
 
-        int choice = JOptionPane.showConfirmDialog(this,
-                I18n.msg(
+        final List<IdName> managers;
+        try {
+            QueryResult headerQr = dao.invoiceHeader(invoiceId);
+            if (headerQr.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        I18n.msg("Không tìm thấy hóa đơn " + invoiceId, "Invoice not found: " + invoiceId),
+                        I18n.msg("Lỗi", "Error"), JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            Object[] h = headerQr.rows.get(0);
+            String status = h[3] == null ? "" : String.valueOf(h[3]);
+            if (InvoiceStatus.of(status) == InvoiceStatus.VOIDED) {
+                JOptionPane.showMessageDialog(this,
+                        I18n.msg("Hóa đơn " + invoiceId + " đã bị hủy trước đó.",
+                                 "Invoice " + invoiceId + " is already voided."),
+                        I18n.msg("Không hủy được hóa đơn", "Cannot Void Invoice"), JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            BigDecimal refund = (headerQr.columns.size() > 12) ? Ui.dec(h[12]) : BigDecimal.ZERO;
+            if (refund.signum() > 0) {
+                JOptionPane.showMessageDialog(this,
+                        I18n.msg("Hóa đơn " + invoiceId + " đã phát sinh trả hàng nên không thể hủy\n"
+                               + "(phải giữ trạng thái Đã thanh toán để bảo toàn doanh thu thuần và lịch sử trả hàng).",
+                                 "Invoice " + invoiceId + " already has returns and cannot be voided\n"
+                               + "(it must stay Paid to preserve net revenue and return history)."),
+                        I18n.msg("Không hủy được hóa đơn", "Cannot Void Invoice"), JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            managers = lookupDao.managers();
+        } catch (Exception ex) {
+            Ui.error(this, ex);
+            return;
+        }
+
+        if (managers.isEmpty()) {
+            Ui.warn(this,
+                    I18n.msg("Không có nhân viên Quản lý (MANAGER) trong bảng Cashier để duyệt hủy.",
+                             "No MANAGER found in the Cashier table to approve voiding."),
+                    I18n.msg("Thiếu người duyệt", "Missing Approver"));
+            return;
+        }
+
+        JComboBox<IdName> cbManager = new JComboBox<>(managers.toArray(new IdName[0]));
+        JPanel confirmPanel = new JPanel(new BorderLayout(8, 8));
+        JLabel lbMsg = new JLabel(toHtmlLines(I18n.msg(
                 "Hủy hóa đơn " + invoiceId + "?\n\n"
               + "Hủy KHÁC Xóa:\n"
-              + "  - Hóa đơn vẫn còn nguyên: hàng, thanh toán, trả hàng\n"
+              + "  - Hóa đơn vẫn còn nguyên: hàng, thanh toán\n"
               + "  - Hóa đơn không còn được tính vào doanh thu\n"
-              + "  - Không trả hàng được nữa\n"
-              + "  - KHÔNG mở lại được\n\n"
-              + "Muốn xóa hẳn hóa đơn thì dùng nút \"Xóa hóa đơn\".",
+              + "  - Không trả hàng được nữa và KHÔNG mở lại được",
                 "Void invoice " + invoiceId + "?\n\n"
               + "Void is NOT Delete:\n"
-              + "  - The invoice is kept: items, payments, returns\n"
+              + "  - The invoice is kept: items, payments\n"
               + "  - It is no longer counted in revenue\n"
-              + "  - No more returns are possible\n"
-              + "  - It CANNOT be reopened\n\n"
-              + "To remove the invoice completely, use \"Delete invoice\"."),
+              + "  - No returns are allowed and it CANNOT be reopened")));
+        JPanel mgrRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        mgrRow.add(new JLabel(I18n.msg("Quản lý duyệt hủy:", "Approving manager:")));
+        mgrRow.add(cbManager);
+        confirmPanel.add(lbMsg, BorderLayout.CENTER);
+        confirmPanel.add(mgrRow, BorderLayout.SOUTH);
+
+        int choice = JOptionPane.showConfirmDialog(this, confirmPanel,
                 I18n.msg("Xác nhận hủy hóa đơn", "Confirm Void Invoice"),
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
 
         if (choice != JOptionPane.YES_OPTION) return;
+        final IdName selectedManager = (IdName) cbManager.getSelectedItem();
+        if (selectedManager == null) return;
 
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() {
-                dao.voidInvoice(invoiceId);
+                dao.voidInvoice(invoiceId, selectedManager.id);
                 return null;
             }
 
@@ -615,9 +578,9 @@ public class InvoiceViewPanel extends JPanel {
                 }
 
                 JOptionPane.showMessageDialog(InvoiceViewPanel.this,
-                        I18n.msg("Đã hủy hóa đơn " + invoiceId + ".\n"
+                        I18n.msg("Đã hủy hóa đơn " + invoiceId + " (duyệt bởi " + selectedManager + ").\n"
                                + "Hóa đơn vẫn còn, chỉ không tính vào doanh thu nữa.",
-                                 "Invoice " + invoiceId + " has been voided.\n"
+                                 "Invoice " + invoiceId + " has been voided (approved by " + selectedManager + ").\n"
                                + "It is kept, but no longer counted in revenue."),
                         I18n.msg("Đã hủy hóa đơn", "Invoice Voided"), JOptionPane.INFORMATION_MESSAGE);
 
@@ -630,137 +593,14 @@ public class InvoiceViewPanel extends JPanel {
         }.execute();
     }
 
-    /** Xóa hóa đơn trực tiếp trong database */
-    private void onDeleteInvoice() {
-        String invoiceId = getSelectedInvoiceId();
-        if (invoiceId == null) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot hoa don de xoa!", "Chua chon hoa don", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        int choice = JOptionPane.showConfirmDialog(this,
-                I18n.msg(
-                "Bạn có chắc chắn muốn XÓA VĨNH VIỄN hóa đơn " + invoiceId + "?\n\n"
-              + "Thao tác này sẽ xóa sạch:\n"
-              + "  1. Các lượt trả hàng\n"
-              + "  2. Các lượt thanh toán và chi tiết thanh toán\n"
-              + "  3. Toàn bộ dòng hàng\n"
-              + "  4. Hóa đơn\n\n"
-              + "Hành động không thể hoàn tác!",
-                "Are you sure to PERMANENTLY DELETE invoice " + invoiceId + "?\n\n"
-              + "This will delete:\n"
-              + "  1. All returns\n"
-              + "  2. All payments and payment details\n"
-              + "  3. All items\n"
-              + "  4. The invoice itself\n\n"
-              + "This cannot be undone!"),
-                I18n.msg("Xác nhận xóa hóa đơn", "Confirm Delete Invoice"),
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-
-        if (choice == JOptionPane.YES_OPTION) {
-            try {
-                dao.deleteInvoice(invoiceId);
-                JOptionPane.showMessageDialog(this,
-                        I18n.msg("Đã xóa thành công hóa đơn " + invoiceId + "!",
-                                 "Invoice " + invoiceId + " deleted successfully!"),
-                        I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
-
-                // Xóa trắng khung chi tiết.
-                // Bản cũ chạy ba câu QueryResult.run("SELECT '' WHERE 1=0") chỉ
-                // để vẽ ba bảng rỗng -- ba lượt đi database không cần thiết
-                // (plan/14 mục 5.9f).
-                taHeader.setText("");
-                Ui.clear(tbLines);
-                Ui.clear(tbPayments);
-                clearAdjusted();
-
-                reload();
-            } catch (Exception ex) {
-                Ui.error(this, ex);
-            }
-        }
+    private static String toHtmlLines(String plain) {
+        return "<html>" + plain.replace("&", "&amp;")
+                               .replace("<", "&lt;")
+                               .replace(">", "&gt;")
+                               .replace("\n", "<br>") + "</html>";
     }
 
-    /** Chỉnh sửa một dòng hàng */
-    private void onEditLine() {
-        String invoiceId = getSelectedInvoiceId();
-        int row = tbLines.getSelectedRow();
-        if (invoiceId == null || row < 0) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot dong hang trong bang 'Cac dong hang' de chinh sua!", "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        try {
-            int lineNo = Integer.parseInt(String.valueOf(tbLines.getValueAt(row, 0)));
-
-            // Lấy thông tin gốc của dòng hàng QUA THỦ TỤC, không phải SQL thô:
-            // câu SELECT cũ ở đây là câu SQL thô cuối cùng còn lại trong tầng
-            // UI/DAO của app billing (khối 4 đã xoá câu còn lại). SQL thô trong
-            // UI nằm ngoài tầm với của mọi thay đổi trong sql/ -- đổi tên cột là
-            // nó sai thầm lặng. Thứ tự 4 cột là hợp đồng: r[0]..r[3].
-            QueryResult qr = dao.invoiceLineEditFields(invoiceId, lineNo);
-            if (qr.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Khong tim thay dong hang so " + lineNo, "Loi", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            // BigDecimal, KHONG phai String.valueOf(...): cot DECIMAL cua MySQL
-            // ve Java von la BigDecimal roi, va EditLineDialog can so co kieu de
-            // dien san bang Ui.qtyInput / Ui.moneyInput (plan/14 muc 5.9e).
-            Object[] r = qr.rows.get(0);
-            String     barcode   = String.valueOf(r[0]);
-            BigDecimal quantity  = Ui.dec(r[1]);
-            BigDecimal unitPrice = Ui.dec(r[2]);
-            BigDecimal discount  = Ui.dec(r[3]);
-
-            Window window = SwingUtilities.getWindowAncestor(this);
-            EditLineDialog dialog = new EditLineDialog(window, dao, invoiceId, lineNo, barcode, quantity, unitPrice, discount);
-            dialog.setVisible(true);
-
-            if (dialog.isSaved()) {
-                // PHẢI THẤY KẾT QUẢ: reload() gọi model.setRowCount(0) nên nó xoá
-                // luôn selection, và onSelect(null) sau đó không còn hàng nào để
-                // đọc -> bảng dòng hàng giữ nguyên nội dung cũ (plan/14 lỗi #30).
-                // Khối 3 đã dựng sẵn hai hàm này và ghi rõ là để lại cho khối 5.
-                reload();
-                selectInvoiceRow(invoiceId);
-                showDetail(invoiceId);
-            }
-
-        } catch (Exception ex) {
-            Ui.error(this, ex);
-        }
-    }
-
-    /** Xóa một dòng hàng */
-    private void onDeleteLine() {
-        String invoiceId = getSelectedInvoiceId();
-        int row = tbLines.getSelectedRow();
-        if (invoiceId == null || row < 0) {
-            JOptionPane.showMessageDialog(this, "Vui long chon mot dong hang de xoa!", "Chua chon dong hang", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        int lineNo = Integer.parseInt(String.valueOf(tbLines.getValueAt(row, 0)));
-        int choice = JOptionPane.showConfirmDialog(this,
-                "Ban co chac chan muon xoa dong hang so " + lineNo + " khoi hoa don " + invoiceId + "?",
-                "Xac nhan xoa dong hang", JOptionPane.YES_NO_OPTION);
-
-        if (choice == JOptionPane.YES_OPTION) {
-            try {
-                dao.deleteInvoiceLine(invoiceId, lineNo);
-                JOptionPane.showMessageDialog(this, "Da xoa thanh cong dong hang " + lineNo + "!", "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
-                // reload() xoá selection -> chọn lại rồi vẽ lại chi tiết, nên
-                // bảng dòng hàng VÀ tổng tiền ở khung trên cập nhật ngay (lỗi #30).
-                reload();
-                selectInvoiceRow(invoiceId);
-                showDetail(invoiceId);
-            } catch (Exception ex) {
-                Ui.error(this, ex);
-            }
-        }
-    }// =================================================================
+    // =================================================================
     //  TRẢ HÀNG (RETURN)
     // =================================================================
 
@@ -991,24 +831,8 @@ public class InvoiceViewPanel extends JPanel {
             return;
         }
 
-        // --- 1. Người duyệt phải là một nhân viên thật ----------------
-        Account user = UserSession.getCurrentUser();
-        if (user == null || user.getCashierId() == null || user.getCashierId().isBlank()) {
-            JOptionPane.showMessageDialog(this,
-                I18n.msg("Tài khoản '" + (user == null ? "?" : user.getUsername())
-                       + "' chưa được gắn với nhân viên nào,\n"
-                       + "nên không thể duyệt trả hàng. Vui lòng báo quản lý.",
-                         "Account '" + (user == null ? "?" : user.getUsername())
-                       + "' is not linked to any employee,\n"
-                       + "so it cannot approve returns. Please tell your manager!"),
-                I18n.msg("Chưa xác định được người duyệt", "Missing Approver"), JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        final String approverId = user.getCashierId();
-        final String approverLabel = approverLabel(approverId);
-
         try {
-            // --- 2. Phần đầu hóa đơn: ngày + trạng thái --------------
+            // --- 1. Phần đầu hóa đơn: ngày + trạng thái --------------
             // sp_get_invoice_header: Ma_HD(0) Ngay(1) Gio(2) Trang_thai(3) ...
             QueryResult headerQr = dao.invoiceHeader(invoiceId);
             String invoiceDate = "";
@@ -1019,25 +843,31 @@ public class InvoiceViewPanel extends JPanel {
                 status = row[3] == null ? "" : String.valueOf(row[3]);
             }
 
-            // Chỉ hóa đơn PAID mới trả hàng được: VOIDED nghĩa là đã bị hủy
-            // hoặc ĐÃ trả hàng một lần rồi. SQL cũng chặn (sp_add_return),
-            // đây chỉ là lớp thông báo sớm.
+            // Chỉ hóa đơn PAID mới trả hàng được (BR16: hóa đơn vẫn giữ PAID sau khi trả).
             InvoiceStatus st = InvoiceStatus.of(status);
             if (st != InvoiceStatus.PAID) {
                 JOptionPane.showMessageDialog(this,
                         I18n.msg("Hóa đơn " + invoiceId + " " + statusText(st, status)
-                               + ".\nChỉ hóa đơn đã thanh toán và chưa trả hàng mới trả hàng được.",
+                               + ".\nChỉ hóa đơn đã thanh toán mới trả hàng được.",
                                  "Invoice " + invoiceId + " " + statusText(st, status)
-                               + ".\nOnly paid invoices without returns can be returned."),
+                               + ".\nOnly paid invoices can be returned."),
                         I18n.msg("Không trả hàng được", "Cannot Return"), JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            // --- 3. Các dòng còn trả được ----------------------------
+            // --- 2. Các dòng còn trả được & danh sách quản lý duyệt ---
             QueryResult linesQr = dao.returnableLines(invoiceId);
             if (linesQr.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Hoa don khong co dong hang nao de tra!",
                         "Thong bao", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            List<IdName> managers = lookupDao.managers();
+            if (managers.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        I18n.msg("Không tìm thấy quản lý (Role = MANAGER) để duyệt trả hàng.",
+                                 "No manager (Role = MANAGER) found to approve returns."),
+                        I18n.msg("Thiếu người duyệt", "Missing Manager"), JOptionPane.WARNING_MESSAGE);
                 return;
             }
             List<ReturnableLine> availableLines = new ArrayList<>();
@@ -1109,9 +939,11 @@ public class InvoiceViewPanel extends JPanel {
             totalPanel.add(totalCaption);
             totalPanel.add(totalAmountLabel);
 
-            // Ai duyệt phải NHÌN THẤY ĐƯỢC trước khi bấm, không chỉ sau khi lưu.
+            // Quản lý duyệt phải được chọn và nhìn thấy trước khi xác nhận (BR15).
+            final JComboBox<IdName> cbApprover = new JComboBox<>(managers.toArray(new IdName[0]));
             JPanel approverPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-            approverPanel.add(new JLabel("Nguoi duyet: " + approverLabel));
+            approverPanel.add(new JLabel(I18n.msg("Quản lý duyệt: ", "Approved by (Manager): ")));
+            approverPanel.add(cbApprover);
 
             JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             buttonPanel.add(btnConfirm);
@@ -1132,6 +964,7 @@ public class InvoiceViewPanel extends JPanel {
                 btnAdd.setEnabled(!busy);
                 btnRemove.setEnabled(!busy);
                 btnConfirm.setEnabled(!busy);
+                cbApprover.setEnabled(!busy);
                 returnDialog.setCursor(Cursor.getPredefinedCursor(
                         busy ? Cursor.WAIT_CURSOR : Cursor.DEFAULT_CURSOR));
             };
@@ -1174,6 +1007,13 @@ public class InvoiceViewPanel extends JPanel {
                     return;
                 }
 
+                boolean wholeOnly = !CashRules.allowsDecimal(line.unit);
+                String qtyPrompt = wholeOnly
+                        ? I18n.msg("Nhập số lượng trả (số nguyên dương, đơn vị " + line.unit + "):",
+                                   "Enter the return quantity (positive whole number, unit " + line.unit + "):")
+                        : I18n.msg("Nhập số lượng trả (tối đa 3 chữ số thập phân, dùng ',' hoặc '.'):",
+                                   "Enter the return quantity (up to 3 decimal places, use ',' or '.'):");
+
                 // Điền sẵn số còn lại -> trường hợp phổ biến nhất (trả hết phần
                 // còn lại) chỉ còn một lần Enter.
                 Object answer = JOptionPane.showInputDialog(returnDialog,
@@ -1181,8 +1021,7 @@ public class InvoiceViewPanel extends JPanel {
                       + I18n.msg("Đã mua: ", "Bought: ") + Ui.qty(line.bought) + " " + line.unit
                       + I18n.msg("   |   Đã trả: ", "   |   Returned: ") + Ui.qty(line.returned)
                       + I18n.msg("   |   Còn lại: ", "   |   Remaining: ") + Ui.qty(remaining) + "\n\n"
-                      + I18n.msg("Nhập số lượng trả (tối đa 3 chữ số thập phân, dùng ',' hoặc '.'):",
-                                 "Enter the return quantity (up to 3 decimal places, use ',' or '.'):"),
+                      + qtyPrompt,
                         I18n.msg("Nhập số lượng trả cho dòng ", "Return quantity for line ") + line.lineNumber,
                         JOptionPane.QUESTION_MESSAGE, null, null,
                         Ui.qtyInput(remaining));
@@ -1191,6 +1030,12 @@ public class InvoiceViewPanel extends JPanel {
                 BigDecimal qty = Ui.readQuantity(returnDialog, answer.toString(),
                                                  remaining, line.unit);
                 if (qty == null) return;
+                String unitProblem = CashRules.quantityProblem(qty, line.unit);
+                if (unitProblem != null) {
+                    JOptionPane.showMessageDialog(returnDialog, unitProblem,
+                            I18n.msg("Sai số lượng", "Invalid Quantity"), JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
 
                 try {
                     // Tiền hoàn do SQL tính -- cùng một hàm mà tab 3 và báo cáo dùng.
@@ -1224,6 +1069,8 @@ public class InvoiceViewPanel extends JPanel {
                             "Danh sach trong", JOptionPane.WARNING_MESSAGE);
                     return;      // không gọi DB
                 }
+                IdName approver = (IdName) cbApprover.getSelectedItem();
+                if (approver == null) return;
 
                 final BigDecimal total = rowsModel.totalRefund();
                 final List<ReturnItem> items = rowsModel.toReturnItems();
@@ -1232,14 +1079,16 @@ public class InvoiceViewPanel extends JPanel {
                         I18n.msg(
                         "Trả " + items.size() + " dòng hàng của hóa đơn " + invoiceId + "?\n\n"
                       + "Tổng tiền phải trả lại: " + Ui.money(total) + "\n"
-                      + "Người duyệt: " + approverLabel + "\n\n"
-                      + "Sau khi trả, hóa đơn " + invoiceId + " KHÔNG trả hàng thêm được nữa.\n"
-                      + "Doanh thu tính theo hóa đơn điều chỉnh.",
+                      + "Quản lý duyệt: " + approver + "\n\n"
+                      + "Hóa đơn vẫn giữ trạng thái Đã thanh toán và có thể trả thêm nếu còn số lượng,\n"
+                      + "nhưng mỗi lượt trả hàng đã ghi nhận KHÔNG thể hủy bỏ.\n"
+                      + "Doanh thu tính theo doanh thu ròng sau hoàn tiền.",
                         "Return " + items.size() + " line(s) of invoice " + invoiceId + "?\n\n"
                       + "Total refund: " + Ui.money(total) + "\n"
-                      + "Approver: " + approverLabel + "\n\n"
-                      + "After this, invoice " + invoiceId + " CANNOT take more returns.\n"
-                      + "Revenue follows the adjusted invoice."),
+                      + "Approved by: " + approver + "\n\n"
+                      + "The invoice remains Paid and can accept more returns while quantity remains,\n"
+                      + "but recorded returns CANNOT be cancelled.\n"
+                      + "Revenue counts net sales after refunds."),
                         I18n.msg("Xác nhận trả hàng", "Confirm Return"),
                         JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
                 if (choice != JOptionPane.YES_OPTION) return;
@@ -1248,7 +1097,7 @@ public class InvoiceViewPanel extends JPanel {
                 new SwingWorker<Void, Void>() {
                     @Override
                     protected Void doInBackground() {
-                        dao.processReturn(invoiceId, items, approverId);
+                        dao.processReturn(invoiceId, items, approver.id);
                         return null;
                     }
 
@@ -1259,15 +1108,17 @@ public class InvoiceViewPanel extends JPanel {
                         try {
                             get();
                         } catch (Exception ex) {
-                            showSqlFailure(parent, ex, "Khong tra hang duoc");
+                            showSqlFailure(parent, ex, I18n.msg("Không trả hàng được", "Cannot Return"));
                             return;
                         }
 
                         returnDialog.dispose();
                         JOptionPane.showMessageDialog(InvoiceViewPanel.this,
-                                "Da ghi " + items.size() + " luot tra hang cho hoa don " + invoiceId + ".\n"
-                              + "Tong tien tra lai: " + Ui.money(total),
-                                "Thanh cong", JOptionPane.INFORMATION_MESSAGE);
+                                I18n.msg("Đã ghi " + items.size() + " lượt trả hàng cho hóa đơn " + invoiceId + ".\n"
+                                       + "Tổng tiền trả lại: " + Ui.money(total),
+                                         "Recorded " + items.size() + " return(s) for invoice " + invoiceId + ".\n"
+                                       + "Total refund: " + Ui.money(total)),
+                                I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
 
                         // PHẢI THẤY KẾT QUẢ: reload() xóa selection nên chọn lại
                         // đúng hàng rồi vẽ lại chi tiết (plan/12 lỗi #12).
@@ -1304,24 +1155,15 @@ public class InvoiceViewPanel extends JPanel {
         }
     }
 
-    // readQuantity DA DOI CHO: no la hop dong kieu so cua khoi 3 (plan/12 muc
-    // 3.2) nhung lai bi khoa trong lop nay bang `private`, nen tab 1 va
-    // EditLineDialog khong dung duoc va ca hai dang nhan 1.2345 de MySQL am
-    // tham lam tron thanh 1.235 -- dung dieu quy tac 1 cam (plan/14 loi #23).
-    // Gio no la Ui.readQuantity, nguyen van, chi khac mot diem: tham so `max`
-    // nhan null khi khong co tran (tab 1 khong co tran so luong).
+    // Ui.readQuantity nhận null cho `max` khi không có trần số lượng (tab 1).
 
     /**
      * Lỗi do SQL chủ động SIGNAL (SQLSTATE 45000) -> cảnh báo gọn, đọc được.
      * Mọi lỗi khác (mất kết nối, thiếu thủ tục, sai khóa ngoại) -> Ui.error.
      *
-     * Nhờ vậy câu "Dong 1: chi con 0.000 co the tra (da mua 2.000, da tra 2.000)"
-     * hiện ra như một lời giải thích, chứ không như một tai nạn. Và lỗi thật vẫn
-     * giữ nguyên đường cũ với thông điệp gốc của MySQL (plan/12 mục 5.7c).
-     *
      * BA NÚT DÙNG CHUNG MỘT CÁCH HIỆN LỖI: trả hàng, hủy hóa đơn, và lưu hộp
      * thoại sửa hóa đơn (EditInvoiceDialog). Cả ba đều gặp SIGNAL '45000' từ
-     * các thủ tục của khối 4, nên tiêu đề hộp thoại là tham số.
+     * các thủ tục, nên tiêu đề hộp thoại là tham số.
      */
     static void showSqlFailure(Component parent, Throwable ex, String title) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
@@ -1334,103 +1176,10 @@ public class InvoiceViewPanel extends JPanel {
         Ui.error(parent, ex);
     }
 
-    /** "Tran Van An (E01)" -- tên nhân viên duyệt, tra từ sp_lookup_cashiers. */
-    private String approverLabel(String cashierId) {
-        try {
-            for (IdName c : lookupDao.cashiers()) {
-                if (cashierId.equals(c.id)) {
-                    return c.name + " (" + cashierId + ")";
-                }
-            }
-        } catch (Exception ignore) {
-            // Không tra được tên thì vẫn hiện mã -- không đáng để chặn trả hàng.
-        }
-        return cashierId;
-    }
-
-    /**
-     * Hủy phần trả hàng của MỘT dòng trong bảng "Hoa don dieu chinh".
-     *
-     * <p>Theo DÒNG, không theo lượt: Return_ID vẫn là khóa trong DB nhưng đã
-     * ẩn khỏi giao diện, và hóa đơn điều chỉnh hiện mỗi dòng hóa đơn một hàng
-     * (đã cộng mọi lượt trả của dòng). {@code sp_delete_return} xóa mọi lượt
-     * trả của dòng đó; nếu không còn dòng nào bị trả, hóa đơn trở lại PAID --
-     * coi như chưa từng trả hàng.
-     *
-     * <p>Đọc cột theo chỉ số của sp_get_invoice_adjusted: 1 Dong, 2 San_pham,
-     * 5 SL_tra, 9 Tien_hoan.
-     */
-    /** "đã thanh toán" / "đã hủy hoặc đã trả hàng" -- câu cho nhân viên, không có mã PAID/VOIDED. */
+    /** "đã thanh toán" / "đã bị hủy" -- câu cho nhân viên, không có mã PAID/VOIDED. */
     private static String statusText(InvoiceStatus st, String raw) {
         if (st == InvoiceStatus.PAID) return I18n.msg("đã thanh toán", "is paid");
-        if (st == InvoiceStatus.VOIDED) return I18n.msg("đã hủy hoặc đã trả hàng", "is voided or already has returns");
+        if (st == InvoiceStatus.VOIDED) return I18n.msg("đã bị hủy", "is voided");
         return raw;
-    }
-
-    private void onDeleteReturn() {
-        String invoiceId = getSelectedInvoiceId();
-        int row = tbAdjusted.getSelectedRow();
-        if (invoiceId == null || row < 0 || tbAdjusted.getColumnCount() < 10) {
-            JOptionPane.showMessageDialog(this,
-                    I18n.msg("Vui lòng chọn một dòng trong bảng 'Hóa đơn điều chỉnh' để hủy trả hàng!",
-                             "Please select a line in the 'Adjusted invoice' table to cancel its return!"),
-                    I18n.msg("Chưa chọn dòng", "No Line Selected"), JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        int lineNo;
-        try {
-            lineNo = intOf(tbAdjusted.getValueAt(row, 1));
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this,
-                    I18n.msg("Không đọc được số dòng của hàng đang chọn.", "Cannot read the selected line number!"),
-                    I18n.msg("Lỗi", "Error"), JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        String product  = String.valueOf(tbAdjusted.getValueAt(row, 2));
-        String quantity = String.valueOf(tbAdjusted.getValueAt(row, 5));
-        String refund   = String.valueOf(tbAdjusted.getValueAt(row, 9));
-
-        int choice = JOptionPane.showConfirmDialog(this,
-                I18n.msg(
-                "Hủy trả hàng của dòng này?\n\n"
-              + "  Hóa đơn : " + invoiceId + "\n"
-              + "  Dòng    : " + lineNo + " (" + product + ")\n"
-              + "  SL trả  : " + quantity + "\n"
-              + "  Tiền hoàn đã ghi nhận: " + refund + "\n\n"
-              + "Nếu đây là dòng trả hàng cuối cùng, hóa đơn trở lại \"Đã thanh toán\"\n"
-              + "(coi như chưa từng trả hàng). Hành động không thể hoàn tác!",
-                "Cancel the return of this line?\n\n"
-              + "  Invoice : " + invoiceId + "\n"
-              + "  Line    : " + lineNo + " (" + product + ")\n"
-              + "  Qty     : " + quantity + "\n"
-              + "  Refund recorded: " + refund + "\n\n"
-              + "If this is the last returned line, the invoice goes back to \"Paid\"\n"
-              + "(as if nothing was returned). This cannot be undone!"),
-                I18n.msg("Xác nhận hủy trả hàng", "Confirm Cancel Return"),
-                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.YES_OPTION) return;
-
-        try {
-            int deleted = dao.deleteLineReturns(invoiceId, lineNo);
-            if (deleted == 0) {
-                JOptionPane.showMessageDialog(this,
-                        I18n.msg("Dòng " + lineNo + " không có lượt trả hàng nào (có thể ai khác đã hủy trước).",
-                                 "Line " + lineNo + " has no returns (someone may have cancelled them already)."),
-                        I18n.msg("Không có gì bị hủy", "Nothing Cancelled"), JOptionPane.WARNING_MESSAGE);
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        I18n.msg("Đã hủy " + deleted + " lượt trả của dòng " + lineNo + ".",
-                                 "Cancelled " + deleted + " return(s) of line " + lineNo + "."),
-                        I18n.msg("Thành công", "Success"), JOptionPane.INFORMATION_MESSAGE);
-            }
-            // Trạng thái có thể vừa đổi VOIDED -> PAID: nạp lại cả danh sách.
-            reload();
-            selectInvoiceRow(invoiceId);
-            showDetail(invoiceId);
-        } catch (Exception ex) {
-            Ui.error(this, ex);
-        }
     }
 }

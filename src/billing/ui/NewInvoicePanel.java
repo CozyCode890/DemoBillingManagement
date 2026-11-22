@@ -25,7 +25,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -95,7 +94,7 @@ public class NewInvoicePanel extends JPanel {
     // --- Khung 4: thanh toán ----------------------------------------
     private final JComboBox<PayMethod> cbMethod = new JComboBox<>(PayMethod.values());
     private final JLabel     lbAmount  = new JLabel();
-    private final JTextField tfAmount  = new JTextField(12);
+    private final JTextField tfAmount  = new JTextField(8);
     private final JLabel     lbEcho;
     private final JTable     tbPay     = Ui.readOnlyTable();
     private final JButton    btAddPay  = new JButton("Them thanh toan");
@@ -132,11 +131,14 @@ public class NewInvoicePanel extends JPanel {
     public NewInvoicePanel(Runnable onSaved) {
         this.onSaved = onSaved;
 
-        // Tran cua o ngay la HOM NAY: ban hang o tuong lai khong phai nghiep vu
-        // nao (plan/14 kich ban #24).
+        // Ngay ban luon theo dong ho server (BR2) -> khoa chi doc.
         Date now = new Date();
         spDate = new JSpinner(new SpinnerDateModel(
-                now, null, now, java.util.Calendar.DAY_OF_MONTH));
+                now, null, null, java.util.Calendar.DAY_OF_MONTH));
+        spDate.setEnabled(false);
+        spDate.setToolTipText(I18n.text(
+                "Ngày lập hóa đơn luôn lấy theo đồng hồ của máy chủ.",
+                "The invoice date always follows the server clock."));
 
         lbEcho = Ui.attachMoneyEcho(tfAmount);
 
@@ -175,14 +177,14 @@ public class NewInvoicePanel extends JPanel {
     }
 
     // -----------------------------------------------------------------
-    //  Dữ liệu chưa lưu (dùng để cảnh báo trước khi đăng xuất)
+    //  Dữ liệu chưa lưu (dùng để cảnh báo trước khi thoát ứng dụng)
     // -----------------------------------------------------------------
 
     /**
      * Có dữ liệu chưa lưu trong tab này hay không.
      *
-     * <p>Dùng để cảnh báo trước khi đăng xuất ({@code MainWindow.doLogout}) --
-     * {@code dispose()} cửa sổ sẽ xoá sạch giỏ hàng mà không hỏi gì.
+     * <p>Dùng để cảnh báo trước khi thoát ({@code MainWindow.confirmExit}) --
+     * đóng cửa sổ sẽ xoá sạch giỏ hàng chưa lưu.
      */
     public boolean hasPendingWork() {
         return !cart.isEmpty() || !payments.isEmpty();
@@ -245,12 +247,12 @@ public class NewInvoicePanel extends JPanel {
         g.gridx = 3; g.gridwidth = 2; p.add(customer, g);
         g.gridwidth = 1;
 
-        // Hàng 3: dòng mẹo -- thứ cả app sinh ra để minh hoạ, GIỮ NGUYÊN
+        // Hàng 3: giải thích quy tắc ngày lập hóa đơn & giá lịch sử (BR2/BR8)
         JLabel note = new JLabel(I18n.text(
-                "<html><i>Mẹo: đổi 'Ngày bán' về ngày trước rồi thêm sản phẩm"
-                        + " -> đơn giá sẽ lấy theo GIÁ CỦA NGÀY ĐÓ.</i></html>",
-                "<html><i>Tip: set the sale date to an earlier day, then add a product"
-                        + " to use THAT DAY'S price.</i></html>"));
+                "<html><i>Lưu ý: ngày giờ hóa đơn và đơn giá tự động lấy theo ngày hiện tại của hệ thống. "
+                        + "Để xem giá lịch sử và hóa đơn cũ giữ giá cũ, xem tab Xem hóa đơn &amp; Báo cáo.</i></html>",
+                "<html><i>Note: invoice date/time and unit prices follow today's server clock. "
+                        + "To inspect historical prices and old invoices, see the Invoices &amp; Reports tabs.</i></html>"));
         g.gridy = 2; g.gridx = 0; g.gridwidth = 5;
         p.add(note, g);
         return p;
@@ -338,13 +340,20 @@ public class NewInvoicePanel extends JPanel {
                 + "<i>Unlike the quantity field above, where <b>.</b> is the decimal separator.</i><br>"
                 + "Enter = add the payment.</html>"));
 
+        // Đảm bảo ô nhập tiền không bị GridBagLayout co nhỏ khi cửa sổ hẹp.
+        Dimension amtPref = tfAmount.getPreferredSize();
+        int amtW = 80;
+        tfAmount.setMinimumSize(new Dimension(amtW, amtPref.height));
+        tfAmount.setPreferredSize(new Dimension(amtW, amtPref.height));
+
         // Hàng 1: phương thức + ô tiền + nhãn vọng lại
         g.gridy = 0;
         g.gridx = 0; pay.add(new JLabel("Phuong thuc:"), g);
         g.gridx = 1; pay.add(cbMethod, g);
         g.gridx = 2; pay.add(lbAmount, g);
         g.gridx = 3; pay.add(tfAmount, g);
-        g.gridx = 4; pay.add(lbEcho, g);
+        g.gridx = 4; g.weightx = 1.0; pay.add(lbEcho, g);
+        g.weightx = 0;
 
         // Hàng 2: hàng nút -- xuống dòng ở ĐÂY, không theo bề rộng cửa sổ
         JPanel buttons = new JPanel(new GridLayout(1, 0, 6, 0));
@@ -624,8 +633,7 @@ public class NewInvoicePanel extends JPanel {
     }
 
     private LocalDate selectedDate() {
-        Date d = (Date) spDate.getValue();
-        return d.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+        return LocalDate.now();
     }
 
     // =================================================================
@@ -763,24 +771,13 @@ public class NewInvoicePanel extends JPanel {
                 }
 
                 CartLine existing = findLineByBarcode(p.barcode);
-                if (existing != null && pr.price.compareTo(existing.unitPrice) == 0) {
-                    // Gop: tinh lai giam gia theo TONG so luong (kich ban #21)
+                if (existing != null) {
+                    // BR7: moi san pham toi da 1 dong tren 1 hoa don -> cong don SL va tinh lai giam gia
                     int i = cart.indexOf(existing);
                     CartLine merged = priceLine(p, existing.quantity.add(qty), pr);
                     if (exceedsMoneyCap(merged, i)) return;
                     cart.set(i, merged);
                     hint(date, pr, "");
-                } else if (existing != null) {
-                    CartLine added = priceLine(p, qty, pr);
-                    if (exceedsMoneyCap(added, -1)) return;
-                    cart.add(added);
-                    hint(date, pr, I18n.msg(
-                            "  Giá ngày " + date + " (" + Ui.money(pr.price)
-                          + ") khác đơn giá của dòng đã có (" + Ui.money(existing.unitPrice)
-                          + ") -> thêm dòng mới.",
-                            "  The price on " + date + " (" + Ui.money(pr.price)
-                          + ") differs from the existing line (" + Ui.money(existing.unitPrice)
-                          + ") -> added a new line."));
                 } else {
                     CartLine added = priceLine(p, qty, pr);
                     if (exceedsMoneyCap(added, -1)) return;
@@ -1565,6 +1562,7 @@ public class NewInvoicePanel extends JPanel {
         cart.clear();
         payments.clear();
         customer.clear();
+        spDate.setValue(new Date());
         tfQty.setText("1");
         tfAmount.setText("");
         lbHint.setText(" ");

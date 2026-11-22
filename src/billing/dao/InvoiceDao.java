@@ -70,32 +70,19 @@ public class InvoiceDao {
      * ================================================================
      *  Java quản lý ranh giới nghiệp vụ (Business Transaction):
      *      conn.setAutoCommit(false);
-     *      - Gọi fn_next_invoice_id: sinh mã hóa đơn (nếu chỗ gọi truyền null)
-     *      - Gọi sp_create_invoice_header: ghi đầu hóa đơn
-     *      - Gọi sp_add_invoice_line: ghi từng dòng hàng (batching)
+     *      - Gọi sp_create_invoice_header: tự sinh mã hóa đơn dạng
+     *        &lt;Shop&gt;-&lt;Counter&gt;-&lt;YYYYMMDD&gt;-&lt;SEQ&gt; qua OUT parameter và ghi đầu hóa đơn
+     *      - Gọi sp_add_invoice_line: ghi từng dòng hàng (batching), MySQL tự lấy
+     *        giá, khuyến mãi, VAT và cộng dồn nếu trùng sản phẩm
      *      - Gọi fn_next_payment_id + sp_add_payment: ghi thanh toán
      *        (SQL tự rẽ nhánh bảng con)
      *      - Gọi sp_settle_invoice: CHỐT -- thiếu dòng hàng hoặc thu thiếu
      *        tiền thì thủ tục SIGNAL và cả transaction ROLLBACK
      *      conn.commit();
      *
-     * @param invoiceId mã hóa đơn, hoặc {@code null} để tự sinh TRONG
-     *        transaction. Truyền {@code null} là cách dùng đúng từ khối 5: bản
-     *        cũ gọi {@link #nextInvoiceId()} trên MỘT CONNECTION KHÁC trước khi
-     *        mở transaction, nên hai cửa sổ app cùng lưu là trùng khóa chính và
-     *        thu ngân mất giỏ hàng (plan/14 lỗi #18).
-     *
-     *        <p>Khe hở còn lại -- hai transaction song song vẫn đọc được cùng
-     *        {@code MAX(...)} trước khi cái nào {@code INSERT} -- KHÔNG được bịt
-     *        ở đây, và đây là một ghi chú trung thực chứ không phải bỏ sót: bịt
-     *        đúng cách là {@code INSERT ... SELECT} hoặc một bảng cấp số, tức là
-     *        đổi {@code fn_next_invoice_id} và {@code sp_create_invoice_header}.
-     *        Cái sửa được ở đây là thu hẹp cửa sổ từ "khoảng thời gian người
-     *        dùng đọc hộp thoại" xuống "vài micro giây trong một transaction",
-     *        và làm cho lần thất bại là một {@code ROLLBACK} sạch kèm thông điệp
-     *        đọc hiểu được (plan/14 mục 5.4a).
-     *
-     * @return mã hóa đơn đã dùng (chính {@code invoiceId}, hoặc mã vừa sinh)
+     * @param invoiceId tham số giữ lại cho tương thích; mã hóa đơn thực tế luôn
+     *                  do {@code sp_create_invoice_header} tự sinh qua tham số OUT.
+     * @return mã hóa đơn vừa được server sinh ra
      */
     public String createInvoice(String invoiceId,
                                 LocalDate date, LocalTime time,
@@ -103,7 +90,6 @@ public class InvoiceDao {
                                 List<CartLine> lines,
                                 List<PaymentEntry> payments) {
 
-        String fnInvId   = "{? = call fn_next_invoice_id()}";
         String fnPayId   = "{? = call fn_next_payment_id()}";
         String spHeader  = "{call sp_create_invoice_header(?, ?, ?, ?, ?, ?)}";
         String spLine    = "{call sp_add_invoice_line(?, ?, ?, ?, ?, ?)}";
@@ -117,27 +103,22 @@ public class InvoiceDao {
             conn = Db.getConnection();
             conn.setAutoCommit(false);          // ==== BẮT ĐẦU TRANSACTION ====
 
-            // ---- 0. Mã hóa đơn: sinh TRONG transaction ---------------
-            if (invoiceId == null) {
-                invoiceId = scalarString(conn, fnInvId);
-                SqlLog.add(fnInvId, null, 0, 1);
-            }
-
-            // ---- 1. Ghi phần đầu hóa đơn qua Stored Procedure -------
+            // ---- 1. Ghi phần đầu & tự sinh mã hóa đơn qua OUT param ---
             try (CallableStatement cs = conn.prepareCall(spHeader)) {
-                cs.setString(1, invoiceId);
-                cs.setDate(2, Date.valueOf(date));
-                cs.setTime(3, Time.valueOf(time));
-                cs.setString(4, counterId);
-                cs.setString(5, cashierId);
+                cs.setDate(1, Date.valueOf(date));
+                cs.setTime(2, Time.valueOf(time));
+                cs.setString(3, counterId);
+                cs.setString(4, cashierId);
                 if (customerId == null) {
-                    cs.setNull(6, Types.VARCHAR);
+                    cs.setNull(5, Types.VARCHAR);
                 } else {
-                    cs.setString(6, customerId);
+                    cs.setString(5, customerId);
                 }
-                cs.executeUpdate();
-                SqlLog.add(spHeader, new Object[]{invoiceId, date, time,
-                        counterId, cashierId, customerId}, 0, 1);
+                cs.registerOutParameter(6, Types.VARCHAR);
+                cs.execute();
+                invoiceId = cs.getString(6);
+                SqlLog.add(spHeader, new Object[]{date, time,
+                        counterId, cashierId, customerId, "OUT=" + invoiceId}, 0, 1);
             }
 
             // ---- 2. Ghi các dòng hàng qua Stored Procedure (Batch) --
@@ -232,45 +213,6 @@ public class InvoiceDao {
             }
         }
     }
-
-    /**
-     * Sinh mã hóa đơn kế tiếp (INV-0001, INV-0002...).
-     * Ứng dụng Stored Function: fn_next_invoice_id()
-     */
-    public String nextInvoiceId() {
-        String sql = "{? = call fn_next_invoice_id()}";
-        long t0 = System.currentTimeMillis();
-
-        try (Connection c = Db.getConnection();
-             CallableStatement cs = c.prepareCall(sql)) {
-
-            cs.registerOutParameter(1, Types.VARCHAR);
-            cs.execute();
-            String nextId = cs.getString(1);
-
-            SqlLog.add(sql, null, System.currentTimeMillis() - t0, 1);
-            return nextId;
-        } catch (SQLException e) {
-            throw new RuntimeException("Cannot generate invoice id: " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Gọi một Stored Function trả về chuỗi, TRÊN CONNECTION ĐANG CHO SẴN.
-     *
-     * <p>Khác {@link #nextInvoiceId()}: hàm đó tự mở Connection riêng, nên cái
-     * nó đọc được là trạng thái đã commit của người khác. Ở đây ta cần đúng
-     * Connection của transaction để thấy được những gì chính transaction này
-     * vừa ghi (plan/14 mục 4.5, 5.4a).
-     */
-    private String scalarString(Connection conn, String callSql) throws SQLException {
-        try (CallableStatement cs = conn.prepareCall(callSql)) {
-            cs.registerOutParameter(1, Types.VARCHAR);
-            cs.execute();
-            return cs.getString(1);
-        }
-    }
-
 
     // =================================================================
     //  PHẦN 2 -- ĐỌC DỮ LIỆU QUA CÁC STORED PROCEDURE
@@ -436,8 +378,9 @@ public class InvoiceDao {
     // =================================================================
 
     /**
-     * Xóa hoàn toàn một hóa đơn và toàn bộ dữ liệu phụ thuộc trong database.
-     * Sử dụng thủ tục sp_delete_invoice().
+     * Yêu cầu xóa hóa đơn qua {@code sp_delete_invoice()}.
+     * Lưu ý: theo chính sách Audit ở {@code 04_routines.sql} mới, thủ tục này
+     * luôn từ chối xóa hóa đơn đã chốt bằng {@code SIGNAL '45000'}.
      */
     public void deleteInvoice(String invoiceId) {
         String sql = "{call sp_delete_invoice(?)}";
@@ -457,35 +400,32 @@ public class InvoiceDao {
     }
 
     /**
-     * Hủy một hóa đơn: sp_void_invoice(p_invoice_id).
+     * Hủy một hóa đơn: sp_void_invoice(p_invoice_id, p_supervisor_id).
      *
-     * HỦY KHÁC XÓA: dữ liệu vẫn còn nguyên (dòng hàng, thanh toán, trả hàng),
-     * chỉ không được tính vào báo cáo nữa vì các câu truy vấn báo cáo đều lọc
-     * WHERE Status = 'PAID'. Muốn xóa sạch thì dùng deleteInvoice().
-     *
-     * Đây là ĐƯỜNG DUY NHẤT tới VOIDED: hộp thoại sửa hóa đơn không đổi được
-     * trạng thái nữa (plan/13 mục 3.2).
+     * <p>Bắt buộc truyền {@code supervisorId} là mã một nhân viên có
+     * {@code Role = 'MANAGER'} trong bảng {@code Cashier} (BR3/BR15).
+     * HỦY KHÁC XÓA: dữ liệu vẫn còn nguyên, chỉ không được tính vào doanh thu.
      *
      * @throws RuntimeException khi SQL từ chối. Exception gốc được giữ làm
-     *         cause để UI đọc getSQLState() -- "45000" là lỗi nghiệp vụ
-     *         (hóa đơn đã hủy trước đó, hoặc không tìm thấy hóa đơn).
+     *         cause để UI đọc getSQLState() -- "45000" là lỗi nghiệp vụ.
      */
-    public void voidInvoice(String invoiceId) {
-        String sql = "{call sp_void_invoice(?)}";
+    public void voidInvoice(String invoiceId, String supervisorId) {
+        String sql = "{call sp_void_invoice(?, ?)}";
         long t0 = System.currentTimeMillis();
 
         try (Connection c = Db.getConnection();
              CallableStatement cs = c.prepareCall(sql)) {
 
             cs.setString(1, invoiceId);
+            cs.setString(2, supervisorId);
             cs.executeUpdate();
 
-            SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 1);
+            SqlLog.add(sql, new Object[]{invoiceId, supervisorId}, System.currentTimeMillis() - t0, 1);
 
         } catch (SQLException e) {
             // Ghi lại cả lần thử thất bại: nhật ký SQL (tab 5 Setup App) phải
             // thấy được câu gọi vừa bị từ chối, với 0 dòng ảnh hưởng.
-            SqlLog.add(sql, new Object[]{invoiceId}, System.currentTimeMillis() - t0, 0);
+            SqlLog.add(sql, new Object[]{invoiceId, supervisorId}, System.currentTimeMillis() - t0, 0);
             // Giữ nguyên exception gốc làm cause -- UI đọc getSQLState() của nó.
             throw new RuntimeException("Cannot void invoice " + invoiceId
                                        + ": " + e.getMessage(), e);
@@ -532,8 +472,9 @@ public class InvoiceDao {
     }
 
     /**
-     * Cập nhật một dòng hàng trong hóa đơn.
-     * Sử dụng thủ tục sp_update_invoice_line().
+     * Yêu cầu cập nhật một dòng hàng qua {@code sp_update_invoice_line()}.
+     * Lưu ý: theo chính sách Audit (BR8) ở {@code 04_routines.sql} mới, thủ tục
+     * này luôn từ chối chỉnh sửa sau checkout bằng {@code SIGNAL '45000'}.
      */
     public void updateInvoiceLine(String invoiceId, int lineNumber, String barcode,
                                   BigDecimal quantity, BigDecimal unitPrice, BigDecimal discount) {
@@ -560,8 +501,9 @@ public class InvoiceDao {
     }
 
     /**
-     * Xóa một dòng hàng trong hóa đơn.
-     * Sử dụng thủ tục sp_delete_invoice_line().
+     * Yêu cầu xóa một dòng hàng qua {@code sp_delete_invoice_line()}.
+     * Lưu ý: theo chính sách Audit (BR16) ở {@code 04_routines.sql} mới, thủ tục
+     * này luôn từ chối xóa dòng hàng sau checkout bằng {@code SIGNAL '45000'}.
      */
     public void deleteInvoiceLine(String invoiceId, int lineNumber) {
         String sql = "{call sp_delete_invoice_line(?, ?)}";
@@ -643,18 +585,9 @@ public class InvoiceDao {
                 }
             }
 
-            // Trả hàng xong -> hóa đơn gốc thành VOIDED, CÙNG transaction.
-            // Không cần kiểm "đang PAID": sp_add_return ở trên đã SIGNAL nếu
-            // hóa đơn không phải PAID. Từ đây hóa đơn không trả thêm được nữa;
-            // doanh thu của nó tính theo hóa đơn điều chỉnh (Invoice_Line −
-            // Return), xem fn_invoice_in_revenue ở 04_routines.sql.
-            String spVoid = "{call sp_void_invoice(?)}";
-            try (CallableStatement cs = conn.prepareCall(spVoid)) {
-                cs.setString(1, invoiceId);
-                cs.executeUpdate();
-                SqlLog.add(spVoid, new Object[]{invoiceId}, 0, 1);
-            }
-
+            // Hóa đơn giữ nguyên trạng thái PAID sau khi trả hàng (BR16 / R9),
+            // có thể trả tiếp phần còn lại và doanh thu thuần tính theo
+            // Invoice_Line - Return qua fn_invoice_in_revenue.
             conn.commit();                      // ==== CHỐT: mọi thứ có hiệu lực ====
             SqlLog.add("COMMIT;  -- save return successfully for invoice " + invoiceId,
                        null, System.currentTimeMillis() - t0, 0);
@@ -685,17 +618,11 @@ public class InvoiceDao {
     }
 
     /**
-     * Hủy MỌI lượt trả hàng của một dòng: sp_delete_return(p_invoice_id,
-     * p_line_number, OUT p_deleted).
+     * Yêu cầu hủy các lượt trả hàng của một dòng qua {@code sp_delete_return()}.
+     * Lưu ý: theo chính sách Audit (BR16) ở {@code 04_routines.sql} mới, thủ tục
+     * này luôn từ chối xóa lịch sử trả hàng bằng {@code SIGNAL '45000'}.
      *
-     * <p>Theo DÒNG chứ không theo Return_ID: Return_ID vẫn là khóa trong DB
-     * nhưng đã ẩn khỏi giao diện (hóa đơn điều chỉnh hiện theo dòng). Thủ tục
-     * có hai câu ghi -- DELETE, và UPDATE trả hóa đơn về PAID khi không còn
-     * dòng nào bị trả -- nên chạy trong MỘT transaction: chết giữa chừng thì
-     * hóa đơn không bị kẹt ở VOIDED mà không có dòng Return (lúc đó nó sẽ bị
-     * coi là hóa đơn bị hủy và rơi khỏi doanh thu).
-     *
-     * @return số lượt trả đã xóa (0 = dòng này không có lượt trả nào)
+     * @return số lượt trả đã xóa
      */
     public int deleteLineReturns(String invoiceId, int lineNumber) {
         String sql = "{call sp_delete_return(?, ?, ?)}";

@@ -63,41 +63,32 @@ public class ReportPanel extends JPanel {
         buttons.add(row2);
         buttons.setBorder(BorderFactory.createTitledBorder(I18n.text("Chọn báo cáo", "Choose a report")));
 
-        row1.add(makeButton(I18n.text("2. Doanh thu 7 ngày / cửa hàng", "2. 7-day revenue by shop"),
-                I18n.text("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất. "
-                        + "Hóa đơn đã trả hàng chỉ tính phần khách còn giữ; hóa đơn bị hủy không tính.",
-                          "Revenue for each SHOP on each DAY of the last 7 days. "
-                        + "Invoices with returns count only what the customer kept; voided invoices are excluded."),
+        row1.add(makeButton(I18n.text("1. Doanh thu 7 ngày / cửa hàng", "1. 7-day revenue by shop"),
+                I18n.text("Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày gần nhất (không tính hôm nay). "
+                        + "Hóa đơn đã trả hàng tính doanh thu ròng sau hoàn tiền; hóa đơn bị hủy không tính.",
+                          "Revenue for each SHOP on each DAY of the last 7 completed days (excluding today). "
+                        + "Invoices with returns count net revenue after refunds; voided invoices are excluded."),
                 dao::dailyTakings));
 
-        row1.add(makeButton(I18n.text("3. Sản phẩm tăng giá > 10%", "3. Price rises > 10%"),
+        row1.add(makeButton(I18n.text("2. Sản phẩm tăng giá > 10%", "2. Price rises > 10%"),
                 I18n.text("Các lần đổi giá trong năm nay mà giá mới cao hơn giá ngay trước đó trên 10%.",
                           "Price changes this year where the new price is more than 10% above the previous one."),
                 dao::priceRise));
 
-        row1.add(makeButton(I18n.text("4. Thu ngân giỏ hàng TB cao nhất", "4. Cashier with the highest average basket"),
+        row1.add(makeButton(I18n.text("3. Thu ngân giỏ hàng TB cao nhất", "3. Cashier with the highest average basket"),
                 I18n.text("Giá trị trung bình MỘT HÓA ĐƠN của từng thu ngân, cao nhất ở trên cùng.",
                           "Average value PER INVOICE for each cashier, highest first."),
                 dao::bestCashier));
 
-        row1.add(makeButton(I18n.text("5. Hóa đơn trả hàng > 50%", "5. Invoices with > 50% returned"),
+        row1.add(makeButton(I18n.text("4. Hóa đơn trả hàng > 50%", "4. Invoices with > 50% returned"),
                 I18n.text("Hóa đơn mà khách đã trả lại hơn một nửa giá trị. "
                         + "Tiền hoàn tính theo tỷ lệ số lượng trả, kể cả phần giảm giá.",
                           "Invoices where the customer returned more than half of the value. "
                         + "Refunds follow the returned quantity, discounts included."),
                 dao::bigReturns));
 
-        row1.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
-                I18n.text("So sánh giá ghi trên hóa đơn (giá lúc bán) với giá hôm nay. "
-                        + "Mỗi dòng: bao nhiêu dòng hàng đang ghi giá đó, bán từ ngày nào đến ngày nào, "
-                        + "và giá hôm nay là bao nhiêu -- giá trên hóa đơn cũ không đổi khi giá mới được áp dụng.",
-                          "Compares the price on each invoice (the price at the time of sale) with today's price. "
-                        + "Each row: how many item lines carry that price, when they were sold, "
-                        + "and today's price -- old invoices keep their price when a new price takes effect."),
-                dao::oldPriceProof));
-
-        // --- Báo cáo 6: cần chọn sản phẩm -> nút riêng + ô chọn -----------
-        JButton btPrice30 = new JButton(I18n.text("6. Giá 30 ngày (SL 1)", "6. 30-day price (qty 1)"));
+        // --- Báo cáo 5: cần chọn sản phẩm -> nút riêng + ô chọn -----------
+        JButton btPrice30 = new JButton(I18n.text("5. Giá 30 ngày (SL 1)", "5. 30-day price (qty 1)"));
         reportButtons.add(btPrice30);
         cbPriceProduct.setPreferredSize(new Dimension(300, 26));
         btPrice30.addActionListener(e -> {
@@ -123,6 +114,15 @@ public class ReportPanel extends JPanel {
         pricePanel.add(cbPriceProduct);
         pricePanel.add(btPrice30);
         row2.add(pricePanel);
+        // Đặt Bonus ở hàng 2 để hàng 1 (nhãn tiếng Anh dài hơn) không bị xuống dòng và che mất nút Bonus.
+        row2.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
+                I18n.text("So sánh giá ghi trên hóa đơn (giá lúc bán) với giá hôm nay. "
+                        + "Mỗi dòng: bao nhiêu dòng hàng đang ghi giá đó, bán từ ngày nào đến ngày nào, "
+                        + "và giá hôm nay là bao nhiêu -- giá trên hóa đơn cũ không đổi khi giá mới được áp dụng.",
+                          "Compares the price on each invoice (the price at the time of sale) with today's price. "
+                        + "Each row: how many item lines carry that price, when they were sold, "
+                        + "and today's price -- old invoices keep their price when a new price takes effect."),
+                dao::oldPriceProof));
         loadPriceProducts();
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
@@ -160,7 +160,7 @@ public class ReportPanel extends JPanel {
      */
     private void runReport(JButton b, String label, String explain,
                            Supplier<QueryResult> action) {
-        taWhat.setText(explain);
+        taWhat.setText(I18n.translate(explain));
         taWhat.setCaretPosition(0);
 
         // Khoá cả sáu nút và đổi nhãn nút đang chạy: một cửa sổ không

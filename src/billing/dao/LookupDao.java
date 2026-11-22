@@ -25,6 +25,13 @@ public class LookupDao {
         return toIdNames(qr);
     }
 
+    /** Danh sách quản lý (Role = MANAGER) để duyệt hủy hóa đơn / trả hàng. */
+    public List<IdName> managers() {
+        QueryResult qr = QueryResult.run(
+                "SELECT Cashier_ID, Name FROM Cashier WHERE Role = 'MANAGER' ORDER BY Cashier_ID");
+        return toIdNames(qr);
+    }
+
     /**
      * Tìm khách hàng theo TIỀN TỐ số điện thoại:
      * {@code sp_search_customers_by_phone(p_prefix)}.

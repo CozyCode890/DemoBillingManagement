@@ -47,29 +47,10 @@ public final class I18n {
     static {
         pairs(
             "Ngôn ngữ", "Language",
-            "Dang xuat", "Log out",
-            "Doi vai tro", "Switch role",
             "1. Lap hoa don", "1. New invoice",
             "2. Tra cứu dữ liệu", "2. Data search",
             "3. Xem hoa don (Database)", "3. Invoice database",
             "4. Bao cao", "4. Reports",
-            "(DANG NHAP TU DONG)", "(AUTOMATIC LOGIN)",
-            "App da dang nhap san, khong qua man hinh dang nhap. Dat quick.login.auto= (de trong) trong config.properties de tat.",
-                "The app signed in automatically without showing the login screen. Set quick.login.auto= (empty) in config.properties to turn this off.",
-            "Doi sang tai khoan khac ma KHONG mat du lieu dang nhap o tab 1", "Switch accounts without losing the invoice in tab 1",
-            "Nguoi dung: ", "User: ",
-            "  Nguoi dung: ", "  User: ",
-            "Vai tro: ", "Role: ",
-            "(Chua dang nhap)", "(Not signed in)",
-            "Tai khoan ", "Account ",
-            " trong config.properties khong dang nhap duoc.\nCo the mat khau trong bang Account da bi doi.\n\nPhien hien tai van duoc giu nguyen.",
-                " in config.properties could not sign in.\nThe password in the Account table may have changed.\n\nThe current session remains active.",
-            "Doi vai tro that bai", "Could not switch account",
-            "Ban co chac chan muon dang xuat khoi he thong?", "Are you sure you want to log out?",
-            "Tab \"Lap hoa don\" dang co ", "Tab \"New invoice\" has ",
-            " chua luu.\nDang xuat se mat toan bo. Van dang xuat?\n\nGoi y: muon xem giao dien cua vai tro khac ma khong mat gio hang\nthi dung nut \"Doi vai tro\" ben canh.",
-                " unsaved.\nLogging out will discard it. Continue?\n\nTip: use \"Switch role\" to view another role without losing the cart.",
-            "Xac nhan dang xuat", "Confirm log out",
 
             "Tai lai", "Reload",
             "Them vao hoa don", "Add to invoice",
@@ -215,9 +196,6 @@ public final class I18n {
             "Xac nhan xoa dong hang", "Confirm item deletion",
             "Da xoa thanh cong dong hang ", "Successfully deleted item ",
             "Vui long chon mot hoa don de tra hang!", "Select an invoice to process a return.",
-            "Tai khoan '", "Account '",
-            "' chua duoc gan voi nhan vien\nnao trong bang Cashier, nen khong the dung lam nguoi duyet tra hang.\n\nCach sua: bam \"Nap lai database\" trong Setup App (xoa sach du lieu),\nhoac chay doan ALTER/UPDATE o plan/12 muc 4.1 de giu du lieu dang co.",
-                "' is not linked to an employee in the Cashier table, so it cannot approve returns.\n\nTo fix: use \"Reload database\" in Setup App (clears all data), or run the ALTER/UPDATE statements in plan/12 section 4.1 to keep existing data.",
             "Chua xac dinh duoc nguoi duyet", "Could not determine approver",
             "Hoa don khong co dong hang nao de tra!", "This invoice has no items to return.",
             "Thong bao", "Notice",
@@ -270,21 +248,6 @@ public final class I18n {
             " (co the ai khac da huy truoc).", " (someone else may have cancelled it already).",
             "Khong co gi bi huy", "Nothing was cancelled",
             "Da huy luot tra lan ", "Cancelled return ",
-
-            "Dang nhap", "Sign in",
-            "Thoat", "Exit",
-            "Dang nhap he thong -- Retail Invoicing", "Sign in -- Retail Invoicing",
-            "Ten dang nhap:", "Username:",
-            "Mat khau:", "Password:",
-            "Dang nhap nhanh (tai khoan mau cua ban demo)", "Quick sign-in (demo accounts)",
-            "Dien san va dang nhap bang tai khoan '", "Fill in and sign in with account '",
-            "Bam mot nut de dien san va dang nhap ngay.", "Click a button to fill in the account and sign in.",
-            "Phim tat: Alt+1 ... Alt+", "Shortcut: Alt+1 ... Alt+",
-            ".  Enter = Dang nhap.", ".  Enter = Sign in.",
-            "Vui long nhap day du Ten dang nhap va Mat khau.", "Enter both a username and password.",
-            "Dang kiem tra tai khoan...", "Checking account...",
-            "Sai ten dang nhap hoac mat khau.", "Incorrect username or password.",
-            "Đăng nhập nhanh", "Quick sign-in",
 
             "Chinh sua Hoa don: ", "Edit invoice: ",
             "Ma hoa don (PK):", "Invoice ID (PK):",
@@ -465,10 +428,6 @@ public final class I18n {
             "Price", "Price",
             "Name", "Name",
             "Phone", "Phone",
-            "Full_Name", "Full name",
-            "Username", "Username",
-            "Role", "Role",
-            "Account", "Account",
             "Tong: ", "Total: ",
             "Da thu: ", "Paid: ",
             "Con thieu: ", "Remaining: ",
@@ -619,9 +578,6 @@ public final class I18n {
         field("Return_Quantity", "Số lượng trả", "Return quantity");
         field("Promotion_ID", "Mã khuyến mãi", "Promotion ID");
         field("Promo_ID", "Mã khuyến mãi", "Promotion ID");
-        field("Full_Name", "Họ tên", "Full name");
-        field("Username", "Tên đăng nhập", "Username");
-        field("Role", "Vai trò", "Role");
         field("Ma_HD", "Mã hóa đơn", "Invoice ID");
         field("Ngay", "Ngày", "Date");
         field("Gio", "Giờ", "Time");
@@ -694,27 +650,10 @@ public final class I18n {
         field("Tong_truoc_giam", "Tổng trước giảm", "Total before discount");
 
         marks(
-            "Doi vai tro", "Đổi vai trò",
-            "Dang xuat", "Đăng xuất",
             "1. Lap hoa don", "1. Lập hóa đơn",
             "2. Tra cứu dữ liệu", "2. Tra cứu dữ liệu",
             "3. Xem hoa don (Database)", "3. Xem hóa đơn (Database)",
             "4. Bao cao", "4. Báo cáo",
-            "(DANG NHAP TU DONG)", "(ĐĂNG NHẬP TỰ ĐỘNG)",
-            "Doi sang tai khoan khac ma KHONG mat du lieu dang nhap o tab 1", "Đổi sang tài khoản khác mà KHÔNG mất dữ liệu đang nhập ở tab 1",
-            "Nguoi dung: ", "Người dùng: ",
-            "  Nguoi dung: ", "  Người dùng: ",
-            "Vai tro: ", "Vai trò: ",
-            "Nguoi dung: (Chua dang nhap)", "Người dùng: (Chưa đăng nhập)",
-            "  Nguoi dung: (Chua dang nhap)", "  Người dùng: (Chưa đăng nhập)",
-            "(Chua dang nhap)", "(Chưa đăng nhập)",
-            "Tai khoan ", "Tài khoản ",
-            "Doi vai tro that bai", "Đổi vai trò thất bại",
-            "Ban co chac chan muon dang xuat khoi he thong?", "Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?",
-            "Tab \"Lap hoa don\" dang co ", "Tab \"Lập hóa đơn\" đang có ",
-            " chua luu.\nDang xuat se mat toan bo. Van dang xuat?\n\nGoi y: muon xem giao dien cua vai tro khac ma khong mat gio hang\nthi dung nut \"Doi vai tro\" ben canh.",
-                " chưa lưu.\nĐăng xuất sẽ mất toàn bộ. Vẫn đăng xuất?\n\nGợi ý: muốn xem giao diện của vai trò khác mà không mất giỏ hàng\nthì dùng nút \"Đổi vai trò\" bên cạnh.",
-            "Xac nhan dang xuat", "Xác nhận đăng xuất",
 
             "Tai lai", "Tải lại",
             "Them vao hoa don", "Thêm vào hóa đơn",
@@ -829,21 +768,6 @@ public final class I18n {
             "Tong tien phai tra lai: ", "Tổng tiền phải trả lại: ",
             "Nguoi duyet: ", "Người duyệt: ",
 
-            "Dang nhap", "Đăng nhập",
-            "Thoat", "Thoát",
-            "Dang nhap he thong -- Retail Invoicing", "Đăng nhập hệ thống -- Retail Invoicing",
-            "Ten dang nhap:", "Tên đăng nhập:",
-            "Mat khau:", "Mật khẩu:",
-            "Dang nhap nhanh (tai khoan mau cua ban demo)", "Đăng nhập nhanh (tài khoản mẫu của bản demo)",
-            "Dien san va dang nhap bang tai khoan '", "Điền sẵn và đăng nhập bằng tài khoản '",
-            "Bam mot nut de dien san va dang nhap ngay.", "Bấm một nút để điền sẵn và đăng nhập ngay.",
-            "Phim tat: Alt+1 ... Alt+", "Phím tắt: Alt+1 ... Alt+",
-            ".  Enter = Dang nhap.", ".  Enter = Đăng nhập.",
-            "Vui long nhap day du Ten dang nhap va Mat khau.", "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.",
-            "Dang kiem tra tai khoan...", "Đang kiểm tra tài khoản...",
-            "Sai ten dang nhap hoac mat khau.", "Sai tên đăng nhập hoặc mật khẩu.",
-            "Đăng nhập nhanh", "Đăng nhập nhanh",
-
             "Chinh sua Hoa don: ", "Chỉnh sửa hóa đơn: ",
             "Ma hoa don (PK):", "Mã hóa đơn (PK):",
             "Ngay lap (YYYY-MM-DD) *:", "Ngày lập (YYYY-MM-DD) *:",
@@ -932,10 +856,6 @@ public final class I18n {
 
         marks(
             "Chuyen giao dien sang ", "Chuyển giao diện sang ",
-            "App da dang nhap san, khong qua man hinh dang nhap. Dat quick.login.auto= (de trong) trong config.properties de tat.",
-                "Ứng dụng đã đăng nhập sẵn, không qua màn hình đăng nhập. Đặt quick.login.auto= (để trống) trong config.properties để tắt.",
-            "Dang nhap nhanh (tai khoan mau cua ban demo)", "Đăng nhập nhanh (tài khoản mẫu của bản demo)",
-            "Dien san va dang nhap bang tai khoan '", "Điền sẵn và đăng nhập bằng tài khoản '",
             "Trang thai doi tu dong khi thu du tien, hoac qua nut \"Huy hoa don\" o tab Xem hoa don", "Trạng thái đổi tự động khi thu đủ tiền hoặc qua nút \"Hủy hóa đơn\" ở tab Xem hóa đơn",
             "* Cac truong danh dau (*) co rang buoc NOT NULL. Neu xoa trang se bi he thong canh bao!", "* Các trường đánh dấu (*) có ràng buộc NOT NULL. Nếu xóa trắng sẽ bị hệ thống cảnh báo!",
             "<html><i style='color:#c0392b;'>* Cac truong danh dau (*) co rang buoc NOT NULL. Neu xoa trang se bi he thong canh bao!</i></html>",
@@ -986,9 +906,6 @@ public final class I18n {
             "Ghi ", "Ghi ",
             " luot tra hang cho hoa don ", " lượt trả hàng cho hóa đơn ",
             "Vui long chon mot hoa don de tra hang!", "Vui lòng chọn một hóa đơn để trả hàng!",
-            "Tai khoan '", "Tài khoản '",
-            "' chua duoc gan voi nhan vien\nnao trong bang Cashier, nen khong the dung lam nguoi duyet tra hang.\n\nCach sua: bam \"Nap lai database\" trong Setup App (xoa sach du lieu),\nhoac chay doan ALTER/UPDATE o plan/12 muc 4.1 de giu du lieu dang co.",
-                "' chưa được gắn với nhân viên\nnào trong bảng Cashier, nên không thể dùng làm người duyệt trả hàng.\n\nCách sửa: bấm \"Nạp lại database\" trong Setup App (xóa sạch dữ liệu),\nhoặc chạy đoạn ALTER/UPDATE ở plan/12 mục 4.1 để giữ dữ liệu đang có.",
             "Chua xac dinh duoc nguoi duyet", "Chưa xác định được người duyệt",
             "Hoa don khong co dong hang nao de tra!", "Hóa đơn không có dòng hàng nào để trả!",
             "Tra hang -- hoa don ", "Trả hàng -- hóa đơn ",
@@ -1039,8 +956,6 @@ public final class I18n {
         // These entries translate only fixed UI wording; IDs, names, amounts,
         // currencies, and role values remain supplied by the application.
         marks(
-            " trong config.properties khong dang nhap duoc.\nCo the mat khau trong bang Account da bi doi.\n\nPhien hien tai van duoc giu nguyen.",
-                " trong config.properties không đăng nhập được.\nCó thể mật khẩu trong bảng Account đã bị đổi.\n\nPhiên hiện tại vẫn được giữ nguyên.",
             "Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don INV-OLD-* tu nam truoc.",
                 "Lọc theo ngày bán. 'Tất cả' nạp mọi hóa đơn, kể cả hai hóa đơn INV-OLD-* từ năm trước.",
             "Chuc nang nay bi khoa voi Thu ngan (Cashier). Chi Quan ly (Manager) moi co quyen.",
@@ -1229,12 +1144,6 @@ public final class I18n {
 
     public static String languageSwitchLabel() {
         return isEnglish() ? "Tiếng Việt" : "English";
-    }
-
-    /** Localize the known role labels used by quick-account configuration. */
-    public static String quickAccountLabel(String label) {
-        if ("Quan ly".equals(label)) return isEnglish() ? "Manager" : "Quản lý";
-        return translate(label);
     }
 
     public static void markDynamicText(JComponent component) {
@@ -1599,17 +1508,6 @@ public final class I18n {
                         + invoiceHeader.group(2) + "  |  Status: " + invoiceHeader.group(3);
             }
 
-            java.util.regex.Matcher accountTip = java.util.regex.Pattern
-                    .compile("^Dien san va dang nhap bang tai khoan '(.+)'$").matcher(source);
-            if (accountTip.matches()) return "Fill in and sign in with account '" + accountTip.group(1) + "'";
-
-            java.util.regex.Matcher user = java.util.regex.Pattern
-                    .compile("^\\s*Nguoi dung: (.*)  \\[Vai tro: (.*)\\]$").matcher(source);
-            if (user.matches()) return "  User: " + knownDemoAccountName(user.group(1))
-                    + "  [Role: " + user.group(2) + "]";
-
-            if (source.trim().equals("Nguoi dung: (Chua dang nhap)")) return "  User: (Not signed in)";
-
             java.util.regex.Matcher count = java.util.regex.Pattern
                     .compile("^Dang hien (.+) hoa don \\((.*)\\)$").matcher(source);
             if (count.matches()) return "Showing " + count.group(1) + " invoices (" + translate(count.group(2)) + ")";
@@ -1634,30 +1532,11 @@ public final class I18n {
                         + invoiceHeader.group(2) + "  |  Trạng thái: " + invoiceHeader.group(3);
             }
 
-            java.util.regex.Matcher asciiUser = java.util.regex.Pattern
-                    .compile("^\\s*Nguoi dung: (.*)  \\[Vai tro: (.*)\\]$").matcher(source);
-            if (asciiUser.matches()) {
-                return "  Người dùng: " + knownDemoAccountName(asciiUser.group(1))
-                        + "  [Vai trò: " + asciiUser.group(2) + "]";
-            }
-            if (source.trim().equals("Nguoi dung: (Chua dang nhap)")) return "  Người dùng: (Chưa đăng nhập)";
-
             java.util.regex.Matcher asciiCount = java.util.regex.Pattern
                     .compile("^Dang hien (.+) hoa don \\((.*)\\)$").matcher(source);
             if (asciiCount.matches()) {
                 return "Đang hiển thị " + asciiCount.group(1) + " hóa đơn (" + translate(asciiCount.group(2)) + ")";
             }
-
-            java.util.regex.Matcher accountTip = java.util.regex.Pattern
-                    .compile("^Fill in and sign in with account '(.+)'$").matcher(source);
-            if (accountTip.matches()) return "Điền sẵn và đăng nhập bằng tài khoản '" + accountTip.group(1) + "'";
-
-            java.util.regex.Matcher user = java.util.regex.Pattern
-                    .compile("^\\s*User: (.*)  \\[Role: (.*)\\]$").matcher(source);
-            if (user.matches()) return "  Người dùng: " + knownDemoAccountName(user.group(1))
-                    + "  [Vai trò: " + user.group(2) + "]";
-
-            if (source.trim().equals("User: (Not signed in)")) return "  Người dùng: (Chưa đăng nhập)";
 
             java.util.regex.Matcher count = java.util.regex.Pattern
                     .compile("^Showing (.+) invoices \\((.*)\\)$").matcher(source);
@@ -1677,10 +1556,5 @@ public final class I18n {
             if (returnRows.matches()) return "Đang hiển thị " + returnRows.group(1) + " dòng đầu " + returnRows.group(2);
         }
         return null;
-    }
-    private static String knownDemoAccountName(String name) {
-        if ("Quan Ly He Thong".equals(name)) return "Quản Lý Hệ Thống";
-        if ("Nhan Vien Thu Ngan".equals(name)) return "Nhân Viên Thu Ngân";
-        return name;
     }
 }

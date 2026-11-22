@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================================
-#  check-seed.sh -- chot bang so cho DU LIEU (14 bat bien)
+#  check-seed.sh -- chot bang so cho DU LIEU (17 bat bien)
 #  Hỗ trợ macOS & Linux
 # ---------------------------------------------------------------------
 #  Khoi 5 chot bon hop dong cua GIAO DIEN bang code (check-contracts.sh).
@@ -14,7 +14,7 @@
 #  Yeu cau: MySQL dang chay va database retail_billing ton tai. Script TU
 #  NAP sql/05_invariants.sql truoc khi goi -- xem khoi comment o buoc 1.
 #
-#  Exit 0 = ca 14 quy tac deu 0 vi pham. Exit 1 = co vi pham (hoac khong
+#  Exit 0 = ca 17 quy tac deu 0 vi pham. Exit 1 = co vi pham (hoac khong
 #  nap duoc file). KHONG ghi mot dong DU LIEU nao vao database (chi tao lai
 #  thu tuc sp_check_seed).
 # =====================================================================
@@ -68,7 +68,7 @@ if [ -f config.properties ]; then
 fi
 export MYSQL_PWD="$DB_PW"
 
-echo -e "${CYAN}--- Kiem 14 bat bien cua du lieu (sp_check_seed) ---${NC}"
+echo -e "${CYAN}--- Kiem 17 bat bien cua du lieu (sp_check_seed) ---${NC}"
 
 # --- Buoc 1: tu nap 05_invariants.sql --------------------------------
 # Vi sao nap moi lan chay thay vi doi nguoi dung nap tay:
@@ -119,7 +119,7 @@ if [ -z "$TOTAL" ]; then
     exit 1
 fi
 if [ "$TOTAL" -eq 0 ]; then
-    echo -e "${GREEN}[OK] Ca 14 bat bien deu dat (0 vi pham).${NC}"
+    echo -e "${GREEN}[OK] Ca 17 bat bien deu dat (0 vi pham).${NC}"
     exit 0
 fi
 echo -e "${RED}[LOI] Co $TOTAL vi pham -- xem cac dong 'SAI' o bang tren.${NC}"
