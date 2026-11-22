@@ -12,22 +12,9 @@ import java.awt.*;
 import java.math.BigDecimal;
 import java.util.List;
 
-/**
- * Tab 3 -- XEM HÓA ĐƠN. Trái: danh sách (sp_get_recent_invoices). Bấm một hóa đơn -> phải:
- * đầu hóa đơn + tổng tiền, các dòng gốc, hóa đơn điều chỉnh (sau trả hàng), thanh toán.
- *
- * Hóa đơn đã chốt là bản ghi audit: chỉ còn ba việc làm được trên nó --
- *   - Sửa khách hàng : đổi khách hàng (BR10), mọi trường khác bất biến (BR4)
- *   - Hủy hóa đơn    : Manager hủy hóa đơn PAID chưa có trả hàng (BR3)
- *   - Trả hàng       : Manager duyệt trả hàng, hóa đơn giữ PAID, trả được nhiều lần (BR15, BR16)
- * Không có đăng nhập, nên người duyệt được CHỌN trong danh sách Manager (sp_lookup_managers);
- * SQL vẫn tự kiểm Role = 'MANAGER' lần nữa.
- */
 public class InvoiceViewPanel extends JPanel {
+    private static final int[] DAYS = {7, 30, 90, 0};
 
-    private static final int[] DAYS = {7, 30, 90, 0};          // 0 = tất cả
-
-    // Cột của sp_get_invoice_header: 3 Trang_thai, 12 Tien_hoan, 13 Tong_sau_dieu_chinh
     private static final int H_STATUS = 3, H_REFUND = 12, H_ADJUSTED = 13;
 
     private final InvoiceDao dao = new InvoiceDao();
@@ -100,20 +87,18 @@ public class InvoiceViewPanel extends JPanel {
         btEditCustomer.addActionListener(e -> onEditCustomer());
         btVoid.addActionListener(e -> onVoidInvoice());
         btReturn.addActionListener(e -> onReturn());
-        tbInvoices.setAutoCreateRowSorter(true);                // bấm tiêu đề cột để sắp xếp
+        tbInvoices.setAutoCreateRowSorter(true);
         tbInvoices.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && selectedId() != null) showDetail(selectedId());
         });
 
-        // Đổi ngôn ngữ: giá trị trong bảng (trạng thái, phương thức...) và khung chi tiết
-        // được ghép lúc đổ dữ liệu, nên đổ lại theo ngôn ngữ mới.
         I18n.onLanguageChange(this, () -> {
             String id = selectedId();
             if (id != null) {
                 refresh(id);
             } else {
                 reload();
-                adjustedBorder.setTitle(noReturns());       // viền ghép chữ, không nằm trong từ điển
+                adjustedBorder.setTitle(noReturns());
                 repaint();
             }
         });
@@ -130,7 +115,7 @@ public class InvoiceViewPanel extends JPanel {
         try {
             int days = DAYS[Math.max(cbDays.getSelectedIndex(), 0)];
             QueryResult qr = dao.recentInvoices(days);
-            Ui.fill(tbInvoices, qr, new int[]{qr.columns.size() - 1}, null, null);    // cột cuối = tổng tiền
+            Ui.fill(tbInvoices, qr, new int[]{qr.columns.size() - 1}, null, null);
             lbCount.setText(I18n.msg(
                     "Đang hiện " + qr.rows.size() + " hóa đơn (" + (days == 0 ? "tất cả" : days + " ngày gần nhất") + ")",
                     "Showing " + qr.rows.size() + " invoice(s) (" + (days == 0 ? "all" : "last " + days + " days") + ")"));
@@ -145,7 +130,6 @@ public class InvoiceViewPanel extends JPanel {
         return r < 0 ? null : String.valueOf(tbInvoices.getValueAt(r, 0));
     }
 
-    /** Bốn câu SELECT cho một cú bấm: đầu hóa đơn, các dòng, thanh toán, (nếu có trả hàng) hóa đơn điều chỉnh. */
     private void showDetail(String invoiceId) {
         try {
             QueryResult h = dao.invoiceHeader(invoiceId);
@@ -182,7 +166,6 @@ public class InvoiceViewPanel extends JPanel {
         }
     }
 
-    /** Sau khi sửa: tải lại danh sách, chọn lại đúng hóa đơn, vẽ lại chi tiết. */
     private void refresh(String invoiceId) {
         reload();
         for (int r = 0; r < tbInvoices.getRowCount(); r++) {
@@ -210,7 +193,6 @@ public class InvoiceViewPanel extends JPanel {
                 I18n.msg("Không tìm thấy", "Not Found"));
     }
 
-    /** Danh sách Manager để chọn người duyệt; rỗng -> báo và trả null. */
     private List<IdName> managersOrWarn() {
         List<IdName> managers = lookupDao.managers();
         if (managers.isEmpty()) {
@@ -222,10 +204,6 @@ public class InvoiceViewPanel extends JPanel {
         }
         return managers;
     }
-
-    // =================================================================
-    //  ĐỔI KHÁCH / HỦY HÓA ĐƠN
-    // =================================================================
 
     private void onEditCustomer() {
         String id = requireInvoice("sửa", "edit");
@@ -241,11 +219,6 @@ public class InvoiceViewPanel extends JPanel {
         }
     }
 
-    /**
-     * HỦY khác XÓA: hóa đơn còn nguyên, chỉ không tính doanh thu và không trả hàng được nữa.
-     * Chỉ hóa đơn PAID CHƯA có trả hàng mới hủy được (BR16) -- kiểm ở đây để báo sớm,
-     * sp_void_invoice vẫn chặn lần nữa.
-     */
     private void onVoidInvoice() {
         String id = requireInvoice("hủy", "void");
         if (id == null) return;
@@ -297,11 +270,6 @@ public class InvoiceViewPanel extends JPanel {
         });
     }
 
-    // =================================================================
-    //  TRẢ HÀNG
-    // =================================================================
-
-    /** Chỉ hóa đơn PAID mới trả được; trả nhiều lần cho tới khi hết số lượng (BR16). */
     private void onReturn() {
         String id = requireInvoice("trả hàng", "return items from");
         if (id == null) return;
@@ -316,7 +284,7 @@ public class InvoiceViewPanel extends JPanel {
             }
             QueryResult lines = dao.returnableLines(id);
             boolean anyLeft = false;
-            for (Object[] r : lines.rows) if (Ui.dec(r[5]).signum() > 0) anyLeft = true;      // SL_con_lai
+            for (Object[] r : lines.rows) if (Ui.dec(r[5]).signum() > 0) anyLeft = true;
             if (!anyLeft) {
                 Ui.warn(this, I18n.msg("Mọi mặt hàng của hóa đơn " + id + " đã được trả hết.",
                                        "Every item of invoice " + id + " has already been returned."),

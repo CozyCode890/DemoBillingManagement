@@ -11,20 +11,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
-/**
- * Tab 4 -- BÁO CÁO: các câu truy vấn đề bài yêu cầu (+ 2 báo cáo thêm). Mỗi nút gọi một
- * thủ tục sp_report_* qua ReportDao, kết quả đổ vào bảng, kèm một đoạn giải thích.
- */
 public class ReportPanel extends JPanel {
-
-    private static final String DEFAULT_PRICE_BARCODE = "8934005";   // Nuoc mam Nam Ngu: đổi giá mỗi ngày
+    private static final String DEFAULT_PRICE_BARCODE = "8934005";
 
     private final ReportDao dao = new ReportDao();
     private final JTextArea taWhat = new JTextArea(3, 40);
     private final JTable    tbData = Ui.readOnlyTable();
     private final List<JButton> buttons = new ArrayList<>();
     private final JComboBox<Product> cbProduct = new JComboBox<>();
-    private String[] explain = {"", ""};                    // {vi, en} của báo cáo đang hiện
+    private String[] explain = {"", ""};
 
     public ReportPanel() {
         setLayout(new BorderLayout(8, 8));
@@ -36,8 +31,6 @@ public class ReportPanel extends JPanel {
         taWhat.setBackground(new Color(255, 250, 225));
         taWhat.setMargin(new Insets(8, 8, 8, 8));
 
-        // Đánh số 1-5 theo thứ tự nút (như nhóm sửa ở nhánh Loc-sql-v2); số câu đề bài
-        // tương ứng ghi trong ngoặc: 1 = Q2, 2 = Q3, 3 = Q4, 4 = Q5.
         JPanel row1 = Ui.row(
             button("1. Doanh thu 7 ngày / cửa hàng", "1. 7-day revenue by shop",
                     "(Q2) Doanh thu từng NGÀY của từng CỬA HÀNG trong 7 ngày ĐÃ TRỌN gần nhất (không tính hôm nay -- "
@@ -72,7 +65,7 @@ public class ReportPanel extends JPanel {
         JButton bt30 = new JButton(I18n.text(vi30, en30));
         buttons.add(bt30);
         bt30.addActionListener(e -> {
-            Product p = (Product) cbProduct.getSelectedItem();          // đọc ô chọn trên EDT
+            Product p = (Product) cbProduct.getSelectedItem();
             if (p == null) {
                 Ui.warn(this, I18n.msg("Không đọc được danh sách sản phẩm!", "Cannot read product list!"),
                         I18n.msg("Chưa chọn sản phẩm", "No Product Selected"));
@@ -99,10 +92,8 @@ public class ReportPanel extends JPanel {
         add(top, BorderLayout.NORTH);
         add(Ui.titled(I18n.text("Kết quả", "Results"), new JScrollPane(tbData)), BorderLayout.CENTER);
 
-        // Đổi ngôn ngữ: viết lại đoạn giải thích (JTextArea không nằm trong từ điển).
         I18n.onLanguageChange(this, () -> taWhat.setText(I18n.msg(explain[0], explain[1])));
 
-        // Danh sách sản phẩm cho báo cáo 30 ngày -- lỗi chỉ in ra console, các báo cáo khác vẫn chạy.
         new SwingWorker<List<Product>, Void>() {
             @Override protected List<Product> doInBackground() { return new ProductDao().findAll(); }
             @Override protected void done() {
@@ -125,7 +116,6 @@ public class ReportPanel extends JPanel {
         return b;
     }
 
-    /** Hiện giải thích -> chạy thủ tục NGOÀI EDT (khóa các nút trong lúc chờ) -> đổ kết quả vào bảng. */
     private void run(JButton b, String vi, String en, String explainVi, String explainEn, Supplier<QueryResult> report) {
         explain = new String[]{explainVi, explainEn};
         taWhat.setText(I18n.msg(explainVi, explainEn));

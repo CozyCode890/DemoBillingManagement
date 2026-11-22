@@ -13,7 +13,6 @@ import java.awt.event.WindowEvent;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 
-/** Small, runtime language switcher for the Swing interface. */
 public final class I18n {
     public enum Language { VI, EN }
 
@@ -40,7 +39,6 @@ public final class I18n {
     private static final Map<JComponent, Runnable> LANGUAGE_CHANGE_CALLBACKS = new WeakHashMap<>();
 
     private static Language language = Language.VI;
-    /** Bo nho dem cho {@link #sortedKeys}; null = phai tinh lai. */
     private static Map<Language, java.util.List<String>> sortedKeys;
     private static boolean windowListenerInstalled;
 
@@ -603,7 +601,6 @@ public final class I18n {
         field("Nguoi_duyet", "Người duyệt", "Approver");
         field("VAT_pct", "VAT %", "VAT %");
 
-        // Ten cot cua cac bao cao / hoa don dieu chinh (them o feat/i18n)
         field("Ap_dung_tu", "Áp dụng từ", "Effective from");
         field("Ban_den_ngay", "Bán đến ngày", "Sold until");
         field("Ban_tu_ngay", "Bán từ ngày", "Sold from");
@@ -952,9 +949,6 @@ public final class I18n {
             "Tien thoi lai", "Tiền thối lại"
         );
 
-        // Keep accents on the remaining dynamic messages and explanations too.
-        // These entries translate only fixed UI wording; IDs, names, amounts,
-        // currencies, and role values remain supplied by the application.
         marks(
             "Loc theo ngay ban. 'Tat ca' nap moi hoa don, ke ca hai hoa don INV-OLD-* tu nam truoc.",
                 "Lọc theo ngày bán. 'Tất cả' nạp mọi hóa đơn, kể cả hai hóa đơn INV-OLD-* từ năm trước.",
@@ -1113,23 +1107,11 @@ public final class I18n {
 
     public static boolean isEnglish() { return language == Language.EN; }
 
-    /**
-     * Chu tinh (nhan nut, nhan, tieu de khung, tooltip...): tra ve ban dung voi ngon
-     * ngu hien tai VA ghi cap (vi, en) vao tu dien, de khi bam doi ngon ngu bo duyet
-     * giao dien dich duoc ca thanh phan da tao truoc do.
-     *
-     * <p>Viet {@code vietnamese} CO DAU ngay tai cho dung -- khong can them dong nao
-     * vao bang tu dien o tren. Chuoi khong dau cu (bang tu dien cua Neve) van chay.
-     */
     public static String text(String vietnamese, String english) {
         register(vietnamese, english);
         return isEnglish() ? english : translate(vietnamese);
     }
 
-    /**
-     * Chu dong (thong bao ghep so lieu, hop thoai...): chi chon ban theo ngon ngu,
-     * KHONG ghi vao tu dien -- tranh tu dien phinh ra theo moi ma hoa don / so tien.
-     */
     public static String msg(String vietnamese, String english) {
         return isEnglish() ? english : vietnamese;
     }
@@ -1451,8 +1433,6 @@ public final class I18n {
         String formatted = translateKnownDynamicText(source);
         if (formatted != null) return formatted;
 
-        // Only translate a dynamic label's full leading or trailing phrase.
-        // This keeps user data (names, IDs, currency values) intact.
         java.util.List<String> keys = sortedKeys(dictionary);
         String result = source;
         boolean changed = false;
@@ -1479,7 +1459,6 @@ public final class I18n {
         return changed ? result : source;
     }
 
-    /** Khoa co dau cach o dau/cuoi, dai truoc -- tinh lai chi khi tu dien doi. */
     private static java.util.List<String> sortedKeys(Map<String, String> dictionary) {
         Map<Language, java.util.List<String>> cache = sortedKeys;
         if (cache == null) {

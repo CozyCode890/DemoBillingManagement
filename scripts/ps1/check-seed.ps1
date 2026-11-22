@@ -3,7 +3,6 @@
 # ---------------------------------------------------------------------
 #  Khoi 5 chot bon hop dong cua GIAO DIEN bang code (check-contracts.ps1).
 #  Khoi 6 chot nam hop dong cua DU LIEU bang SQL: sql/05_invariants.sql.
-#  Dac ta: docs/plan/15 muc 3 va muc 4.7.
 #
 #  Chay duoc BAT CU LUC NAO, khong chi sau khi nap seed -- ke ca sau khi
 #  nguoi dung da bam chuot sua/xoa du lieu bang giao dien. Do la diem khac
@@ -29,7 +28,7 @@ $rbHome = if ($env:RETAIL_BILLING_HOME) { $env:RETAIL_BILLING_HOME } else { Join
     ForEach-Object { $env:PATH = "$env:PATH;$($_.Path)" }
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 # Ong pipe sang mysql phai la UTF-8 KHONG BOM: powershell.exe 5.1 chen BOM vao dau
-# chuoi pipe va mysql bao ERROR 1064 ngay dong 1 (cung loi da gap o docs/plan/16 muc 10.2).
+# chuoi pipe va mysql bao ERROR 1064 ngay dong 1.
 $OutputEncoding = New-Object System.Text.UTF8Encoding $false
 
 # --- Thong tin dang nhap: lay tu config.properties giong app billing ---
@@ -72,7 +71,7 @@ try {
     #   (lan dau, hoac moi khi SQL doi) la sp_check_seed bien mat roi tao lai.
     #   De script tu nap thi no chay duoc sau BAT KY duong dung database
     #   nao -- va khong phai them mot buoc vao hai duong nap do (duong cua
-    #   Setup App thi khoi 6 cam khong duoc sua -- docs/plan/15 muc 4.1 diem 2).
+    #   Setup App thi khoi 6 cam khong duoc sua).
     # File nay chi CREATE mot thu tuc va co DROP ... IF EXISTS o dau, nen
     # nap lai bao nhieu lan cung xong va khong cham mot dong du lieu nao.
     Get-Content (Join-Path $projectRoot 'sql\05_invariants.sql') -Raw -Encoding UTF8 |
@@ -122,5 +121,5 @@ if ($total -eq 0) {
     exit 0
 }
 Write-Host "[LOI] Co $total vi pham -- xem cac dong 'SAI' o bang tren." -ForegroundColor Red
-Write-Host "      Cot Hop_dong chi ra muc nao cua docs/plan/15 dang bi vi pham." -ForegroundColor Yellow
+Write-Host "      Cot Hop_dong chi ra business rule (BR) nao dang bi vi pham." -ForegroundColor Yellow
 exit 1

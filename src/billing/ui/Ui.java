@@ -21,21 +21,12 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-/**
- * Đồ nghề dùng chung của tầng giao diện: font, định dạng / đọc số kiểu Việt Nam,
- * bảng chỉ đọc, hộp thoại lỗi, chạy việc DB ngoài luồng giao diện.
- */
 public class Ui {
-
     public static final Font  MONO  = new Font("Consolas", Font.PLAIN, 13);
     public static final Font  BOLD  = new Font("Segoe UI", Font.BOLD, 14);
     public static final Font  BIG   = new Font("Segoe UI", Font.BOLD, 20);
     public static final Color GREEN = new Color(0, 110, 0);
     public static final Color RED   = new Color(180, 40, 40);
-
-    // =================================================================
-    //  SỐ: tiền "135.100đ" (. tách nghìn), số lượng "1,5" (, thập phân)
-    // =================================================================
 
     private static final DecimalFormat MONEY, QTY, QTY_IN, PERCENT;
     static {
@@ -48,44 +39,35 @@ public class Ui {
         PERCENT.setGroupingUsed(false);
         DecimalFormatSymbols dot = new DecimalFormatSymbols(Locale.forLanguageTag("vi-VN"));
         dot.setDecimalSeparator('.');
-        QTY_IN = new DecimalFormat("0.###", dot);       // điền lại vào ô nhập: "1.5"
+        QTY_IN = new DecimalFormat("0.###", dot);
         QTY_IN.setGroupingUsed(false);
     }
 
     public static String money(Object v)   { return v == null ? "0đ" : v instanceof Number ? MONEY.format(v) + "đ" : v.toString(); }
     public static String qty(Object v)     { return v == null ? "0" : v instanceof Number ? QTY.format(v) : v.toString(); }
     public static String percent(Object v) { return v == null ? "" : v instanceof Number ? PERCENT.format(v) + "%" : v.toString(); }
-    /** Số nguyên có dấu tách nghìn, không đuôi "đ" (số dòng, số lần...): 1.234. */
     public static String integer(Object v) { return v == null ? "0" : v instanceof Number n ? MONEY.format(n.longValue()) : v.toString(); }
 
-    /** Trạng thái hóa đơn thô từ SQL ("PAID" / "VOIDED") -> nhãn theo ngôn ngữ đang chọn. */
     public static String status(Object raw) { return raw == null ? "" : val(String.valueOf(raw)); }
     public static String qtyInput(BigDecimal v)   { return v == null ? "" : QTY_IN.format(v); }
     public static String moneyInput(BigDecimal v) { return v == null ? "" : MONEY.format(v); }
 
-    /** Giá trị từ ResultSet / ô bảng -> BigDecimal (null -> 0). */
     public static BigDecimal dec(Object o) {
         if (o == null)               return BigDecimal.ZERO;
         if (o instanceof BigDecimal) return (BigDecimal) o;
         return new BigDecimal(o.toString().trim());
     }
 
-    // =================================================================
-    //  ĐỌC Ô NHẬP -- sai thì báo và trả null
-    // =================================================================
-
-    /** Ô tiền: dấu . tách nghìn (đủ 3 số), dấu , thập phân (tối đa 2 số). Đúng: 500.000 | 1.234,50 | 500000 */
     private static final Pattern MONEY_IN = Pattern.compile("^-?(\\d{1,3}(\\.\\d{3})*|\\d+)(,\\d{1,2})?$");
 
     private static String normalizeMoney(String input) {
         String s = input.trim().replace(" ", "").replace(" ", "");
         while (!s.isEmpty() && "đĐdD".indexOf(s.charAt(s.length() - 1)) >= 0) {
-            s = s.substring(0, s.length() - 1);           // cho phép gõ đuôi "đ"
+            s = s.substring(0, s.length() - 1);
         }
         return s;
     }
 
-    /** Đọc im lặng (cho dòng "= 135.100đ" cạnh ô tiền); null = không hợp lệ hoặc <= 0. */
     public static BigDecimal parseMoney(String input) {
         if (input == null) return null;
         String s = normalizeMoney(input);
@@ -127,13 +109,9 @@ public class Ui {
                     I18n.msg("Số tiền không hợp lệ", "Invalid Amount"));
             return null;
         }
-        return v.setScale(2, RoundingMode.HALF_UP);       // khớp DECIMAL(12,2)
+        return v.setScale(2, RoundingMode.HALF_UP);
     }
 
-    /**
-     * Ô số lượng: , hoặc . đều là dấu THẬP PHÂN (khác ô tiền!), tối đa 3 số lẻ, phải > 0.
-     * @param max không null = trần (số còn trả được khi trả hàng)
-     */
     public static BigDecimal readQuantity(Component parent, String input, BigDecimal max, String unit) {
         if (input == null) return null;
         String s = input.trim().replace(',', '.');
@@ -171,7 +149,6 @@ public class Ui {
         return q;
     }
 
-    /** Nhãn "= 135.100đ" cạnh ô tiền, cập nhật khi gõ -- thu ngân thấy ngay app hiểu số gì. */
     public static JLabel attachMoneyEcho(JTextField field) {
         JLabel echo = new JLabel(" ");
         echo.setFont(BOLD);
@@ -186,10 +163,6 @@ public class Ui {
         return echo;
     }
 
-    // =================================================================
-    //  BẢNG
-    // =================================================================
-
     public static JTable readOnlyTable() {
         JTable t = new JTable(new DefaultTableModel() {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -202,10 +175,6 @@ public class Ui {
 
     public static void fill(JTable table, QueryResult qr) { fill(table, qr, null, null, null); }
 
-    /**
-     * Đổ kết quả SQL vào bảng. Tên cột SQL (Ma_HD, Tong_tien...) hiện theo ngôn ngữ đang chọn
-     * (Ui.col); các cột theo chỉ số trong moneyCols / qtyCols / pctCols được định dạng số.
-     */
     public static void fill(JTable table, QueryResult qr, int[] moneyCols, int[] qtyCols, int[] pctCols) {
         Object[][] data = new Object[qr.rows.size()][];
         for (int r = 0; r < data.length; r++) {
@@ -235,7 +204,6 @@ public class Ui {
         ((DefaultTableModel) table.getModel()).setDataVector(new Object[0][], new Object[0]);
     }
 
-    /** Độ rộng cột theo tiêu đề và 40 dòng đầu. */
     public static void autoSize(JTable table) {
         for (int c = 0; c < table.getColumnCount(); c++) {
             int width = Math.max(80, String.valueOf(table.getColumnModel().getColumn(c).getHeaderValue()).length() * 9 + 20);
@@ -246,11 +214,6 @@ public class Ui {
         }
     }
 
-    // =================================================================
-    //  TỪ ĐIỂN: SQL trả tên cột / vài chuỗi cố định bằng tiếng Việt không dấu
-    // =================================================================
-
-    /** Mỗi mục: {tiếng Việt, tiếng Anh}. */
     private static final Map<String, String[]> COLS = new HashMap<>(), VALUES = new HashMap<>();
     static {
         String[] cols = {
@@ -290,35 +253,21 @@ public class Ui {
         for (int i = 0; i < values.length; i += 3) VALUES.put(values[i], new String[]{values[i + 1], values[i + 2]});
     }
 
-    /**
-     * Tên cột SQL -> tiêu đề theo ngôn ngữ đang chọn (không có trong từ điển thì giữ nguyên).
-     * Đi qua I18n.text nên cặp (vi, en) được ghi vào từ điển: bấm đổi ngôn ngữ thì tiêu đề
-     * của bảng đang mở cũng đổi theo.
-     */
     public static String col(String sqlColumn) {
         String[] t = COLS.get(sqlColumn);
         return t == null ? sqlColumn : I18n.text(t[0], t[1]);
     }
 
-    /** Chuỗi cố định do SQL trả về ("Tien mat", "(vang lai)", "PAID"...) -> theo ngôn ngữ đang chọn. */
     public static String val(String value) {
         if (value == null) return "";
         String[] t = VALUES.get(value);
         return t == null ? value : I18n.msg(t[0], t[1]);
     }
 
-    // =================================================================
-    //  HỘP THOẠI, BỐ CỤC
-    // =================================================================
-
     public static void warn(Component parent, String message, String title) {
         JOptionPane.showMessageDialog(parent, message, title, JOptionPane.WARNING_MESSAGE);
     }
 
-    /**
-     * Lỗi nghiệp vụ (SIGNAL '45000' trong thủ tục SQL, IllegalArgument...) -> hiện đúng lý do.
-     * Lỗi kỹ thuật -> câu chung cho thu ngân, chi tiết in ra console.
-     */
     public static void error(Component parent, Throwable e) {
         e.printStackTrace();
         for (Throwable t = e; t != null; t = t.getCause()) {
@@ -338,10 +287,6 @@ public class Ui {
                 I18n.msg("Lỗi", "Error"), JOptionPane.ERROR_MESSAGE);
     }
 
-    /**
-     * Chạy việc gọi DB NGOÀI luồng giao diện (EDT) để cửa sổ không bị đơ; xong thì quay lại EDT:
-     * chạy `after` trước (vd. mở lại nút), rồi `onSuccess` -- hoặc hộp thoại lỗi.
-     */
     public static <T> void async(Component parent, Supplier<T> work, Runnable after, Consumer<T> onSuccess) {
         new SwingWorker<T, Void>() {
             @Override protected T doInBackground() { return work.get(); }
@@ -359,7 +304,6 @@ public class Ui {
         }.execute();
     }
 
-    /** Hộp thoại OK / Cancel có ô nhập, con trỏ đặt sẵn trong `focus`; Enter = OK. */
     public static boolean ask(Component parent, String title, JComponent focus, Object... message) {
         focus.addAncestorListener(new AncestorListener() {
             @Override public void ancestorAdded(AncestorEvent e)   { SwingUtilities.invokeLater(focus::requestFocusInWindow); }
@@ -378,14 +322,12 @@ public class Ui {
         };
     }
 
-    /** Một hàng component xếp trái -> phải. */
     public static JPanel row(Component... cs) {
         JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         for (Component c : cs) p.add(c);
         return p;
     }
 
-    /** Form 2 cột: form("Label:", component, "Label 2:", component2, ...). */
     public static JPanel form(Object... pairs) {
         JPanel p = new JPanel(new GridBagLayout());
         GridBagConstraints g = new GridBagConstraints();

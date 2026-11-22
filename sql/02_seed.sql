@@ -1,29 +1,12 @@
--- =====================================================================
---  02_seed.sql  --  Dữ liệu mẫu cho hệ thống Retail Invoicing (Topic 19)
---  Chạy bằng:  mysql -u root -p retail_billing < 02_seed.sql
--- =====================================================================
---  BẮT BUỘC: File này phải chạy SAU 01_schema.sql và 04_routines.sql.
---  Đảm bảo:
---   1. Mọi bảng (15/15 bảng) đều có >= 15 dòng dữ liệu thực tế.
---   2. Tuân thủ 100% Triggers & Stored Procedures trong 04_routines.sql
---      và 16 Business Rules (BR1 - BR16, docs/09-BUSINESS-RULES.md).
---   3. Giữ nguyên cấu trúc dữ liệu (đầu số SĐT, mã sản phẩm, các mốc
---      tăng giá > 10%, trả hàng > 50%...) để giao diện Java hoạt động
---      không cần chỉnh sửa.
--- =====================================================================
+-- 02_seed.sql -- Sample data (run after 01_schema.sql and 04_routines.sql)
 
 USE retail_billing;
 
--- ---------------------------------------------------------------------
--- 0. DỌN SẠCH DỮ LIỆU CŨ (chạy lại nhiều lần không lỗi)
--- ---------------------------------------------------------------------
+-- 0. Clear old data
 SET SQL_SAFE_UPDATES = 0;
 CALL sp_wipe_all_data();
 
-
--- ---------------------------------------------------------------------
--- 1. SHOP (15 cửa hàng: S01 -> S15)
--- ---------------------------------------------------------------------
+-- 1. Shop (15 shops: S01 -> S15)
 INSERT INTO Shop (Shop_ID, Address) VALUES
 ('S01', '123 Nguyen Hue, Quan 1, TP.HCM'),
 ('S02', '45 Nguyen Van Linh, Quan 7, TP.HCM'),
@@ -41,10 +24,7 @@ INSERT INTO Shop (Shop_ID, Address) VALUES
 ('S14', '260 Au Co, Tan Phu, TP.HCM'),
 ('S15', '330 Kinh Duong Vuong, Binh Tan, TP.HCM');
 
-
--- ---------------------------------------------------------------------
--- 2. COUNTER (30 quầy: C01 -> C30, mỗi Shop có đúng 2 quầy)
--- ---------------------------------------------------------------------
+-- 2. Counter (30 counters: C01 -> C30, 2 per shop)
 INSERT INTO Counter (Counter_ID, Shop_ID) VALUES
 ('C01', 'S01'), ('C02', 'S01'),
 ('C03', 'S02'), ('C04', 'S02'),
@@ -62,13 +42,8 @@ INSERT INTO Counter (Counter_ID, Shop_ID) VALUES
 ('C27', 'S14'), ('C28', 'S14'),
 ('C29', 'S15'), ('C30', 'S15');
 
-
--- ---------------------------------------------------------------------
--- 3. CASHIER (30 nhân viên: 15 MANAGER E01..E15, 15 CASHIER E16..E30)
---    BR15: Chỉ MANAGER mới được duyệt trả hàng và hủy hóa đơn (VOIDED).
--- ---------------------------------------------------------------------
+-- 3. Cashier (15 managers E01..E15, 15 cashiers E16..E30)
 INSERT INTO Cashier (Cashier_ID, Name, Role, Supervisor_ID) VALUES
--- 15 Managers (quản lý 15 cửa hàng, cấp cao nhất nên Supervisor_ID = NULL)
 ('E01', 'Tran Van An',       'MANAGER', NULL),
 ('E02', 'Nguyen Minh Tuan',  'MANAGER', NULL),
 ('E03', 'Le Hoang Nam',      'MANAGER', NULL),
@@ -84,7 +59,6 @@ INSERT INTO Cashier (Cashier_ID, Name, Role, Supervisor_ID) VALUES
 ('E13', 'Ly Thai To',        'MANAGER', NULL),
 ('E14', 'Cao Minh Triet',    'MANAGER', NULL),
 ('E15', 'Doan Van Hau',      'MANAGER', NULL),
--- 15 Cashiers (trực thuộc 15 Managers tương ứng)
 ('E16', 'Nguyen Thi Binh',   'CASHIER', 'E01'),
 ('E17', 'Le Minh Cuong',     'CASHIER', 'E02'),
 ('E18', 'Pham Thu Dung',     'CASHIER', 'E03'),
@@ -101,11 +75,7 @@ INSERT INTO Cashier (Cashier_ID, Name, Role, Supervisor_ID) VALUES
 ('E29', 'Ngo Van Son',       'CASHIER', 'E14'),
 ('E30', 'Huynh Thi Trang',   'CASHIER', 'E15');
 
-
--- ---------------------------------------------------------------------
--- 4. CUSTOMER (30 khách hàng thành viên - BR10)
---    22 số bắt đầu '09' để test LIMIT 20 của sp_search_customers_by_phone
--- ---------------------------------------------------------------------
+-- 4. Customer (30 member customers - BR10)
 INSERT INTO Customer (Customer_ID, Name, Phone) VALUES
 ('KH001', 'Hoang Van Kien',   '0901000001'),
 ('KH002', 'Do Thi Lan',       '0901000002'),
@@ -138,10 +108,7 @@ INSERT INTO Customer (Customer_ID, Name, Phone) VALUES
 ('KH029', 'Nghiem Thi Suong', '0813262728'),
 ('KH030', 'Lam Van Thinh',    '0815272829');
 
-
--- ---------------------------------------------------------------------
--- 5. PRODUCT (20 sản phẩm - đủ 5 loại Unit và 3 mức VAT 5%, 8%, 10%)
--- ---------------------------------------------------------------------
+-- 5. Product (20 products)
 INSERT INTO Product (Barcode, Name, Unit, Tax_Rate) VALUES
 ('8934001', 'Sua tuoi Vinamilk 1L',          'PIECE',  8.00),
 ('8934002', 'Banh mi sandwich',              'PACK',   8.00),
@@ -164,17 +131,11 @@ INSERT INTO Product (Barcode, Name, Unit, Tax_Rate) VALUES
 ('8934019', 'Nuoc cam Teppy 1L',             'PIECE',  8.00),
 ('8934020', 'Bia Saigon thung 24 lon',       'BOX',   10.00);
 
-
--- ---------------------------------------------------------------------
--- 6. PRICE_HISTORY (118 dòng - đi qua sp_add_price_history theo BR6/BR8)
---    Trigger trg_price_history_bi chặn INSERT trực tiếp, nên bắt buộc
---    gọi sp_add_price_history với Valid_From_Date tăng dần nghiêm ngặt.
--- ---------------------------------------------------------------------
+-- 6. Price_History (added through sp_add_price_history - BR6/BR8)
 SET @old_day = DATE_SUB(CURDATE(), INTERVAL 400 DAY);
 SET @new_day = GREATEST(MAKEDATE(YEAR(CURDATE()), 1),
                         DATE_SUB(CURDATE(), INTERVAL 45 DAY));
 
--- 6.1 Giá gốc tại @old_day cho cả 20 sản phẩm
 CALL sp_add_price_history('8934001', @old_day,  28000.00);
 CALL sp_add_price_history('8934002', @old_day,  18000.00);
 CALL sp_add_price_history('8934003', @old_day, 150000.00);
@@ -196,17 +157,15 @@ CALL sp_add_price_history('8934018', @old_day,  48000.00);
 CALL sp_add_price_history('8934019', @old_day,  35000.00);
 CALL sp_add_price_history('8934020', @old_day, 390000.00);
 
--- 6.2 Giá mới tại @new_day (5 sản phẩm tăng > 10% phục vụ Query Q3)
-CALL sp_add_price_history('8934001', @new_day,  33000.00); -- +17.86% (>10%)
-CALL sp_add_price_history('8934002', @new_day,  19000.00); --  +5.56%
-CALL sp_add_price_history('8934003', @new_day, 175000.00); -- +16.67% (>10%)
-CALL sp_add_price_history('8934004', @new_day,  35000.00); --  +9.38%
-CALL sp_add_price_history('8934006', @new_day,  62000.00); -- +19.23% (>10%)
-CALL sp_add_price_history('8934007', @new_day, 128000.00); --  +6.67%
-CALL sp_add_price_history('8934008', @new_day, 158000.00); -- +21.54% (>10%)
-CALL sp_add_price_history('8934010', @new_day,  21000.00); -- +16.67% (>10%)
+CALL sp_add_price_history('8934001', @new_day,  33000.00);
+CALL sp_add_price_history('8934002', @new_day,  19000.00);
+CALL sp_add_price_history('8934003', @new_day, 175000.00);
+CALL sp_add_price_history('8934004', @new_day,  35000.00);
+CALL sp_add_price_history('8934006', @new_day,  62000.00);
+CALL sp_add_price_history('8934007', @new_day, 128000.00);
+CALL sp_add_price_history('8934008', @new_day, 158000.00);
+CALL sp_add_price_history('8934010', @new_day,  21000.00);
 
--- 6.3 Giá biến động 30 ngày gần nhất cho 3 sản phẩm (90 dòng) phục vụ sp_report_price_30_days
 DELIMITER $$
 CREATE PROCEDURE sp_seed_30d_prices()
 BEGIN
@@ -225,14 +184,7 @@ DELIMITER ;
 CALL sp_seed_30d_prices();
 DROP PROCEDURE sp_seed_30d_prices;
 
-
--- ---------------------------------------------------------------------
--- 7. PROMOTION (15 chương trình) & APPLIES_TO (20 dòng) -- BR11
---    Lưu ý: 01_schema.sql định nghĩa Status ENUM('ACTIVE','EXPIRED').
---    Có chương trình trùng nhau (PR01 và PR05 cùng giảm 10% cho 8934001)
---    để kiểm chứng BR11: không cộng dồn, chọn mức giảm cao nhất và nếu
---    bằng nhau thì chọn Expiry_Date sớm nhất.
--- ---------------------------------------------------------------------
+-- 7. Promotion (15 programs) and Applies_To (20 rows) - BR11
 INSERT INTO Promotion (Promo_ID, Rule_Description, Status, Expiry_Date) VALUES
 ('PR01', 'Giam 10% sua tuoi va nuoc ngot',           'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 30 DAY)),
 ('PR02', 'Giam 5% gao ST25',                         'ACTIVE',  DATE_ADD(CURDATE(), INTERVAL 60 DAY)),
@@ -272,27 +224,13 @@ INSERT INTO Applies_To (Barcode, Promo_ID, Promo_Start_date, Promo_End_date, Dis
 ('8934013', 'PR01', DATE_SUB(CURDATE(), INTERVAL 15 DAY), DATE_ADD(CURDATE(), INTERVAL 15 DAY), 10.00),
 ('8934018', 'PR09', DATE_SUB(CURDATE(), INTERVAL 10 DAY), DATE_ADD(CURDATE(), INTERVAL 35 DAY), 10.00);
 
-
--- =====================================================================
---  8 sp_seed_demo_data: sinh hoa don cho p_days ngay gan nhat.
---   * Sinh du lieu trai dai nhieu ngay (mac dinh 90 -> 91 ngay, 6 HD/ngay
---     = 546 hoa don) giong thuat toan ban dau nhung TUAN THU 100% schema/
---     routines moi:
---       - Ma hoa don <Shop>-<Counter>-<YYYYMMDD>-<SEQ> qua sp_create_invoice_header
---       - Xoay vong du 30 quay (C01..C30) & 30 thu ngan (E01..E30)
---       - E03, E18 duoc tang so dong hang de dung dau gio hang TB (Q4)
---       - Kiem tra BR15 (chi MANAGER E01..E15 duyet huy/tra hang) & BR16
---         (hoa don tra hang van giu trang thai PAID)
---       - Sau khi sinh xong, cap nhat lui ngay & dong bo lai YYYYMMDD trong
---         Invoice_ID (tam tat FK check trong luc doi ma) de ma hoa don khop
---         tuyet doi voi ngay giao dich va co hoa don cu giu gia cu (BR8).
--- =====================================================================
+-- 8. sp_seed_demo_data: create invoices for the last p_days days
 DROP PROCEDURE IF EXISTS sp_seed_demo_data;
 DELIMITER $$
 
 CREATE PROCEDURE sp_seed_demo_data(
-    IN p_days        INT, -- So ngay lui ve qua khu (90 => 91 ngay: -90..hom nay)
-    IN p_inv_per_day INT  -- So hoa don moi ngay (6 => 546 hoa don trong 91 ngay)
+    IN p_days        INT,
+    IN p_inv_per_day INT
 )
 BEGIN
     DECLARE v_d          INT;
@@ -320,7 +258,6 @@ BEGIN
     DECLARE v_line1_unit VARCHAR(10);
     DECLARE v_sample     INT;
 
-    -- Bang tam anh xa Invoice_ID tam thoi -> Ngay & Gio lich su that
     DROP TEMPORARY TABLE IF EXISTS tmp_inv_schedule;
     CREATE TEMPORARY TABLE tmp_inv_schedule (
         Old_ID      VARCHAR(30) PRIMARY KEY,
@@ -330,33 +267,25 @@ BEGIN
         New_ID      VARCHAR(30) NULL
     );
 
-    -- Duyet tu ngay cu nhat (-p_days) den hom nay (0)
     SET v_d = p_days;
     WHILE v_d >= 0 DO
         SET v_date = DATE_SUB(CURDATE(), INTERVAL v_d DAY);
 
         SET v_k = 1;
         WHILE v_k <= p_inv_per_day DO
-            -- Hoa don mau dau tien cua ca du an (tai ngay -p_days, luot 1)
             SET v_sample = IF(v_d = p_days AND v_k = 1, 1, 0);
 
-            -- Gio ban ngau nhien co dinh trong khung 07:00..21:59
             SET v_time = MAKETIME(7 + MOD(v_d * 7 + v_k * 13, 15),
                                   MOD(v_d * 29 + v_k * 17, 60),
                                   MOD(v_d * 11 + v_k * 19, 60));
 
-            -- Phan bo deu qua 30 quay (C01..C30) thuoc 15 Shop (S01..S15)
             SET v_counter = CONCAT('C', LPAD(MOD(v_d * p_inv_per_day + v_k - 1, 30) + 1, 2, '0'));
-            -- Phan bo qua 30 nhan vien (E01..E30)
             SET v_cashier = CONCAT('E', LPAD(MOD(v_d + v_k, 30) + 1, 2, '0'));
-            -- Manager quan ly Shop tuong ung (E01..E15)
             SET v_manager = CONCAT('E', LPAD(MOD(v_d * p_inv_per_day + v_k - 1, 15) + 1, 2, '0'));
 
-            -- 1/3 khach vang lai (NULL), 2/3 khach thanh vien (KH001..KH030) - BR10
             SET v_customer = IF(MOD(v_d * 3 + v_k, 3) = 0, NULL,
                                 CONCAT('KH', LPAD(MOD(v_d * 11 + v_k * 7, 30) + 1, 3, '0')));
 
-            -- So dong hang moi hoa don: 1..3 dong; E03 & E18 them dong de dung dau Q4
             SET v_lines = 1 + MOD(v_d + v_k, 3);
             IF v_cashier IN ('E03', 'E18') THEN
                 SET v_lines = v_lines + 1;
@@ -365,27 +294,22 @@ BEGIN
                 SET v_lines = 3;
             END IF;
 
-            -- Tao dau hoa don qua routine chuan (tu sinh ma <Shop>-<Counter>-<YYYYMMDD>-<SEQ>)
             CALL sp_create_invoice_header(NULL, NULL, v_counter, v_cashier, v_customer, v_id);
 
-            -- Ghi lai lich ngay/gio muc tieu cua hoa don nay
             INSERT INTO tmp_inv_schedule (Old_ID, Counter_ID, Target_Date, Target_Time)
             VALUES (v_id, v_counter, v_date, v_time);
 
-            -- Them cac dong hang
             SET v_j = 1;
             WHILE v_j <= v_lines DO
                 SET v_barcode = CONCAT('89340',
                                 LPAD(MOD(v_d * 3 + v_k * 7 + v_j * 11, 20) + 1, 2, '0'));
 
-                -- Hoa don mau ep dong 1 la 8934001 (co KM) voi SL = 2
                 IF v_sample = 1 AND v_j = 1 THEN
                     SET v_barcode = '8934001';
                 END IF;
 
                 SELECT Unit INTO v_unit FROM Product WHERE Barcode = v_barcode;
 
-                -- BR7: Hang can/dong (KG, LITER) cho phep thap phan; hang dong goi so nguyen
                 SET v_qty = CASE
                     WHEN v_unit IN ('KG', 'LITER') THEN
                         CASE MOD(v_d + v_k + v_j, 4)
@@ -405,16 +329,13 @@ BEGIN
                 SET v_j = v_j + 1;
             END WHILE;
 
-            -- Thanh toan (BR12, BR13, BR14)
             SET v_due = fn_invoice_amount_due(v_id);
 
             IF MOD(v_d + v_k, 7) = 0 AND v_sample = 0 THEN
-                -- Khach dua dung so tien (tien thoi = 0)
                 CALL sp_add_payment(fn_next_payment_id(), v_id, v_due,
                                     'CASH', CAST(v_due AS CHAR), NULL);
 
             ELSEIF MOD(v_d + v_k, 5) = 0 THEN
-                -- Thanh toan tach 2 phuong thuc tren cung 1 hoa don (BR12)
                 SET v_recorded = ROUND(v_due * 0.40, 2);
                 SET v_tendered = CEILING(v_recorded / 10000) * 10000;
                 CALL sp_add_payment(fn_next_payment_id(), v_id, v_recorded,
@@ -433,7 +354,6 @@ BEGIN
                 END IF;
 
             ELSE
-                -- Thanh toan 1 phuong thuc xoay vong CASH / CARD / EWALLET
                 SET v_method = ELT(MOD(v_d * 3 + v_k, 3) + 1, 'CASH', 'CARD', 'EWALLET');
                 SET v_pay_id = fn_next_payment_id();
 
@@ -452,20 +372,16 @@ BEGIN
                 END IF;
             END IF;
 
-            -- Chot hoa don PAID (BR3, BR14)
             CALL sp_settle_invoice(v_id);
 
             SET v_status = NULL;
             SELECT Status INTO v_status FROM Invoice WHERE Invoice_ID = v_id;
 
-            -- Nghiep vu sau thanh toan: Huy hoa don (VOIDED) hoac Tra hang (Return)
             IF v_status = 'PAID' AND v_sample = 0
                AND MOD(v_d * 7 + v_k * 11, 37) = 0 THEN
-                -- BR3 & BR15: Huy hoa don boi MANAGER
                 CALL sp_void_invoice(v_id, v_manager);
 
             ELSEIF v_status = 'PAID' AND MOD(v_d + v_k * 3, 12) = 0 THEN
-                -- BR15 & BR16: Tra hang tren hoa don PAID, giu nguyen trang thai PAID
 
                 SELECT l.Quantity, p.Unit
                 INTO   v_line1_qty, v_line1_unit
@@ -474,10 +390,8 @@ BEGIN
                 WHERE  l.Invoice_ID = v_id AND l.Line_Number = 1;
 
                 IF MOD(v_d, 7) = 0 THEN
-                    -- Tra toan bo dong 1 (hoan > 50% gia tri cho Query Q5)
                     CALL sp_add_return(v_id, 1, CURDATE(), v_line1_qty, v_manager);
                 ELSE
-                    -- Tra mot phan dong 1 (ton trong so nguyen cho hang dong goi)
                     IF v_line1_unit IN ('KG', 'LITER') THEN
                         CALL sp_add_return(v_id, 1, CURDATE(), ROUND(v_line1_qty / 2, 3), v_manager);
                     ELSEIF v_line1_qty >= 2 THEN
@@ -494,12 +408,6 @@ BEGIN
         SET v_d = v_d - 1;
     END WHILE;
 
-    -- =================================================================
-    --  DONG BO LICH SU NGAY & MA HOA DON BR1]
-    --   * Tinh lai ma chuan <Shop>-<Counter>-<YYYYMMDD>-<SEQ> theo tung ngay
-    --     lich su Target_Date va cap nhat dong bo tren Invoice, Invoice_Line,
-    --     Payment, Return (tam tat FOREIGN_KEY_CHECKS & trg_invoice_bu).
-    -- =================================================================
     DROP TEMPORARY TABLE IF EXISTS tmp_inv_computed;
     CREATE TEMPORARY TABLE tmp_inv_computed AS
     SELECT t.Old_ID,
@@ -513,7 +421,6 @@ BEGIN
            ) AS Computed_New_ID
     FROM tmp_inv_schedule t
     JOIN Counter c ON c.Counter_ID = t.Counter_ID;
-
 
     UPDATE tmp_inv_schedule s
     JOIN   tmp_inv_computed m ON m.Old_ID = s.Old_ID
@@ -548,7 +455,6 @@ BEGIN
                CURDATE()
            );
 
-    -- Dong bo lai gia & khuyen mai lich su (BR8) cho cac hoa don ban truoc hom nay
     UPDATE Invoice_Line l
     JOIN   Invoice i ON i.Invoice_ID = l.Invoice_ID
     SET    l.Unit_Price = fn_get_product_price(l.Barcode, i.`Date`),
@@ -556,7 +462,6 @@ BEGIN
                                            fn_get_product_price(l.Barcode, i.`Date`))
     WHERE  i.`Date` < CURDATE();
 
-    -- Dong bo lai Payment & Cash_Payment cho hoa don bi doi gia lich su (< @new_day)
     DROP TEMPORARY TABLE IF EXISTS tmp_inv_recalc_pay;
     CREATE TEMPORARY TABLE tmp_inv_recalc_pay AS
     SELECT p.Payment_ID,
@@ -625,11 +530,7 @@ END$$
 
 DELIMITER ;
 
--- =====================================================================
---  9 TAM TAT TRIGGER KHI GOI sp_seed_demo_data(90, 6)
---   * Sinh 91 ngay (-90..hom nay) x 6 hoa don/ngay = 546 hoa don trai deu
---     30 quay va 15 cua hang, sau do khoi phuc nguyen ban trg_invoice_bu.
--- =====================================================================
+-- 9. Run sp_seed_demo_data(90, 6) with triggers turned off
 DROP TRIGGER IF EXISTS trg_invoice_bu;
 DROP TRIGGER IF EXISTS trg_invoice_line_bu;
 DROP TRIGGER IF EXISTS trg_payment_bu;
@@ -640,7 +541,6 @@ CALL sp_seed_demo_data(90, 6);
 
 DROP PROCEDURE sp_seed_demo_data;
 
--- Khôi phục lại trigger trg_invoice_bu nguyên bản từ 04_routines.sql
 DELIMITER $$
 
 CREATE TRIGGER trg_cash_payment_bu
@@ -727,10 +627,7 @@ BEGIN
 END$$
 DELIMITER ;
 
-
--- ---------------------------------------------------------------------
--- 10. KIỂM TRA SỐ LƯỢNG DÒNG TỪNG BẢNG (ALL >= 15)
--- ---------------------------------------------------------------------
+-- 10. Check the row count of each table (all >= 15)
 SELECT 'Shop'            AS Bang, COUNT(*) AS So_dong FROM Shop
 UNION ALL SELECT 'Counter',         COUNT(*) FROM Counter
 UNION ALL SELECT 'Cashier',         COUNT(*) FROM Cashier
