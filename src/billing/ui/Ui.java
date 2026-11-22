@@ -3,383 +3,193 @@ package billing.ui;
 import billing.db.QueryResult;
 
 import javax.swing.*;
+import javax.swing.event.AncestorEvent;
+import javax.swing.event.AncestorListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.SQLException;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
- * ====================================================================
- *  Ui -- BẢN CHÉP DUY NHẤT của lớp giữa bàn phím và BigDecimal,
- *        và của lớp giữa BigDecimal và màn hình.
- * ====================================================================
- *
- *  <p>Trước khối 5 bộ định dạng số bị chép <b>bốn</b> lần ({@code Ui},
- *  {@code InvoiceViewPanel}, và hai lần trong {@code SearchPanel}), còn việc
- *  đọc số từ bàn phím thì mỗi chỗ tự làm theo một cách -- phần lớn bằng
- *  {@code new BigDecimal(textField.getText())}, nên thu ngân gõ {@code 500.000}
- *  là ghi vào database <b>500 đồng</b>, sai đúng 1000 lần, không một cảnh báo
- *  nào (plan/14 lỗi #1).
- *
- *  <p><b>Nguyên tắc:</b> con số trên màn hình phải là con số trong database, và
- *  mỗi phép đọc số / mỗi phép định dạng số chỉ tồn tại ở MỘT chỗ. Hệ quả:
- *  <ul>
- *    <li>không {@code new BigDecimal(textField.getText())} ở bất kỳ đâu --
- *        đọc số đi qua {@link #readMoney} / {@link #readQuantity};</li>
- *    <li>không {@code new DecimalFormat(...)} ở bất kỳ file nào khác --
- *        hiện số đi qua {@link #money} / {@link #qty} / {@link #percent}.</li>
- *  </ul>
+ * Đồ nghề dùng chung của tầng giao diện: font, định dạng / đọc số kiểu Việt Nam,
+ * bảng chỉ đọc, hộp thoại lỗi, chạy việc DB ngoài luồng giao diện.
  */
 public class Ui {
 
-    public static final Font MONO  = new Font("Consolas", Font.PLAIN, 13);
-    public static final Font BOLD  = new Font("Segoe UI", Font.BOLD, 14);
-    public static final Font BIG   = new Font("Segoe UI", Font.BOLD, 20);
+    public static final Font  MONO  = new Font("Consolas", Font.PLAIN, 13);
+    public static final Font  BOLD  = new Font("Segoe UI", Font.BOLD, 14);
+    public static final Font  BIG   = new Font("Segoe UI", Font.BOLD, 20);
+    public static final Color GREEN = new Color(0, 110, 0);
+    public static final Color RED   = new Color(180, 40, 40);
 
     // =================================================================
-    //  HIỆN SỐ -- hợp đồng plan/14 mục 3.4
+    //  SỐ: tiền "135.100đ" (. tách nghìn), số lượng "1,5" (, thập phân)
     // =================================================================
 
-    private static final DecimalFormat MONEY;     // #,##0      -> 135.100
-    private static final DecimalFormat QTY;       // #,##0.###  -> 1,5
-    private static final DecimalFormat QTY_IN;    // 0.###      -> 1.5  (điền vào ô nhập)
-    private static final DecimalFormat PERCENT;   // #0.##      -> 8
+    private static final DecimalFormat MONEY, QTY, QTY_IN, PERCENT;
     static {
-        // Locale.forLanguageTag chứ không new Locale("vi","VN"): hàm dựng đó
-        // đã deprecated và là cảnh báo biên dịch duy nhất còn lại của dự án.
-        // Dấu nghìn '.' và dấu thập phân ',' vẫn đặt tay: ta phụ thuộc vào
-        // chúng theo hợp đồng, không phụ thuộc vào dữ liệu locale của JDK.
-        DecimalFormatSymbols sym = new DecimalFormatSymbols(Locale.forLanguageTag("vi-VN"));
-        sym.setGroupingSeparator('.');
-        sym.setDecimalSeparator(',');
-
-        MONEY   = new DecimalFormat("#,##0", sym);
-        QTY     = new DecimalFormat("#,##0.###", sym);
-        PERCENT = new DecimalFormat("#0.##", sym);
+        DecimalFormatSymbols vn = new DecimalFormatSymbols(Locale.forLanguageTag("vi-VN"));
+        vn.setGroupingSeparator('.');
+        vn.setDecimalSeparator(',');
+        MONEY   = new DecimalFormat("#,##0", vn);
+        QTY     = new DecimalFormat("#,##0.###", vn);
+        PERCENT = new DecimalFormat("#0.##", vn);
         PERCENT.setGroupingUsed(false);
-
-        // Ô NHẬP số lượng: KHÔNG dấu nghìn, và dấu thập phân là '.'.
-        //
-        // Không dấu nghìn vì ô nhập hiểu cả '.' và ',' là dấu thập phân (mục
-        // 3.3), nên điền "1.500" vào đó sẽ bị đọc thành 1,5 -- đó là lý do
-        // khối 3 dựng riêng một format cho giá trị điền sẵn.
-        //
-        // Dấu thập phân '.' chứ không ',': bản khối 3 cho ra "1,5", vẫn đọc
-        // được (readQuantity đổi ',' thành '.') nhưng "1.5" thì KHÔNG THỂ bị
-        // đọc nhầm thành dấu nghìn dù người dùng có sửa thêm vào ô hay không.
         DecimalFormatSymbols dot = new DecimalFormatSymbols(Locale.forLanguageTag("vi-VN"));
         dot.setDecimalSeparator('.');
-        QTY_IN = new DecimalFormat("0.###", dot);
+        QTY_IN = new DecimalFormat("0.###", dot);       // điền lại vào ô nhập: "1.5"
         QTY_IN.setGroupingUsed(false);
     }
 
-    /**
-     * Mọi cột tiền: {@code 135100 -> "135.100đ"}.
-     *
-     * <p>Nhận {@code Object} để {@code fillFormatted} và các chỗ đọc thẳng từ
-     * JDBC dùng chung một đường. {@code null -> "0đ"}, không bao giờ ném; giá
-     * trị không phải số thì trả nguyên văn.
-     */
-    public static String money(Object v) {
-        if (v == null)            return "0đ";
-        if (v instanceof Number)  return MONEY.format(v) + "đ";
-        return v.toString();
-    }
+    public static String money(Object v)   { return v == null ? "0đ" : v instanceof Number ? MONEY.format(v) + "đ" : v.toString(); }
+    public static String qty(Object v)     { return v == null ? "0" : v instanceof Number ? QTY.format(v) : v.toString(); }
+    public static String percent(Object v) { return v == null ? "" : v instanceof Number ? PERCENT.format(v) + "%" : v.toString(); }
+    /** Số nguyên có dấu tách nghìn, không đuôi "đ" (số dòng, số lần...): 1.234. */
+    public static String integer(Object v) { return v == null ? "0" : v instanceof Number n ? MONEY.format(n.longValue()) : v.toString(); }
 
-    /**
-     * Số lượng: {@code 1.500 -> "1,5"} ; {@code 2.000 -> "2"} ; {@code 0.250 -> "0,25"}.
-     * Dùng cho {@code Quantity} / {@code Return_Quantity} -- {@code DECIMAL(10,3)}.
-     *
-     * <p>Làm tròn về số nguyên là nói sai về dữ liệu đang nằm trong database:
-     * hàng bán theo {@code KG} / {@code LITER} có số lượng thập phân thật, và
-     * từ khối 6 thì chúng rải khắp 91 ngày dữ liệu chứ không còn là một hoá
-     * đơn duy nhất (plan/15 mục 4.5).
-     */
-    public static String qty(Object v) {
-        if (v == null)            return "0";
-        if (v instanceof Number)  return QTY.format(v);
-        return v.toString();
-    }
+    /** Trạng thái hóa đơn thô từ SQL ("PAID" / "VOIDED") -> nhãn theo ngôn ngữ đang chọn. */
+    public static String status(Object raw) { return raw == null ? "" : val(String.valueOf(raw)); }
+    public static String qtyInput(BigDecimal v)   { return v == null ? "" : QTY_IN.format(v); }
+    public static String moneyInput(BigDecimal v) { return v == null ? "" : MONEY.format(v); }
 
-    /**
-     * Phần trăm: {@code 8.00 -> "8%"} ; {@code 7.50 -> "7,5%"}.
-     * Dùng cho {@code Tax_Rate} / {@code VAT_pct} / {@code Phan_tram_tra}.
-     *
-     * <p>Phần trăm KHÔNG thuộc nhóm tiền tệ. Xếp nó vào nhóm tiền là
-     * {@code VAT_pct} hiện ra thành {@code "8đ"} (plan/14 lỗi #21).
-     */
-    public static String percent(Object v) {
-        if (v == null)            return "";
-        if (v instanceof Number)  return PERCENT.format(v) + "%";
-        return v.toString();
-    }
-
-    /** Số nguyên (mã, số lượt, số hóa đơn): {@code 1234 -> "1.234"}. */
-    public static String integer(Object v) {
-        if (v == null)            return "0";
-        if (v instanceof Number)  return MONEY.format(((Number) v).longValue());
-        return v.toString();
-    }
-
-    /**
-     * Giá trị ĐIỀN SẴN vào một ô nhập số lượng: {@code 1.5 -> "1.5"},
-     * <b>không</b> dấu nghìn (plan/12 mục 9.2 điểm 3).
-     */
-    public static String qtyInput(BigDecimal v) {
-        return v == null ? "" : QTY_IN.format(v);
-    }
-
-    /**
-     * Giá trị ĐIỀN SẴN vào một ô nhập tiền: {@code 158000.00 -> "158.000"}.
-     * Có dấu nghìn, vì {@link #readMoney} hiểu dấu nghìn (mục 3.3) và người
-     * dùng đọc {@code 158.000} dễ hơn {@code 158000.00}.
-     */
-    public static String moneyInput(BigDecimal v) {
-        return v == null ? "" : MONEY.format(v);
-    }
-
-    /**
-     * Đổi giá trị thô từ JDBC thành BigDecimal. Cột {@code DECIMAL} của MySQL
-     * về Java vốn là {@code BigDecimal} rồi (docs/05 mục 3) -- không qua
-     * {@code double}, không parse chuỗi khi không cần.
-     */
+    /** Giá trị từ ResultSet / ô bảng -> BigDecimal (null -> 0). */
     public static BigDecimal dec(Object o) {
         if (o == null)               return BigDecimal.ZERO;
         if (o instanceof BigDecimal) return (BigDecimal) o;
-        if (o instanceof Number)     return new BigDecimal(o.toString());
-        return new BigDecimal(String.valueOf(o).trim());
+        return new BigDecimal(o.toString().trim());
     }
 
     // =================================================================
-    //  ĐỌC SỐ TỪ BÀN PHÍM -- hợp đồng plan/14 mục 3.3
+    //  ĐỌC Ô NHẬP -- sai thì báo và trả null
     // =================================================================
 
-    /**
-     * Biểu thức của một số tiền người Việt gõ:
-     * {@code 500.000 | 1.234.567 | 1.234,50 | 500000 | 0,5}.
-     *
-     * <p>Dấu {@code '.'} là dấu TÁCH NGHÌN và phải đủ 3 chữ số theo sau; dấu
-     * thập phân là {@code ','}, tối đa 2 chữ số ({@code DECIMAL(12,2)}).
-     * Dấu {@code '-'} được NHẬN ở đây để phép kiểm dấu bên dưới nói được câu
-     * "phải lớn hơn 0" thay vì câu "không đọc được".
-     */
-    private static final Pattern MONEY_IN = Pattern.compile(
-            "^-?(\\d{1,3}(\\.\\d{3})*|\\d+)(,\\d{1,2})?$");
+    /** Ô tiền: dấu . tách nghìn (đủ 3 số), dấu , thập phân (tối đa 2 số). Đúng: 500.000 | 1.234,50 | 500000 */
+    private static final Pattern MONEY_IN = Pattern.compile("^-?(\\d{1,3}(\\.\\d{3})*|\\d+)(,\\d{1,2})?$");
 
-    /** Bỏ khoảng trắng (cả khoảng trắng cứng) và chữ {@code đ}/{@code d} ở cuối. */
     private static String normalizeMoney(String input) {
         String s = input.trim().replace(" ", "").replace(" ", "");
-        while (s.endsWith("đ") || s.endsWith("Đ") || s.endsWith("d") || s.endsWith("D")) {
-            s = s.substring(0, s.length() - 1);
+        while (!s.isEmpty() && "đĐdD".indexOf(s.charAt(s.length() - 1)) >= 0) {
+            s = s.substring(0, s.length() - 1);           // cho phép gõ đuôi "đ"
         }
         return s;
     }
 
-    /**
-     * Đọc số tiền, KHÔNG hiện thông báo. {@code null} = không đọc được, kể cả
-     * khi {@code <= 0}. Dùng cho nhãn vọng lại ({@link #attachMoneyEcho}).
-     */
+    /** Đọc im lặng (cho dòng "= 135.100đ" cạnh ô tiền); null = không hợp lệ hoặc <= 0. */
     public static BigDecimal parseMoney(String input) {
         if (input == null) return null;
         String s = normalizeMoney(input);
-        if (s.isEmpty() || !MONEY_IN.matcher(s).matches()) return null;
+        if (!MONEY_IN.matcher(s).matches()) return null;
         BigDecimal v = new BigDecimal(s.replace(".", "").replace(',', '.'));
         return v.signum() <= 0 ? null : v.setScale(2, RoundingMode.HALF_UP);
     }
 
-    /**
-     * Như {@link #readMoney(Component, String, String)} nhưng NHẬN số 0.
-     *
-     * <p>Vì sao cần hai biến thể: một dòng thanh toán 0 đồng là vô nghĩa (ô
-     * tiền ở tab 1 phải từ chối), nhưng {@code Invoice_Line.Discount = 0.00}
-     * là giá trị <b>bình thường nhất</b> của cột đó -- phần lớn dòng hàng
-     * không có khuyến mãi. {@code Unit_Price} cũng vậy: bản trước khối 5 của
-     * {@code EditLineDialog} nhận {@code >= 0} cho cả hai ô, và đó là đúng.
-     */
-    public static BigDecimal readMoneyAllowZero(Component parent, String input, String fieldLabel) {
-        return readMoneyInternal(parent, input, fieldLabel, true);
-    }
+    public static BigDecimal readMoney(Component parent, String input, String field)          { return readMoney(parent, input, field, false); }
+    public static BigDecimal readMoneyAllowZero(Component parent, String input, String field) { return readMoney(parent, input, field, true); }
 
-    /**
-     * Đọc số tiền người dùng gõ. Trả {@code null} <b>sau khi đã hiện thông
-     * báo</b> nếu không hợp lệ -- đúng khuôn {@link #readQuantity}, để chỗ gọi
-     * chỉ cần {@code if (v == null) return;}.
-     *
-     * <p>Dấu {@code '.'} là dấu TÁCH NGHÌN; dấu thập phân là {@code ','}.
-     * Ngược hoàn toàn với {@link #readQuantity}, và đây là <b>cố ý</b>:
-     * plan/14 mục 3.3 giải thích vì sao một quy tắc không phục vụ được cả hai
-     * (tiền thì lớn và có dấu nghìn, số lượng thì nhỏ và có phần lẻ).
-     *
-     * <p>{@code "500.000" -> 500000}. Trước khối 5:
-     * {@code new BigDecimal("500.000") = 500}, ghi vào {@code Payment} 500
-     * đồng, không một cảnh báo nào (plan/14 lỗi #1).
-     *
-     * @param fieldLabel tên ô để ghép vào thông báo, ví dụ {@code "So tien"}
-     */
-    public static BigDecimal readMoney(Component parent, String input, String fieldLabel) {
-        return readMoneyInternal(parent, input, fieldLabel, false);
-    }
-
-    private static BigDecimal readMoneyInternal(Component parent, String input,
-                                                String fieldLabel, boolean allowZero) {
-        if (input == null) return null;                       // bấm Cancel
+    private static BigDecimal readMoney(Component parent, String input, String field, boolean allowZero) {
+        if (input == null) return null;
         String s = normalizeMoney(input);
         if (s.isEmpty()) {
-            warn(parent, I18n.msg("Chưa nhập " + fieldLabel + ".", "Please enter the " + fieldLabel.toLowerCase() + "!"),
+            warn(parent, I18n.msg("Vui lòng nhập " + field.toLowerCase() + "!", "Please enter the " + field.toLowerCase() + "!"),
                     I18n.msg("Chưa nhập số tiền", "Missing Amount"));
             return null;
         }
         if (!MONEY_IN.matcher(s).matches()) {
             warn(parent, I18n.msg(
-                         fieldLabel + " không đọc được: \"" + input + "\"\n\n"
-                       + "Dấu . là dấu tách nghìn (phải đủ 3 chữ số),\n"
-                       + "dấu , là dấu thập phân (tối đa 2 chữ số).\n\n"
-                       + "Đúng:  500.000   |   1.234,50   |   500000\n"
-                       + "Sai:   500.00    |   1.2.3      |   1,234",
-                         "Cannot read the " + fieldLabel.toLowerCase() + ": \"" + input + "\"\n\n"
-                       + ". separates thousands (followed by 3 digits),\n"
-                       + ", is the decimal point (up to 2 digits).\n\n"
-                       + "Valid:    500.000   |   1.234,50   |   500000\n"
-                       + "Invalid:  500.00    |   1.2.3      |   1,234"),
+                    "Không đọc được " + field.toLowerCase() + ": \"" + input + "\"\n\n"
+                  + "Dấu . tách hàng nghìn (theo sau là đủ 3 chữ số),\n"
+                  + "dấu , là dấu thập phân (tối đa 2 chữ số).\n\n"
+                  + "Đúng:  500.000   |   1.234,50   |   500000\n"
+                  + "Sai:   500.00    |   1.2.3      |   1,234",
+                    "Cannot read the " + field.toLowerCase() + ": \"" + input + "\"\n\n"
+                  + ". separates thousands (followed by 3 digits),\n"
+                  + ", is the decimal point (up to 2 digits).\n\n"
+                  + "Valid:    500.000   |   1.234,50   |   500000\n"
+                  + "Invalid:  500.00    |   1.2.3      |   1,234"),
                     I18n.msg("Số tiền không hợp lệ", "Invalid Amount"));
             return null;
         }
         BigDecimal v = new BigDecimal(s.replace(".", "").replace(',', '.'));
         if (allowZero ? v.signum() < 0 : v.signum() <= 0) {
-            warn(parent, allowZero
-                            ? I18n.msg(fieldLabel + " không được âm.", fieldLabel + " mustn't be negative!")
-                            : I18n.msg(fieldLabel + " phải lớn hơn 0.", fieldLabel + " must be greater than 0!"),
+            warn(parent, allowZero ? I18n.msg(field + " không được âm!", field + " mustn't be negative!")
+                                   : I18n.msg(field + " phải lớn hơn 0!", field + " must be greater than 0!"),
                     I18n.msg("Số tiền không hợp lệ", "Invalid Amount"));
             return null;
         }
-        return v.setScale(2, RoundingMode.HALF_UP);           // DECIMAL(12,2)
+        return v.setScale(2, RoundingMode.HALF_UP);       // khớp DECIMAL(12,2)
     }
 
     /**
-     * Đọc số lượng người dùng gõ. Trả {@code null} (và <b>đã</b> hiện thông
-     * báo) nếu không hợp lệ.
-     *
-     * <p>Bản dời của {@code InvoiceViewPanel.readQuantity} (khối 3) lên chỗ
-     * dùng chung được: trước khối 5 nó là {@code private} của một lớp, nên tab
-     * 1 và {@code EditLineDialog} không dùng được và cả hai đang nhận
-     * {@code 1.2345} để MySQL âm thầm làm tròn thành {@code 1.235}
-     * (plan/14 lỗi #23).
-     *
-     * <p>Ba quy tắc của plan/12 mục 3.2:
-     * <ol>
-     *   <li>Quá 3 chữ số thập phân thì TỪ CHỐI, không âm thầm làm tròn --
-     *       {@code DECIMAL(10,3)} sẽ lặng lẽ biến {@code 1.2345} thành
-     *       {@code 1.235}.</li>
-     *   <li>Không nhận dấu phân cách nghìn; cả {@code ','} và {@code '.'} đều
-     *       là dấu thập phân.</li>
-     *   <li>(Chỗ gọi lo) điền sẵn số lượng còn lại.</li>
-     * </ol>
-     *
-     * <p>So sánh bằng {@code compareTo}, KHÔNG {@code equals}:
-     * {@code BigDecimal("1.5").equals(BigDecimal("1.50"))} là {@code false}
-     * (khác scale) -- một cái bẫy kinh điển làm phép kiểm "còn lại" sai ở biên.
-     *
-     * @param max số lượng tối đa, hoặc {@code null} khi không có trần (tab 1)
-     * @param unit đơn vị tính, chỉ để ghép vào thông báo khi vượt {@code max}
+     * Ô số lượng: , hoặc . đều là dấu THẬP PHÂN (khác ô tiền!), tối đa 3 số lẻ, phải > 0.
+     * @param max không null = trần (số còn trả được khi trả hàng)
      */
-    public static BigDecimal readQuantity(Component parent, String input,
-                                          BigDecimal max, String unit) {
-        if (input == null) return null;                       // bấm Cancel
+    public static BigDecimal readQuantity(Component parent, String input, BigDecimal max, String unit) {
+        if (input == null) return null;
         String s = input.trim().replace(',', '.');
+        String problem = null;
+        BigDecimal q = null;
         if (s.isEmpty()) {
-            warn(parent, I18n.msg("Chưa nhập số lượng.", "Please enter the quantity!"), I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
-            return null;
+            problem = I18n.msg("Vui lòng nhập số lượng!", "Please enter the quantity!");
+        } else if (s.indexOf('.') != s.lastIndexOf('.')) {
+            problem = I18n.msg("Số lượng chỉ được có MỘT dấu thập phân: ", "Only one decimal point is allowed in the quantity: ") + input;
+        } else {
+            try {
+                q = new BigDecimal(s);
+            } catch (NumberFormatException ex) {
+                problem = I18n.msg(
+                        "Số lượng không hợp lệ: " + input + "\n\nDấu , hoặc . là dấu THẬP PHÂN, không phải dấu tách nghìn.\n"
+                      + "Đúng:  2   |   1,5   |   1.5   |   0,25",
+                        "Invalid quantity: " + input + "\n\n, or . is the decimal point, NOT a thousands separator.\n"
+                      + "Valid:  2   |   1,5   |   1.5   |   0,25");
+            }
         }
-        if (s.indexOf('.') != s.lastIndexOf('.')) {
-            warn(parent, I18n.msg("Chỉ được một dấu thập phân trong số lượng: ",
-                                  "Only one decimal point is allowed in the quantity: ") + input,
-                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
-            return null;
+        if (problem == null && q.scale() > 3) {
+            problem = I18n.msg("Tối đa 3 chữ số thập phân.\nBạn đã gõ: ", "At most 3 decimal places.\nYou typed: ") + input;
         }
-        BigDecimal q;
-        try {
-            q = new BigDecimal(s);
-        } catch (NumberFormatException ex) {
-            warn(parent, I18n.msg(
-                         "Số lượng không hợp lệ: " + input
-                       + "\n\nDấu , hoặc . là dấu thập phân, KHÔNG phải dấu tách nghìn.\n"
-                       + "Đúng:  2   |   1,5   |   1.5   |   0,25",
-                         "Invalid quantity: " + input
-                       + "\n\n, or . is the decimal point, NOT a thousands separator.\n"
-                       + "Valid:  2   |   1,5   |   1.5   |   0,25"),
-                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
-            return null;
+        if (problem == null && q.signum() <= 0) {
+            problem = I18n.msg("Số lượng phải lớn hơn 0!", "Quantity must be greater than 0!");
         }
-        if (q.scale() > 3) {
-            warn(parent, I18n.msg("Tối đa 3 chữ số thập phân.\nBạn gõ: ",
-                                  "At most 3 decimal places.\nYou typed: ") + input,
-                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
-            return null;
+        if (problem == null && max != null && q.compareTo(max) > 0) {
+            problem = I18n.msg("Chỉ còn trả được " + qty(max) + " " + unit + ".",
+                               "Only " + qty(max) + " " + unit + " can be returned.");
         }
-        if (q.signum() <= 0) {
-            warn(parent, I18n.msg("Số lượng phải lớn hơn 0.", "Quantity must be greater than 0!"),
-                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
-            return null;
-        }
-        if (max != null && q.compareTo(max) > 0) {
-            warn(parent, I18n.msg("Chỉ còn " + qty(max) + " " + unit + " có thể trả.",
-                                  "Only " + qty(max) + " " + unit + " can be returned."),
-                    I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
+        if (problem != null) {
+            warn(parent, problem, I18n.msg("Số lượng không hợp lệ", "Invalid Quantity"));
             return null;
         }
         return q;
     }
 
-    /**
-     * Gắn một nhãn <i>"= 500.000đ"</i> cạnh ô nhập tiền, cập nhật theo từng ký tự.
-     *
-     * <p>KHÔNG gọi database (khác plan/14 lỗi #14): chỉ parse trong bộ nhớ.
-     * Không đọc được thì hiện {@code "= ?"} màu đỏ -- người dùng thấy app hiểu
-     * gì <b>trước khi</b> bấm nút, chứ không phát hiện ra sau khi đã lưu.
-     */
+    /** Nhãn "= 135.100đ" cạnh ô tiền, cập nhật khi gõ -- thu ngân thấy ngay app hiểu số gì. */
     public static JLabel attachMoneyEcho(JTextField field) {
         JLabel echo = new JLabel(" ");
         echo.setFont(BOLD);
         Runnable update = () -> {
             String raw = field.getText();
-            if (raw == null || raw.trim().isEmpty()) {
-                echo.setText(" ");
-                return;
-            }
             BigDecimal v = parseMoney(raw);
-            if (v == null) {
-                echo.setText("= ?");
-                echo.setForeground(Color.RED.darker());
-            } else {
-                echo.setText("= " + money(v));
-                echo.setForeground(new Color(0, 110, 0));
-            }
+            echo.setText(raw == null || raw.isBlank() ? " " : v == null ? "= ?" : "= " + money(v));
+            echo.setForeground(v == null ? Color.RED.darker() : GREEN);
         };
-        field.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e)  { update.run(); }
-            @Override public void removeUpdate(DocumentEvent e)  { update.run(); }
-            @Override public void changedUpdate(DocumentEvent e) { update.run(); }
-        });
+        field.getDocument().addDocumentListener(onChange(update));
         update.run();
         return echo;
-    }
-
-    /** Cảnh báo gọn một dòng. Bản dời của {@code InvoiceViewPanel.warn}. */
-    public static void warn(Component parent, String message, String title) {
-        JOptionPane.showMessageDialog(parent, message, title, JOptionPane.WARNING_MESSAGE);
     }
 
     // =================================================================
     //  BẢNG
     // =================================================================
 
-    /** Tạo một JTable chỉ để xem (không cho sửa ô). */
     public static JTable readOnlyTable() {
         JTable t = new JTable(new DefaultTableModel() {
             @Override public boolean isCellEditable(int r, int c) { return false; }
@@ -390,77 +200,206 @@ public class Ui {
         return t;
     }
 
+    public static void fill(JTable table, QueryResult qr) { fill(table, qr, null, null, null); }
+
     /**
-     * Đổ kết quả một câu SELECT thẳng vào JTable.
-     *
-     * Chỉ cần đúng 3 dòng: lấy tên cột, lấy dữ liệu, gán vào model.
-     * Đây là lý do tôi tạo lớp QueryResult ở tầng db.
+     * Đổ kết quả SQL vào bảng. Tên cột SQL (Ma_HD, Tong_tien...) hiện theo ngôn ngữ đang chọn
+     * (Ui.col); các cột theo chỉ số trong moneyCols / qtyCols / pctCols được định dạng số.
      */
-    public static void fill(JTable table, QueryResult qr) {
-        DefaultTableModel m = (DefaultTableModel) table.getModel();
-        m.setDataVector(qr.rowArray(), qr.columnArray());
+    public static void fill(JTable table, QueryResult qr, int[] moneyCols, int[] qtyCols, int[] pctCols) {
+        Object[][] data = new Object[qr.rows.size()][];
+        for (int r = 0; r < data.length; r++) {
+            Object[] src = qr.rows.get(r);
+            Object[] row = new Object[src.length];
+            for (int c = 0; c < src.length; c++) {
+                Object v = src[c];
+                row[c] = has(moneyCols, c) ? (v == null ? "" : money(v))
+                       : has(qtyCols, c)   ? qty(v)
+                       : has(pctCols, c)   ? percent(v)
+                       : v instanceof String s ? val(s)
+                       : v == null ? "" : v;
+            }
+            data[r] = row;
+        }
+        String[] cols = qr.columns.stream().map(Ui::col).toArray(String[]::new);
+        ((DefaultTableModel) table.getModel()).setDataVector(data, cols);
         autoSize(table);
     }
 
-    /**
-     * Xóa trắng một bảng.
-     *
-     * <p>Bản cũ gọi {@code QueryResult.run("SELECT '' WHERE 1=0")} ba lần chỉ
-     * để vẽ ba bảng rỗng -- ba lượt đi database không cần thiết (plan/14 mục 5.9f).
-     */
-    public static void clear(JTable table) {
-        DefaultTableModel m = (DefaultTableModel) table.getModel();
-        m.setRowCount(0);
-        m.setColumnCount(0);
+    private static boolean has(int[] cols, int c) {
+        if (cols != null) for (int x : cols) if (x == c) return true;
+        return false;
     }
 
-    /** Giãn cột cho vừa nội dung. */
+    public static void clear(JTable table) {
+        ((DefaultTableModel) table.getModel()).setDataVector(new Object[0][], new Object[0]);
+    }
+
+    /** Độ rộng cột theo tiêu đề và 40 dòng đầu. */
     public static void autoSize(JTable table) {
         for (int c = 0; c < table.getColumnCount(); c++) {
-            int width = 80;
-            Object header = table.getColumnModel().getColumn(c).getHeaderValue();
-            width = Math.max(width, String.valueOf(header).length() * 9 + 20);
+            int width = Math.max(80, String.valueOf(table.getColumnModel().getColumn(c).getHeaderValue()).length() * 9 + 20);
             for (int r = 0; r < Math.min(table.getRowCount(), 40); r++) {
-                Object v = table.getValueAt(r, c);
-                width = Math.max(width, String.valueOf(v).length() * 8 + 20);
+                width = Math.max(width, String.valueOf(table.getValueAt(r, c)).length() * 8 + 20);
             }
             table.getColumnModel().getColumn(c).setPreferredWidth(Math.min(width, 400));
         }
     }
 
+    // =================================================================
+    //  TỪ ĐIỂN: SQL trả tên cột / vài chuỗi cố định bằng tiếng Việt không dấu
+    // =================================================================
+
+    /** Mỗi mục: {tiếng Việt, tiếng Anh}. */
+    private static final Map<String, String[]> COLS = new HashMap<>(), VALUES = new HashMap<>();
+    static {
+        String[] cols = {
+            "Ma_HD", "Mã HĐ", "Invoice", "Ngay", "Ngày", "Date", "Gio", "Giờ", "Time",
+            "Shop", "Cửa hàng", "Shop", "Thu_ngan", "Thu ngân", "Cashier", "Khach", "Khách", "Customer",
+            "Khach_hang", "Khách hàng", "Customer", "Trang_thai", "Trạng thái", "Status",
+            "Tong_tien", "Tổng tiền", "Total", "Quay", "Quầy", "Counter", "Dia_chi", "Địa chỉ", "Address",
+            "Tong_truoc_giam", "Tổng trước giảm", "Subtotal", "Tong_giam", "Tổng giảm", "Total discount",
+            "Tong_phai_tra", "Tổng phải trả", "Total due", "Tien_hoan", "Tiền hoàn", "Refund",
+            "Tong_sau_dieu_chinh", "Tổng sau điều chỉnh", "Total after returns",
+            "Dong", "Dòng", "Line", "San_pham", "Sản phẩm", "Product", "SL", "SL", "Qty", "DVT", "ĐVT", "Unit",
+            "Don_gia", "Đơn giá", "Unit price", "Giam_gia", "Giảm giá", "Discount",
+            "Thanh_tien", "Thành tiền", "Line total", "VAT_pct", "VAT %", "VAT %",
+            "Ma_TT", "Mã TT", "Payment", "So_tien", "Số tiền", "Amount", "Phuong_thuc", "Phương thức", "Method",
+            "Chi_tiet", "Chi tiết", "Details", "Tien_khach_dua", "Khách đưa", "Tendered",
+            "SL_mua", "SL mua", "Bought", "SL_tra", "SL trả", "Returned", "SL_da_tra", "SL đã trả", "Returned",
+            "SL_con_lai", "SL còn lại", "Remaining", "Thanh_tien_goc", "Thành tiền gốc", "Original total",
+            "Thanh_tien_moi", "Thành tiền mới", "New total", "Ngay_tra", "Ngày trả", "Return date",
+            "Cua_hang", "Cửa hàng", "Shop", "So_hoa_don", "Số hóa đơn", "Invoices", "Doanh_thu", "Doanh thu", "Revenue",
+            "Ma_vach", "Mã vạch", "Barcode", "Gia_cu", "Giá cũ", "Old price", "Gia_moi", "Giá mới", "New price",
+            "Ap_dung_tu", "Áp dụng từ", "Effective from", "Tang_phan_tram", "Tăng %", "Increase %",
+            "Ma_TN", "Mã TN", "Cashier ID", "Ten_thu_ngan", "Tên thu ngân", "Cashier",
+            "Tong_doanh_thu", "Tổng doanh thu", "Total revenue", "Gio_hang_TB", "Giỏ hàng TB", "Avg basket",
+            "Tong_hoa_don", "Tổng hóa đơn", "Invoice total", "Tien_tra_lai", "Tiền trả lại", "Refunded",
+            "Phan_tram_tra", "% trả lại", "Returned %", "Gia_ghi_tren_HD", "Giá ghi trên HĐ", "Price on invoice",
+            "Gia_hom_nay", "Giá hôm nay", "Today's price", "So_dong_hang", "Số dòng hàng", "Item lines",
+            "Ban_tu_ngay", "Bán từ ngày", "Sold from", "Ban_den_ngay", "Bán đến ngày", "Sold until",
+            "KM_phan_tram", "KM %", "Promo %", "Thanh_tien_SL1", "Giá (SL 1)", "Price (qty 1)",
+            "Chenh_lech", "Chênh lệch so với hôm trước", "Change vs. previous day"};
+        String[] values = {
+            "Tien mat", "Tiền mặt", "Cash", "The ngan hang", "Thẻ ngân hàng", "Bank card",
+            "Vi dien tu", "Ví điện tử", "E-wallet", "(khong ro)", "(không rõ)", "(unknown)",
+            "(vang lai)", "(vãng lai)", "(walk-in)", "(khach vang lai)", "(khách vãng lai)", "(walk-in customer)",
+            "Thu ngan", "Thu ngân", "Cashier", "Quan ly", "Quản lý", "Manager",
+            "PAID", "Đã thanh toán", "Paid", "VOIDED", "Đã hủy", "Voided"};
+        for (int i = 0; i < cols.length; i += 3)   COLS.put(cols[i], new String[]{cols[i + 1], cols[i + 2]});
+        for (int i = 0; i < values.length; i += 3) VALUES.put(values[i], new String[]{values[i + 1], values[i + 2]});
+    }
+
     /**
-     * Hộp thoại báo lỗi cho NHÂN VIÊN: không hiện thông điệp gốc của MySQL /
-     * Java (tên bảng, mã lỗi, stack trace) -- chi tiết đó vẫn in ra console.
-     *
-     * <p>Ngoại lệ duy nhất: lỗi nghiệp vụ do thủ tục tự báo
-     * ({@code SIGNAL SQLSTATE '45000'}) -- đó là câu viết cho người đọc
-     * ("Hoa don ... chua thu du tien"), nên hiện nguyên văn.
+     * Tên cột SQL -> tiêu đề theo ngôn ngữ đang chọn (không có trong từ điển thì giữ nguyên).
+     * Đi qua I18n.text nên cặp (vi, en) được ghi vào từ điển: bấm đổi ngôn ngữ thì tiêu đề
+     * của bảng đang mở cũng đổi theo.
+     */
+    public static String col(String sqlColumn) {
+        String[] t = COLS.get(sqlColumn);
+        return t == null ? sqlColumn : I18n.text(t[0], t[1]);
+    }
+
+    /** Chuỗi cố định do SQL trả về ("Tien mat", "(vang lai)", "PAID"...) -> theo ngôn ngữ đang chọn. */
+    public static String val(String value) {
+        if (value == null) return "";
+        String[] t = VALUES.get(value);
+        return t == null ? value : I18n.msg(t[0], t[1]);
+    }
+
+    // =================================================================
+    //  HỘP THOẠI, BỐ CỤC
+    // =================================================================
+
+    public static void warn(Component parent, String message, String title) {
+        JOptionPane.showMessageDialog(parent, message, title, JOptionPane.WARNING_MESSAGE);
+    }
+
+    /**
+     * Lỗi nghiệp vụ (SIGNAL '45000' trong thủ tục SQL, IllegalArgument...) -> hiện đúng lý do.
+     * Lỗi kỹ thuật -> câu chung cho thu ngân, chi tiết in ra console.
      */
     public static void error(Component parent, Throwable e) {
         e.printStackTrace();
-        String reason = businessReason(e);
-        String msg = reason != null
-                ? I18n.msg("Không thực hiện được thao tác:\n", "The action could not be completed:\n") + reason
-                : I18n.msg("Có lỗi khi làm việc với dữ liệu.\n"
-                           + "Vui lòng thử lại; nếu vẫn lỗi, hãy báo quản lý.",
-                           "Something went wrong while working with the data.\n"
-                           + "Please try again. If it keeps failing, please tell your manager!");
-        JOptionPane.showMessageDialog(parent, msg, I18n.msg("Có lỗi xảy ra", "Error"),
-                JOptionPane.ERROR_MESSAGE);
-    }
-
-    /** Thông điệp của SIGNAL '45000' nằm đâu đó trong chuỗi nguyên nhân, hoặc null. */
-    private static String businessReason(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof java.sql.SQLException
-                    && "45000".equals(((java.sql.SQLException) t).getSQLState())) {
-                return t.getMessage();
-            }
-            if (t instanceof IllegalArgumentException || t instanceof IllegalStateException) {
-                return t.getMessage();
+            boolean business = (t instanceof SQLException sql && "45000".equals(sql.getSQLState()))
+                            || t instanceof IllegalArgumentException || t instanceof IllegalStateException;
+            if (business) {
+                JOptionPane.showMessageDialog(parent,
+                        I18n.msg("Không thực hiện được thao tác này:\n", "The action could not be completed:\n") + t.getMessage(),
+                        I18n.msg("Không được phép", "Not Allowed"), JOptionPane.WARNING_MESSAGE);
+                return;
             }
         }
-        return null;
+        JOptionPane.showMessageDialog(parent, I18n.msg(
+                "Có lỗi khi làm việc với dữ liệu.\nVui lòng thử lại. Nếu vẫn lỗi, hãy báo quản lý!",
+                "Something went wrong while working with the data.\n"
+              + "Please try again. If it keeps failing, please tell your manager!"),
+                I18n.msg("Lỗi", "Error"), JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * Chạy việc gọi DB NGOÀI luồng giao diện (EDT) để cửa sổ không bị đơ; xong thì quay lại EDT:
+     * chạy `after` trước (vd. mở lại nút), rồi `onSuccess` -- hoặc hộp thoại lỗi.
+     */
+    public static <T> void async(Component parent, Supplier<T> work, Runnable after, Consumer<T> onSuccess) {
+        new SwingWorker<T, Void>() {
+            @Override protected T doInBackground() { return work.get(); }
+            @Override protected void done() {
+                if (after != null) after.run();
+                T result;
+                try {
+                    result = get();
+                } catch (Exception ex) {
+                    error(parent, ex);
+                    return;
+                }
+                onSuccess.accept(result);
+            }
+        }.execute();
+    }
+
+    /** Hộp thoại OK / Cancel có ô nhập, con trỏ đặt sẵn trong `focus`; Enter = OK. */
+    public static boolean ask(Component parent, String title, JComponent focus, Object... message) {
+        focus.addAncestorListener(new AncestorListener() {
+            @Override public void ancestorAdded(AncestorEvent e)   { SwingUtilities.invokeLater(focus::requestFocusInWindow); }
+            @Override public void ancestorRemoved(AncestorEvent e) { }
+            @Override public void ancestorMoved(AncestorEvent e)   { }
+        });
+        return JOptionPane.showConfirmDialog(parent, message, title, JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION;
+    }
+
+    public static DocumentListener onChange(Runnable r) {
+        return new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e)  { r.run(); }
+            @Override public void removeUpdate(DocumentEvent e)  { r.run(); }
+            @Override public void changedUpdate(DocumentEvent e) { r.run(); }
+        };
+    }
+
+    /** Một hàng component xếp trái -> phải. */
+    public static JPanel row(Component... cs) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        for (Component c : cs) p.add(c);
+        return p;
+    }
+
+    /** Form 2 cột: form("Label:", component, "Label 2:", component2, ...). */
+    public static JPanel form(Object... pairs) {
+        JPanel p = new JPanel(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(4, 6, 4, 6);
+        g.anchor = GridBagConstraints.WEST;
+        g.fill = GridBagConstraints.HORIZONTAL;
+        for (int i = 0; i < pairs.length; i += 2) {
+            g.gridy = i / 2;
+            g.gridx = 0; g.weightx = 0;
+            p.add(new JLabel(String.valueOf(pairs[i])), g);
+            g.gridx = 1; g.weightx = 1;
+            p.add((Component) pairs[i + 1], g);
+        }
+        return p;
     }
 
     public static JPanel titled(String title, JComponent inner) {
@@ -468,16 +407,5 @@ public class Ui {
         p.setBorder(BorderFactory.createTitledBorder(title));
         p.add(inner, BorderLayout.CENTER);
         return p;
-    }
-
-    public static JTextArea sqlBox(String sql) {
-        JTextArea ta = new JTextArea(sql);
-        ta.setEditable(false);
-        ta.setFont(MONO);
-        ta.setBackground(new Color(30, 32, 38));
-        ta.setForeground(new Color(190, 230, 190));
-        ta.setCaretColor(Color.WHITE);
-        ta.setMargin(new Insets(8, 8, 8, 8));
-        return ta;
     }
 }

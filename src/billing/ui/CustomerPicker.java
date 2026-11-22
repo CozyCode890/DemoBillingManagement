@@ -4,319 +4,135 @@ import billing.dao.LookupDao;
 import billing.model.CustomerRef;
 
 import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ====================================================================
- *  CustomerPicker -- ô SỐ ĐIỆN THOẠI + popup gợi ý khách hàng
- * ====================================================================
+ * Ô "Customer (phone)": gõ >= 3 chữ số -> chờ 250 ms -> tìm theo TIỀN TỐ số điện thoại
+ * (sp_search_customers_by_phone) -> chọn trong danh sách gợi ý (chuột, hoặc lên/xuống + Enter).
  *
- *  <p><b>Bất biến (plan/14 mục 3.5):</b>
- *  <pre>
- *  getSelected() != null   &lt;=&gt;   tfPhone.getText().trim() == selected.phone
- *  </pre>
- *
- *  <p>Mọi thay đổi nội dung ô làm vỡ đẳng thức này đều đưa về <b>khách vãng
- *  lai</b>. Bất biến được kiểm <b>hai lần</b>: {@code DocumentListener} xoá
- *  {@code selected} ở chỗ GHI, và {@link #getSelected()} kiểm lại ở chỗ ĐỌC.
- *  Lỗi #10 là một lỗi "quên xoá ở một nhánh" -- phép kiểm ở chỗ đọc thì không
- *  nhánh nào thoát được.
- *
- *  <p>Bốn điểm khác bản cũ ({@code NewInvoicePanel} dòng 356-527):
- *  <ul>
- *    <li><b>Chọn xong thì ô chứa SỐ ĐIỆN THOẠI</b>, không chứa
- *        {@code "CUS001 - Nguyen Van A - 0901234567"}. Tên khách đi vào nhãn
- *        bên cạnh, nên gõ thêm một ký tự vẫn là một lần tìm hợp lệ (lỗi #12).</li>
- *    <li><b>Không giật con trỏ</b> (lỗi #13): {@code JPopupMenu} không nhận
- *        focus, và không gọi {@code requestFocusInWindow()} -- mũi lên/xuống/
- *        Enter/Esc xử lý ngay trên ô nhập, con trỏ ở lại trong ô.</li>
- *    <li><b>Chỉ tìm khi nội dung toàn chữ số và dài &ge; 3</b>, có
- *        <b>hoãn 250ms</b> và chạy trong {@code SwingWorker}: gõ 10 số là
- *        1-2 câu SQL, không phải 10, và không câu nào chạy trên EDT (lỗi #14).</li>
- *    <li><b>Không gọi lại database</b> để lấy object vừa hiện trên màn hình:
- *        popup giữ {@code List&lt;CustomerRef&gt;} của lần tìm.</li>
- *  </ul>
+ * Chỉ khách ĐƯỢC CHỌN mới gắn vào hóa đơn; gõ đủ số mà không chọn vẫn là khách vãng lai.
  */
 public class CustomerPicker extends JPanel {
 
-    /** Dưới 3 chữ số thì mọi khách đều khớp -- một câu SQL không nói gì cả. */
-    private static final int MIN_DIGITS = 3;
-
-    /** Hoãn giữa ký tự cuối và câu SQL. Gõ nhanh hơn thế thì timer khởi động lại. */
-    private static final int DEBOUNCE_MS = 250;
-
     private final LookupDao lookupDao;
-
     private final JTextField tfPhone  = new JTextField(14);
     private final JLabel     lbStatus = new JLabel();
+    private final DefaultListModel<CustomerRef> matches = new DefaultListModel<>();
+    private final JList<CustomerRef> list  = new JList<>(matches);
+    private final JPopupMenu popup = new JPopupMenu();
+    private final Timer debounce = new Timer(250, e -> runSearch());   // gõ 10 số = 1-2 câu SQL, không phải 10
 
-    private final DefaultListModel<CustomerRef> listModel = new DefaultListModel<>();
-    private final JList<CustomerRef>            list      = new JList<>(listModel);
-    private final JPopupMenu                    popup     = new JPopupMenu();
-    private final JScrollPane                   popupScroll;
-
-    private final Timer debounce;
-
-    /** Khách đang chọn, hoặc null = khách vãng lai. */
     private CustomerRef selected;
-
-    /** Kết quả lần tìm gần nhất -- để chọn xong KHÔNG phải gọi lại database. */
-    private List<CustomerRef> lastMatches = new ArrayList<>();
-
-    /** Đang tự đặt nội dung ô -- đừng để DocumentListener hiểu đó là người gõ. */
-    private boolean settingText;
+    private boolean settingText;          // đang tự đổi chữ trong ô -> đừng coi là người dùng gõ
 
     public CustomerPicker(LookupDao lookupDao) {
+        super(new FlowLayout(FlowLayout.LEFT, 6, 0));
         this.lookupDao = lookupDao;
-
-        setLayout(new FlowLayout(FlowLayout.LEFT, 6, 0));
         setOpaque(false);
 
         tfPhone.setToolTipText(I18n.text(
-                "<html>Gõ SỐ ĐIỆN THOẠI của khách (từ 3 chữ số trở lên)"
-                + " rồi chọn từ danh sách gợi ý.<br>"
-                + "Chỉ khách <b>được chọn từ danh sách</b> mới được gắn vào hóa đơn"
-                + " -- gõ đủ số mà không chọn vẫn là khách vãng lai.</html>",
-                "<html>Type the customer's PHONE NUMBER (3 digits or more)"
-                + " and pick from the suggestions.<br>"
-                + "Only a customer <b>picked from the list</b> is added to the bill"
-                + " -- typing the full number without picking keeps it a walk-in customer.</html>"));
-
-        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setFixedCellHeight(22);
-        list.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        list.setFocusable(false);                 // con tro o lai trong o nhap
-        list.setCellRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> l, Object value, int index,
-                                                          boolean sel, boolean focus) {
-                super.getListCellRendererComponent(l, value, index, sel, focus);
-                if (value instanceof CustomerRef) {
-                    setText(((CustomerRef) value).display());
-                }
-                return this;
-            }
-        });
+                "<html>Gõ SỐ ĐIỆN THOẠI của khách (từ 3 chữ số) rồi chọn trong danh sách gợi ý.<br>"
+              + "Chỉ khách <b>được chọn trong danh sách</b> mới được gắn vào hóa đơn.</html>",
+                "<html>Type the customer's PHONE NUMBER (3 digits or more) and pick from the suggestions.<br>"
+              + "Only a customer <b>picked from the list</b> is added to the bill.</html>"));
+        list.setFocusable(false);         // con trỏ ở lại trong ô nhập
         list.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) { commitSelection(); }
         });
-
-        popupScroll = new JScrollPane(list);
-        popupScroll.setBorder(BorderFactory.createEmptyBorder());
-        popup.setFocusable(false);                // KHONG lay focus khoi o nhap
-        popup.setBorder(BorderFactory.createLineBorder(Color.GRAY));
-        popup.add(popupScroll);
-
-        debounce = new Timer(DEBOUNCE_MS, e -> runSearch());
+        popup.setFocusable(false);
+        popup.add(new JScrollPane(list));
         debounce.setRepeats(false);
 
-        tfPhone.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e)  { onTyped(); }
-            @Override public void removeUpdate(DocumentEvent e)  { onTyped(); }
-            @Override public void changedUpdate(DocumentEvent e) { onTyped(); }
-        });
-
+        tfPhone.getDocument().addDocumentListener(Ui.onChange(this::onTyped));
         tfPhone.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) { onKey(e); }
         });
-
         add(tfPhone);
         add(lbStatus);
+        I18n.markDynamicText(lbStatus);                   // chữ ghép theo khách -> tự vẽ lại khi đổi ngôn ngữ
+        I18n.onLanguageChange(this, this::updateStatus);
         updateStatus();
     }
 
-    /** Ô nhập, để chỗ gọi đặt tooltip / kích thước / thứ tự tab nếu cần. */
-    public JTextField field() { return tfPhone; }
-
-    /**
-     * Khách đang chọn, hoặc {@code null} = khách vãng lai.
-     *
-     * <p>KHÔNG BAO GIỜ trả về một khách mà số điện thoại của họ khác nội dung
-     * đang hiện trong ô -- bất biến mục 3.5, kiểm lần thứ hai ngay tại đây.
-     */
+    /** Khách đã chọn -- CHỈ khi ô nhập vẫn đúng số điện thoại của khách đó; null = khách vãng lai. */
     public CustomerRef getSelected() {
-        if (selected == null) return null;
-        return selected.phone.equals(tfPhone.getText().trim()) ? selected : null;
+        return selected != null && selected.phone.equals(tfPhone.getText().trim()) ? selected : null;
     }
 
-    /**
-     * Xoá ô và khách đang chọn. {@code resetForm()} của tab 1 gọi hàm này sau
-     * khi lưu, nếu không thì hoá đơn TIẾP THEO tự động gắn cho khách của hoá
-     * đơn trước (plan/14 lỗi #11).
-     *
-     * <p>Dừng luôn timer: nó có thể còn đang đếm 250ms khi người dùng đăng xuất
-     * giữa lúc đang gõ (plan/14 rủi ro #12).
-     */
     public void clear() {
         debounce.stop();
-        hidePopup();
+        popup.setVisible(false);
         selected = null;
         setTextQuietly("");
         updateStatus();
     }
 
-    // -----------------------------------------------------------------
-
     private void onTyped() {
         if (settingText) return;
-
-        // Bất biến mục 3.5 ở chỗ GHI: nội dung ô không còn là số điện thoại
-        // của khách đang chọn -> về khách vãng lai, NGAY, không chờ gì.
-        if (selected != null && !selected.phone.equals(tfPhone.getText().trim())) {
-            selected = null;
-        }
+        String s = tfPhone.getText().trim();
+        if (selected != null && !selected.phone.equals(s)) selected = null;     // sửa số -> bỏ chọn
         updateStatus();
-
-        if (digitsOnly(tfPhone.getText().trim())) {
+        if (s.length() >= 3 && s.chars().allMatch(Character::isDigit)) {
             debounce.restart();
         } else {
             debounce.stop();
-            hidePopup();
+            popup.setVisible(false);
         }
     }
 
-    /** Toàn chữ số và dài &ge; {@value #MIN_DIGITS}. */
-    private static boolean digitsOnly(String s) {
-        if (s.length() < MIN_DIGITS) return false;
-        for (int i = 0; i < s.length(); i++) {
-            if (!Character.isDigit(s.charAt(i))) return false;
-        }
-        return true;
-    }
-
-    /**
-     * Một câu SQL, NGOÀI EDT.
-     *
-     * <p>{@code p_prefix} ở đây chắc chắn là chuỗi toàn chữ số, nên không có ký
-     * tự {@code %} hay {@code _} lọt vào làm rộng điều kiện {@code LIKE} của
-     * thủ tục.
-     */
+    /** Tìm NGOÀI EDT; kết quả về muộn (người dùng đã gõ tiếp) thì bỏ. */
     private void runSearch() {
-        final String prefix = tfPhone.getText().trim();
-        if (!digitsOnly(prefix)) return;
-
+        String prefix = tfPhone.getText().trim();
         new SwingWorker<List<CustomerRef>, Void>() {
-            @Override
-            protected List<CustomerRef> doInBackground() {
-                return lookupDao.searchCustomersByPhone(prefix);
-            }
-
-            @Override
-            protected void done() {
-                // Panel co the da bi dispose trong luc cho (dang xuat giua luc
-                // dang go) -- ve popup tren mot o khong con tren man hinh thi
-                // popup treo lo lung giua desktop.
-                if (!tfPhone.isShowing()) return;
-                // Nguoi dung da go tiep -> ket qua nay da cu, bo di.
-                if (!prefix.equals(tfPhone.getText().trim())) return;
-
-                List<CustomerRef> matches;
+            @Override protected List<CustomerRef> doInBackground() { return lookupDao.searchCustomersByPhone(prefix); }
+            @Override protected void done() {
+                if (!tfPhone.isShowing() || !prefix.equals(tfPhone.getText().trim())) return;
+                matches.clear();
                 try {
-                    matches = get();
+                    get().forEach(matches::addElement);
                 } catch (Exception ex) {
-                    // Tim khach hang that bai KHONG duoc chan viec lap hoa don:
-                    // khach vang lai van ban duoc. Mot dong ra console la du.
                     System.out.println("[CustomerPicker] Cannot find customer: " + ex.getMessage());
-                    hidePopup();
+                }
+                if (matches.isEmpty()) {
+                    popup.setVisible(false);
                     return;
                 }
-
-                lastMatches = matches;
-                listModel.clear();
-                for (CustomerRef c : matches) listModel.addElement(c);
-
-                if (matches.isEmpty()) {
-                    hidePopup();
-                } else {
-                    showPopup();
-                }
+                list.setSelectedIndex(0);
+                list.setVisibleRowCount(Math.min(matches.size(), 8));
+                popup.pack();
+                popup.show(tfPhone, 0, tfPhone.getHeight());
+                tfPhone.requestFocusInWindow();
             }
         }.execute();
     }
 
-    private void showPopup() {
-        int rows   = Math.min(listModel.size(), 8);
-        int height = rows * list.getFixedCellHeight() + 6;
-        int width  = Math.max(tfPhone.getWidth(), contentWidth() + 24);
-        popupScroll.setPreferredSize(new Dimension(width, Math.min(height, 200)));
-        popup.setPreferredSize(null);
-        popup.pack();
-        if (list.getSelectedIndex() < 0 && !listModel.isEmpty()) {
-            list.setSelectedIndex(0);
-        }
-        popup.show(tfPhone, 0, tfPhone.getHeight());
-        // show() co the doi focus tuy look-and-feel; dua con tro ve o nhap.
-        tfPhone.requestFocusInWindow();
-    }
-
-    private int contentWidth() {
-        FontMetrics fm = list.getFontMetrics(list.getFont());
-        int max = 0;
-        for (int i = 0; i < listModel.size(); i++) {
-            max = Math.max(max, fm.stringWidth(listModel.get(i).display()));
-        }
-        return max;
-    }
-
-    private void hidePopup() {
-        if (popup.isVisible()) popup.setVisible(false);
-    }
-
-    /**
-     * Mũi lên / xuống / Enter / Esc xử lý ngay trên ô nhập.
-     *
-     * <p>Chỉ {@code consume()} khi popup đang hiện: Enter lúc popup đóng vẫn
-     * phải đi tới chỗ khác (ví dụ nút mặc định của hộp thoại).
-     */
     private void onKey(KeyEvent e) {
-        if (!popup.isVisible()) return;
-        int n = listModel.size();
-        if (n == 0) return;
+        if (!popup.isVisible() || matches.isEmpty()) return;
         int i = list.getSelectedIndex();
-
         switch (e.getKeyCode()) {
-            case KeyEvent.VK_DOWN:
-                list.setSelectedIndex(Math.min(i + 1, n - 1));
-                list.ensureIndexIsVisible(list.getSelectedIndex());
-                e.consume();
-                break;
-            case KeyEvent.VK_UP:
-                list.setSelectedIndex(Math.max(i - 1, 0));
-                list.ensureIndexIsVisible(list.getSelectedIndex());
-                e.consume();
-                break;
-            case KeyEvent.VK_ENTER:
-                commitSelection();
-                e.consume();
-                break;
-            case KeyEvent.VK_ESCAPE:
-                hidePopup();
-                e.consume();
-                break;
-            default:
-                break;
+            case KeyEvent.VK_DOWN   -> list.setSelectedIndex(Math.min(i + 1, matches.size() - 1));
+            case KeyEvent.VK_UP     -> list.setSelectedIndex(Math.max(i - 1, 0));
+            case KeyEvent.VK_ENTER  -> commitSelection();
+            case KeyEvent.VK_ESCAPE -> popup.setVisible(false);
+            default -> { return; }
         }
+        list.ensureIndexIsVisible(list.getSelectedIndex());
+        e.consume();
     }
 
-    /** Chốt khách đang trỏ trong popup: ô nhận SỐ ĐIỆN THOẠI, tên vào nhãn. */
     private void commitSelection() {
-        int i = list.getSelectedIndex();
-        if (i < 0 || i >= lastMatches.size()) return;
-
-        CustomerRef c = lastMatches.get(i);
-        setTextQuietly(c.phone);       // o chua SO DIEN THOAI (loi #12)
-        selected = c;                  // dat SAU khi doi text, de onTyped khong xoa
+        CustomerRef c = list.getSelectedValue();
+        if (c == null) return;
+        setTextQuietly(c.phone);          // ô nhập giữ SỐ ĐIỆN THOẠI, tên hiện ở nhãn bên cạnh
+        selected = c;
         updateStatus();
-        hidePopup();
-        debounce.stop();               // noi dung o vua doi -> dung tim lai
+        popup.setVisible(false);
+        debounce.stop();
         tfPhone.requestFocusInWindow();
         tfPhone.setCaretPosition(tfPhone.getText().length());
     }
@@ -330,22 +146,10 @@ public class CustomerPicker extends JPanel {
         }
     }
 
-    /**
-     * Nhãn cạnh ô: bất biến mục 3.5 <b>kiểm được bằng mắt</b>.
-     *
-     * <p>Người dùng thấy hoá đơn sắp gắn cho ai TRƯỚC khi bấm lưu, thay vì phát
-     * hiện ra sau (lỗi #10, #11, #47).
-     */
     private void updateStatus() {
         CustomerRef c = getSelected();
-        if (c == null) {
-            lbStatus.setText(I18n.text("(khách vãng lai)", "(walk-in customer)"));
-            lbStatus.setForeground(Color.GRAY);
-            lbStatus.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-        } else {
-            lbStatus.setText("→ " + c.shortLabel());
-            lbStatus.setForeground(new Color(0, 110, 0));
-            lbStatus.setFont(Ui.BOLD);
-        }
+        lbStatus.setText(c == null ? I18n.msg("(khách vãng lai)", "(walk-in customer)") : "→ " + c.shortLabel());
+        lbStatus.setForeground(c == null ? Color.GRAY : Ui.GREEN);
+        lbStatus.setFont(c == null ? new Font("Segoe UI", Font.ITALIC, 12) : Ui.BOLD);
     }
 }

@@ -1,20 +1,26 @@
 -- =====================================================================
---  04_routines.sql  --  Tập hợp Hàm (Functions) và Thủ tục (Procedures)
---  Dành riêng cho DEV SQL quản lý và tối ưu hóa
---  Chạy bằng:  mysql -u root -p retail_billing < 04_routines.sql
+--  04_routines.sql -- Retail Invoicing (Topic 19)
+--  Doi chieu 01_schema.sql (15 bang) & 16 Business Rules (BR1 - BR16,
+--  dinh nghia day du: docs/09-BUSINESS-RULES.md)
+--  Chay sau 01_schema.sql: mysql -u root -p retail_billing < 04_routines.sql
 -- =====================================================================
---  QUY ƯỚC CHUNG (CONTRACT VỚI DEV JAVA BACKEND):
---  1. Tiền tố hàm trả về giá trị đơn (Scalar Function): fn_<ten_ham>
---  2. Tiền tố thủ tục (Stored Procedure):             sp_<ten_thu_tuc>
---  3. Tiền tố tham số đầu vào:                        p_<ten_tham_so>
---  4. Tiền tố biến nội bộ:                            v_<ten_bien>
---  5. Tên cột trả về (Alias) trong câu SELECT phải giữ cố định vì Java
---     sẽ dùng đúng tên cột đó để ánh xạ vào Model/JTable.
+--  LUU Y:
+--  1. Caller phai BEGIN/START TRANSACTION, goi create -> add lines ->
+--     add payments -> settle -> COMMIT; neu loi thi ROLLBACK.
+--  2. Khong luu cart nhap vao CSDL (BR3); header chi ton tai chua commit
+--     trong transaction checkout.
+--  QUY UOC CHUNG (CONTRACT VOI DEV JAVA BACKEND):
+--  1. Tien to ham tra ve gia tri don (Scalar Function): fn_<ten_ham>
+--  2. Tien to thu tuc (Stored Procedure):             sp_<ten_thu_tuc>
+--  3. Tien to tham so dau vao / ra:                   p_<ten_tham_so>
+--  4. Tien to bien noi bo:                            v_<ten_bien>
+--  5. Ten cot tra ve (Alias) trong cau SELECT giu co dinh de Java
+--     anh xa vao Model/JTable.
 -- =====================================================================
 
 USE retail_billing;
 
--- Xóa các hàm và thủ tục cũ nếu đã tồn tại để tránh lỗi trùng lặp khi chạy lại
+-- Xoa cac ham, thu tuc va trigger cu neu da ton tai de tranh loi khi chay lai
 DROP FUNCTION IF EXISTS fn_get_product_price;
 DROP FUNCTION IF EXISTS fn_active_promo_pct;
 DROP FUNCTION IF EXISTS fn_line_discount;
@@ -31,16 +37,18 @@ DROP FUNCTION IF EXISTS fn_invoice_in_revenue;
 
 DROP PROCEDURE IF EXISTS sp_lookup_counters;
 DROP PROCEDURE IF EXISTS sp_lookup_cashiers;
+DROP PROCEDURE IF EXISTS sp_lookup_managers;
 DROP PROCEDURE IF EXISTS sp_lookup_customers;
 DROP PROCEDURE IF EXISTS sp_search_customers_by_phone;
 DROP PROCEDURE IF EXISTS sp_get_all_products;
 DROP PROCEDURE IF EXISTS sp_get_active_promo;
+DROP PROCEDURE IF EXISTS sp_add_price_history;
 
 DROP PROCEDURE IF EXISTS sp_get_recent_invoices;
 DROP PROCEDURE IF EXISTS sp_get_invoice_header;
 DROP PROCEDURE IF EXISTS sp_get_invoice_lines;
 DROP PROCEDURE IF EXISTS sp_get_invoice_payments;
-DROP PROCEDURE IF EXISTS sp_get_invoice_returns;   -- da bo, thay bang sp_get_invoice_adjusted
+DROP PROCEDURE IF EXISTS sp_get_invoice_returns;
 DROP PROCEDURE IF EXISTS sp_get_invoice_adjusted;
 DROP PROCEDURE IF EXISTS sp_get_returnable_lines;
 DROP PROCEDURE IF EXISTS sp_get_invoice_edit_fields;
@@ -61,7 +69,6 @@ DROP PROCEDURE IF EXISTS sp_void_invoice;
 DROP PROCEDURE IF EXISTS sp_add_return;
 DROP PROCEDURE IF EXISTS sp_delete_return;
 
-DROP PROCEDURE IF EXISTS sp_authenticate_account;
 DROP PROCEDURE IF EXISTS sp_delete_invoice;
 DROP PROCEDURE IF EXISTS sp_update_invoice_header;
 DROP PROCEDURE IF EXISTS sp_update_invoice_line;
@@ -70,22 +77,49 @@ DROP PROCEDURE IF EXISTS sp_delete_invoice_line;
 DROP PROCEDURE IF EXISTS sp_wipe_transactions;
 DROP PROCEDURE IF EXISTS sp_wipe_all_data;
 
+DROP TRIGGER IF EXISTS trg_price_history_bi;
+DROP TRIGGER IF EXISTS trg_price_history_bu;
+DROP TRIGGER IF EXISTS trg_price_history_bd;
+DROP TRIGGER IF EXISTS trg_invoice_bi;
+DROP TRIGGER IF EXISTS trg_invoice_bu;
+DROP TRIGGER IF EXISTS trg_invoice_line_bi;
+DROP TRIGGER IF EXISTS trg_invoice_line_bu;
+DROP TRIGGER IF EXISTS trg_invoice_line_bd;
+DROP TRIGGER IF EXISTS trg_return_bi;
+DROP TRIGGER IF EXISTS trg_return_bu;
+DROP TRIGGER IF EXISTS trg_return_bd;
+DROP TRIGGER IF EXISTS trg_payment_bi;
+DROP TRIGGER IF EXISTS trg_payment_bu;
+DROP TRIGGER IF EXISTS trg_payment_bd;
+DROP TRIGGER IF EXISTS trg_cash_payment_bi;
+DROP TRIGGER IF EXISTS trg_cash_payment_bu;
+DROP TRIGGER IF EXISTS trg_cash_payment_bd;
+DROP TRIGGER IF EXISTS trg_card_payment_bi;
+DROP TRIGGER IF EXISTS trg_card_payment_bu;
+DROP TRIGGER IF EXISTS trg_card_payment_bd;
+DROP TRIGGER IF EXISTS trg_ewallet_payment_bi;
+DROP TRIGGER IF EXISTS trg_ewallet_payment_bu;
+DROP TRIGGER IF EXISTS trg_ewallet_payment_bd;
+
+DROP VIEW IF EXISTS vw_cash_change_due;
+DROP VIEW IF EXISTS vw_invoice_line_total;
 DELIMITER $$
 
 -- =====================================================================
--- PHẦN 1: HÀM SQL (STORED FUNCTIONS - TRẢ VỀ GIÁ TRỊ ĐƠN)
+-- PHAN 1: HAM SQL (STORED FUNCTIONS - TRA VE GIA TRI DON)
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 1.1 fn_get_product_price: Tìm giá hợp lệ của sản phẩm tại một ngày
---     (Trái tim của bài toán lịch sử giá)
+-- 1.1 fn_get_product_price (BR6, BR8):
+--     Tim gia hieu luc cua san pham tai mot ngay (Valid_From_Date <= p_date
+--     gan nhat).
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_get_product_price(
     p_barcode VARCHAR(20),
     p_date    DATE
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_price DECIMAL(12,2) DEFAULT NULL;
@@ -102,33 +136,16 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.2 fn_active_promo_pct: Phan tram giam cua khuyen mai TOT NHAT dang ap
---     dung cho san pham tai mot ngay. Khong co khuyen mai -> 0.00.
---
---     DAY LA BAN CHEP THU HAI cua dieu kien chon khuyen mai: ban thu nhat
---     la sp_get_active_promo (muc 2.6). plan/14 muc 3.2 da tu choi tao ban
---     thu hai nay -- va luc do la dung, vi khi do KHONG CO code SQL nao can
---     tinh Discount. Tien de do doi o khoi 6: seed sinh Invoice_Line.Discount
---     bang SQL (plan/15 muc 3.1).
---
---     Hai ban chep nay co CHOT BANG SO, khong phai co loi hua:
---       - kich ban #76: ham tra dung cai sp_get_active_promo tra, tren mot
---         luoi ma vach x ngay
---       - kich ban #77: cong thuc giam gia cua SQL khop
---         NewInvoicePanel.lineDiscount cua Java, tung dong
---     Sua mot ban thi hai kich ban do sai ngay. DUNG sua mot ben.
---
---     Vi sao MAX(...) chu khong ORDER BY ... LIMIT 1: khi chi lay MOT cot
---     thi hai cach cho cung ket qua, va MAX() doc duoc trong mot cau SELECT
---     INTO. sp_get_active_promo phai dung ORDER BY vi no con tra Promo_ID
---     va Rule_Description.
+-- 1.2 fn_active_promo_pct (BR11):
+--     Phan tram giam cua khuyen mai TOT NHAT dang ap dung cho san pham
+--     tai mot ngay (khong cong don). Khong co khuyen mai -> 0.00.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_active_promo_pct(
     p_barcode VARCHAR(20),
     p_date    DATE
 )
 RETURNS DECIMAL(5,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_pct DECIMAL(5,2) DEFAULT NULL;
@@ -147,17 +164,8 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.3 fn_line_discount: Tien giam cua CA DONG hang tai ngay ban
---     discount = ROUND(qty * price * pct / 100, 2), voi pct la cai
---     fn_active_promo_pct tra ve tai ngay do.
---
---     Ham nay ton tai de bat bien G2 (plan/15 muc 3.3) chi la MOT LOI GOI
---     HAM o ca hai cho: vong lap sinh seed trong 02_seed.sql, va quy tac R2
---     trong 05_invariants.sql. Viet lai bieu thuc o hai cho la hai ban chep
---     cua cung mot cong thuc, va mot ban sai thi ban kia dong y voi no.
---
---     Khop TUNG DONG voi NewInvoicePanel.lineDiscount cua Java -- kich ban
---     #77 chot bang so tren luoi SL x gia x phan tram.
+-- 1.3 fn_line_discount (BR5, BR9, BR11):
+--     Tien giam cua ca dong hang tai ngay ban.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_line_discount(
     p_barcode    VARCHAR(20),
@@ -166,7 +174,7 @@ CREATE FUNCTION fn_line_discount(
     p_unit_price DECIMAL(12,2)
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     RETURN ROUND(p_quantity * p_unit_price
@@ -175,30 +183,11 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.4 fn_next_invoice_id: Tự động sinh mã hóa đơn tiếp theo (INV-xxxx)
--- ---------------------------------------------------------------------
-CREATE FUNCTION fn_next_invoice_id()
-RETURNS VARCHAR(30)
-DETERMINISTIC
-READS SQL DATA
-BEGIN
-    DECLARE v_max_seq INT DEFAULT 0;
-
-    SELECT COALESCE(MAX(CAST(SUBSTRING(Invoice_ID, 5) AS UNSIGNED)), 0)
-    INTO   v_max_seq
-    FROM   Invoice
-    WHERE  Invoice_ID REGEXP '^INV-[0-9]+$';
-
-    RETURN CONCAT('INV-', LPAD(v_max_seq + 1, 4, '0'));
-END$$
-
-
--- ---------------------------------------------------------------------
--- 1.5 fn_next_payment_id: Tự động sinh mã thanh toán tiếp theo (PAY-xxxx)
+-- 1.4 fn_next_payment_id: Tu dong sinh ma thanh toan tiep theo (PAY-xxxx)
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_next_payment_id()
 RETURNS VARCHAR(20)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_max_seq INT DEFAULT 0;
@@ -213,18 +202,11 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.6 fn_return_refund: Tien hoan lai cho p_quantity don vi cua MOT dong hoa don
---     Tra bao nhieu phan cua dong thi hoan lai dung bay nhieu phan tien cua dong
---     (giam gia cua dong cung duoc chia theo ty le do).
---     DAY LA BAN DUY NHAT CUA CONG THUC NAY -- xem plan/12 muc 3.1.
---     sp_get_invoice_returns va sp_report_big_returns deu goi vao day.
---
---     Luu y cho nguoi hoc: tien hoan KHONG bang SL_tra * Don_gia khi dong co
---     giam gia. Vi du INV-0001 dong 1 cua seed (mua 2, don gia 28.000, giam
---     4.480 -- thanh tien 51.520): tra 1 don vi hoan 25.760 chu khong phai
---     23.520. INV-0001 la hoa don mau cua ca du an va seed ep no o trang thai
---     'PAID' co 3 dong (02_seed.sql, tim 'v_sample'), nen vi du nay CHAY DUOC
---     tren seed moi nap -- khong chi la mot con so trong comment.
+-- 1.5 fn_return_refund (BR16):
+--     Tien hoan lai cho p_quantity don vi cua MOT dong hoa don theo don
+--     gia thuc te sau chiet khau:
+--     Effective_Price = ((Quantity * Unit_Price) - Discount) / Quantity
+--     Amount_Refunded = Return_Quantity * Effective_Price
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_return_refund(
     p_invoice_id  VARCHAR(30),
@@ -232,7 +214,7 @@ CREATE FUNCTION fn_return_refund(
     p_quantity    DECIMAL(10,3)
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_refund DECIMAL(12,2) DEFAULT NULL;
@@ -244,27 +226,19 @@ BEGIN
     WHERE  l.Invoice_ID  = p_invoice_id
       AND  l.Line_Number = p_line_number;
 
-    -- Khong tim thay dong: tra 0 thay vi NULL, de SUM() o bao cao khong bi
-    -- NULL hoa ca nhom.
     RETURN COALESCE(v_refund, 0.00);
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.7 fn_next_return_id: So thu tu lan tra ke tiep CUA MOT DONG hoa don
---     Khoa chinh bang `Return` la (Invoice_ID, Line_Number, Return_ID) nen
---     Return_ID chi can duy nhat trong pham vi mot dong -- dung nhu seed dang
---     danh so (moi dong deu bat dau tu 1). AUTO_INCREMENT khong lam duoc viec nay.
---
---     MAX + 1 an toan VI sp_add_return chi goi ham nay SAU khi da khoa dong
---     Invoice_Line bang FOR UPDATE.
+-- 1.6 fn_next_return_id: So thu tu lan tra ke tiep cua mot dong hoa don
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_next_return_id(
     p_invoice_id  VARCHAR(30),
     p_line_number INT
 )
 RETURNS INT
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_max INT DEFAULT 0;
@@ -280,18 +254,14 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.8 fn_invoice_amount_due: Tong so tien hoa don PHAI thu
---     Dung dung cong thuc cua sp_get_invoice_header (Tong_phai_tra).
---     Hoa don khong co dong hang nao -> tra 0.00 (khong phai NULL), nen
---     NGUOI GOI phai tu kiem "co dong hang hay khong" truoc khi so sanh:
---     0 >= 0 la TRUE, va mot hoa don rong KHONG bao gio duoc coi la da thu
---     du (plan/13 muc 3.4 diem 2).
+-- 1.7 fn_invoice_amount_due (BR9): Tong so tien hoa don phai thu
+--     (Don gia da bao gom thue VAT nen khong cong them thue rieng)
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_invoice_amount_due(
     p_invoice_id VARCHAR(30)
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_due DECIMAL(12,2) DEFAULT NULL;
@@ -306,15 +276,13 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.9 fn_invoice_amount_paid: Tong so tien DA GHI NHAN cho hoa don
---     Payment.Amount la so tien ghi nhan, KHONG phai tien khach dua
---     (tien khach dua nam o Cash_Payment.Tendered_Amount).
+-- 1.8 fn_invoice_amount_paid (BR12, BR14): Tong so tien da ghi nhan
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_invoice_amount_paid(
     p_invoice_id VARCHAR(30)
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_paid DECIMAL(12,2) DEFAULT NULL;
@@ -328,33 +296,15 @@ BEGIN
 END$$
 
 
--- =====================================================================
--- HOA DON DIEU CHINH = Invoice_Line - Return
---
---   Tra hang KHONG tao hoa don moi trong database. "Hoa don dieu chinh" chi
---   la cach app HIEN THI: doc cac dong cua hoa don goc (Invoice_Line) roi
---   tru phan da tra (Return). Database chi luu PHAN THAY DOI -- dung cac
---   dong `Return`.
---
---   Tra hang xong, hoa don goc chuyen sang 'VOIDED' (InvoiceDao.processReturn
---   goi sp_void_invoice trong CUNG transaction voi sp_add_return), nen moi
---   hoa don chi tra hang duoc MOT lan. Nhung doanh thu cua no KHONG mat: bao
---   cao tinh hoa don VOIDED-co-tra-hang theo gia tri da dieu chinh.
---   VOIDED do bam "Huy hoa don" thi khong co dong Return nao -- van bi loai.
---
---   Bon ham duoi day la BAN CHEP DUY NHAT cua hai quy tac do; moi bao cao
---   (04_routines PHAN 4, 03_queries.sql) goi chung, khong chep lai.
--- =====================================================================
-
 -- ---------------------------------------------------------------------
--- 1.10 fn_line_returned_qty: Tong so luong DA TRA cua mot dong hoa don
+-- 1.9 fn_line_returned_qty: Tong so luong da tra cua mot dong hoa don
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_line_returned_qty(
     p_invoice_id  VARCHAR(30),
     p_line_number INT
 )
 RETURNS DECIMAL(10,3)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_qty DECIMAL(10,3) DEFAULT NULL;
@@ -370,17 +320,14 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.11 fn_line_refund: Tong tien DA HOAN cua mot dong hoa don
---      Cong fn_return_refund cua TUNG luot tra (khong tinh lai tren tong so
---      luong) -- de con so nay bang dung tong cac con so da hien tren hop
---      thoai xac nhan tra hang, ke ca phan lam tron.
+-- 1.10 fn_line_refund: Tong tien da hoan cua mot dong hoa don
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_line_refund(
     p_invoice_id  VARCHAR(30),
     p_line_number INT
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_refund DECIMAL(12,2) DEFAULT NULL;
@@ -396,13 +343,13 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.12 fn_invoice_refund: Tong tien DA HOAN cua ca hoa don
+-- 1.11 fn_invoice_refund: Tong tien da hoan cua ca hoa don
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_invoice_refund(
     p_invoice_id VARCHAR(30)
 )
 RETURNS DECIMAL(12,2)
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_refund DECIMAL(12,2) DEFAULT NULL;
@@ -417,44 +364,29 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 1.13 fn_invoice_in_revenue: Hoa don co duoc TINH VAO DOANH THU khong
---      1 = 'PAID'
---      1 = 'VOIDED' VI TRA HANG (co dong Return) va hoa don dieu chinh con
---          gia tri > 0 -- tra het hang thi khong con gi de tinh
---      0 = 'VOIDED' do bam "Huy hoa don" (khong co dong Return nao)
---      0 = khong tim thay hoa don
+-- 1.12 fn_invoice_in_revenue (BR3, BR16):
+--      1 = 'PAID' (tinh doanh thu thuan sau khi tru Return neu co)
+--      0 = 'VOIDED' hoac khong tim thay hoa don
 -- ---------------------------------------------------------------------
 CREATE FUNCTION fn_invoice_in_revenue(
     p_invoice_id VARCHAR(30)
 )
 RETURNS TINYINT
-DETERMINISTIC
+NOT DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_status VARCHAR(10) DEFAULT NULL;
-
     SELECT Status INTO v_status FROM Invoice WHERE Invoice_ID = p_invoice_id;
-
-    IF v_status = 'PAID' THEN
-        RETURN 1;
-    END IF;
-
-    IF v_status = 'VOIDED'
-       AND EXISTS (SELECT 1 FROM `Return` r WHERE r.Invoice_ID = p_invoice_id)
-       AND fn_invoice_amount_due(p_invoice_id) - fn_invoice_refund(p_invoice_id) > 0 THEN
-        RETURN 1;
-    END IF;
-
-    RETURN 0;
+    RETURN IF(v_status = 'PAID', 1, 0);
 END$$
 
 
 -- =====================================================================
--- PHẦN 2: THỦ TỤC DANH MỤC & TRA CỨU (LOOKUP & PRODUCTS)
+-- PHAN 2: THU TUC DANH MUC & TRA CUU (LOOKUP & PRODUCTS)
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 2.1 sp_lookup_counters: Danh sách quầy thu ngân kèm địa chỉ shop
+-- 2.1 sp_lookup_counters: Danh sach quay thu ngan kem dia chi shop
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_lookup_counters()
 BEGIN
@@ -467,7 +399,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.2 sp_lookup_cashiers: Danh sách thu ngân
+-- 2.2 sp_lookup_cashiers: Danh sach thu ngan
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_lookup_cashiers()
 BEGIN
@@ -478,7 +410,20 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.3 sp_lookup_customers: Danh sách khách hàng thành viên
+-- 2.2b sp_lookup_managers (BR3, BR15): Nhan vien co Role = MANAGER -- danh
+--      sach nguoi duoc chon de duyet huy hoa don / tra hang.
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_lookup_managers()
+BEGIN
+    SELECT Cashier_ID, Name
+    FROM   Cashier
+    WHERE  Role = 'MANAGER'
+    ORDER BY Cashier_ID;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 2.3 sp_lookup_customers: Danh sach khach hang thanh vien
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_lookup_customers()
 BEGIN
@@ -490,20 +435,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.4 sp_search_customers_by_phone: Tim khach hang theo TIEN TO so dien thoai
---     Thay cau SQL tho cuoi cung con lai trong tang DAO (LookupDao cu),
---     giu dung quy uoc Swing -> DAO -> Stored Procedure (docs/05 muc 1).
---
---     Tra ve BA COT RIENG, khong CONCAT san chuoi hien thi: ghep chuoi de
---     hien tren man hinh la viec cua tang UI. Ban cu ghep trong DAO nen
---     chinh cai chuoi ghep do bi do tro lai o nhap (plan/14 loi #12).
---
---     LIMIT 20: danh sach goi y khong ai doc het 500 dong, va popup cao
---     toi da 200px (CustomerPicker).
---
---     p_prefix duoc chac chan la chuoi so: phia Java chi goi khi noi dung
---     o nhap toan chu so (plan/14 muc 3.5), nen khong co ky tu % hay _
---     lot vao lam rong dieu kien LIKE.
+-- 2.4 sp_search_customers_by_phone (BR10): Tim khach hang theo tien to SDT
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_search_customers_by_phone(
     IN p_prefix VARCHAR(20)
@@ -520,7 +452,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.5 sp_get_all_products: Lấy toàn bộ sản phẩm để đổ vào danh sách chọn
+-- 2.5 sp_get_all_products: Lay toan bo danh muc san pham
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_all_products()
 BEGIN
@@ -531,8 +463,58 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 2.6 sp_get_active_promo: Tra cứu chương trình khuyến mãi tốt nhất
---     đang áp dụng cho sản phẩm tại một ngày cụ thể
+-- 2.6 sp_add_price_history (BR6, BR8):
+--     Them moc gia moi (append-only), Valid_From_Date > moi moc cu.
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_add_price_history(
+    IN p_barcode         VARCHAR(20),
+    IN p_valid_from_date DATE,
+    IN p_price           DECIMAL(12,2)
+)
+BEGIN
+    DECLARE v_product VARCHAR(20) DEFAULT NULL;
+    DECLARE v_latest  DATE        DEFAULT NULL;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_price_write = NULL;
+        RESIGNAL;
+    END;
+
+    IF p_barcode IS NULL OR p_valid_from_date IS NULL OR p_price IS NULL OR p_price <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Barcode, effective date and positive price are required';
+    END IF;
+
+    SELECT Barcode INTO v_product
+    FROM   Product
+    WHERE  Barcode = p_barcode
+    FOR UPDATE;
+
+    IF v_product IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unknown product barcode';
+    END IF;
+
+    SELECT MAX(Valid_From_Date) INTO v_latest
+    FROM   Price_History
+    WHERE  Barcode = p_barcode;
+
+    IF v_latest IS NOT NULL AND p_valid_from_date <= v_latest THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Valid_From_Date must be strictly greater than all prior price records (BR6/BR8)';
+    END IF;
+
+    SET @retail_price_write = 1;
+    INSERT INTO Price_History (Barcode, Valid_From_Date, Price)
+    VALUES (p_barcode, p_valid_from_date, p_price);
+    SET @retail_price_write = NULL;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 2.7 sp_get_active_promo (BR11):
+--     Tra cuu chuong trinh khuyen mai tot nhat dang ap dung cho san pham
+--     tai ngay p_date; neu bang nhau thi chon Expiry_Date som nhat.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_active_promo(
     IN p_barcode VARCHAR(20),
@@ -546,52 +528,29 @@ BEGIN
       AND  p_date BETWEEN a.Promo_Start_date AND a.Promo_End_date
       AND  p.Status = 'ACTIVE'
       AND  p.Expiry_Date >= p_date
-    ORDER BY a.Discount_Percent DESC
+    ORDER BY a.Discount_Percent DESC, p.Expiry_Date ASC, a.Promo_ID ASC
     LIMIT 1;
 END$$
 
 
 -- =====================================================================
--- PHẦN 3: THỦ TỤC XEM THÔNG TIN HÓA ĐƠN
+-- PHAN 3: THU TUC XEM THONG TIN HOA DON
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 3.1 sp_get_recent_invoices: Danh sách hóa đơn kèm tổng tiền
---     LEFT JOIN Invoice_Line (khong phai JOIN) + COALESCE: hoa don chua co
---     dong hang nao van PHAI hien ra, voi Tong_tien = 0. Ban cu dung inner
---     join nen hoa don bi xoa het dong hang bien mat khoi bang -> khong chon
---     duoc -> khong sua va khong xoa duoc bang giao dien (plan/13 loi #9).
---     (Hoa don rong van co the xuat hien khi nguoi dung xoa het dong hang
---     bang nut "Xoa dong hang" o tab 3.)
---
---     THAM SO p_days THEM O KHOI 6 -- DAY LA MOT DOI HOP DONG
---     (docs/05 Quy tac 2, plan/15 muc 5.2):
---       p_days > 0  -> chi hoa don trong p_days ngay gan nhat
---       0 hoac NULL -> TAT CA hoa don (nhu truoc khoi 6)
---
---     Vi sao can: ban cu khong co LIMIT va khong loc ngay, nen tab 3 nap
---     MOI hoa don tung co. Voi 18 hoa don khong ai thay; voi ~550 hoa don
---     trong mot bang khong co o loc nao (InvoiceViewPanel chi co RowSorter
---     -- sap xep, khong loc) thi thay (plan/15 loi #18).
---
---     Vi sao la KHOANG NGAY chu khong phai LIMIT n: "gan day" cua mot danh
---     sach hoa don la mot khoang thoi gian, va thu tuc da ten la 'recent'.
---     Quan trong hon: voi LIMIT 200 thi ~350 hoa don cu nhat KHONG DEN DUOC
---     bang giao dien, trong do co INV-0001 (03_queries.sql CAU 1 lay lam vi
---     du mau) va hai hoa don INV-OLD-* ma bao cao bonus noi ve. Voi p_days
---     thi chon "Tat ca" la moi hoa don van den duoc.
+-- 3.1 sp_get_recent_invoices: Danh sach hoa don kem tong tien
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_recent_invoices(
     IN p_days INT
 )
 BEGIN
-    SELECT  i.Invoice_ID                                  AS Ma_HD,
-            i.`Date`                                      AS Ngay,
-            i.`Time`                                      AS Gio,
-            s.Shop_ID                                     AS Shop,
-            c.Name                                        AS Thu_ngan,
-            COALESCE(cu.Name, '(vang lai)')               AS Khach,
-            i.Status                                      AS Trang_thai,
+    SELECT  i.Invoice_ID                                             AS Ma_HD,
+            i.`Date`                                                 AS Ngay,
+            i.`Time`                                                 AS Gio,
+            s.Shop_ID                                                AS Shop,
+            c.Name                                                   AS Thu_ngan,
+            COALESCE(cu.Name, '(vang lai)')                          AS Khach,
+            i.Status                                                 AS Trang_thai,
             COALESCE(SUM(l.Quantity * l.Unit_Price - l.Discount), 0) AS Tong_tien
     FROM    Invoice      i
     JOIN    Counter      ct ON ct.Counter_ID  = i.Counter_ID
@@ -599,9 +558,6 @@ BEGIN
     JOIN    Cashier      c  ON c.Cashier_ID   = i.Cashier_ID
     LEFT JOIN Customer   cu ON cu.Customer_ID = i.Customer_ID
     LEFT JOIN Invoice_Line l ON l.Invoice_ID  = i.Invoice_ID
-    -- COALESCE(p_days, 0) <= 0 la nhanh "tat ca": phep OR nay duoc danh gia
-    -- mot lan cho moi dong, nhung no khong phu thuoc dong nao nen MySQL
-    -- rut gon no thanh hang so.
     WHERE   COALESCE(p_days, 0) <= 0
        OR   i.`Date` >= DATE_SUB(CURDATE(), INTERVAL p_days DAY)
     GROUP BY i.Invoice_ID, i.`Date`, i.`Time`, s.Shop_ID,
@@ -611,29 +567,21 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.2 sp_get_invoice_header: Phần đầu và các tổng tiền của một hóa đơn
---     LEFT JOIN Invoice_Line + COALESCE tren CA BA cot tong: hoa don chua co
---     dong hang nao van tra ve 1 dong voi cac tong bang 0, thay vi khong tra
---     dong nao (plan/13 loi #9). Thieu COALESCE o day thi
---     InvoiceViewPanel.showDetail nhan NULL cho Tong_phai_tra.
---
---     Hai cot CUOI (12 Tien_hoan, 13 Tong_sau_dieu_chinh) them khi co hoa
---     don dieu chinh -- them O CUOI de cac cho doc theo chi so 0..11
---     (ReceiptDialog, InvoiceViewPanel) khong phai sua.
+-- 3.2 sp_get_invoice_header: Phan dau va cac tong tien cua mot hoa don
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_header(
     IN p_invoice_id VARCHAR(30)
 )
 BEGIN
-    SELECT  i.Invoice_ID                                  AS Ma_HD,
-            i.`Date`                                      AS Ngay,
-            i.`Time`                                      AS Gio,
-            i.Status                                      AS Trang_thai,
-            i.Counter_ID                                  AS Quay,
-            s.Shop_ID                                     AS Shop,
-            s.Address                                     AS Dia_chi,
-            c.Name                                        AS Thu_ngan,
-            COALESCE(cu.Name, '(khach vang lai)')         AS Khach_hang,
+    SELECT  i.Invoice_ID                                             AS Ma_HD,
+            i.`Date`                                                 AS Ngay,
+            i.`Time`                                                 AS Gio,
+            i.Status                                                 AS Trang_thai,
+            i.Counter_ID                                             AS Quay,
+            s.Shop_ID                                                AS Shop,
+            s.Address                                                AS Dia_chi,
+            c.Name                                                   AS Thu_ngan,
+            COALESCE(cu.Name, '(khach vang lai)')                    AS Khach_hang,
             COALESCE(SUM(l.Quantity * l.Unit_Price), 0)              AS Tong_truoc_giam,
             COALESCE(SUM(l.Discount), 0)                             AS Tong_giam,
             COALESCE(SUM(l.Quantity * l.Unit_Price - l.Discount), 0) AS Tong_phai_tra,
@@ -653,7 +601,9 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.3 sp_get_invoice_lines: Các dòng sản phẩm chi tiết của hóa đơn
+-- 3.3 sp_get_invoice_lines (BR9):
+--     Cac dong san pham chi tiet cua hoa don, tra ve l.Tax_Rate da khoa
+--     cung (snapshot) tren Invoice_Line tai thoi diem ban.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_lines(
     IN p_invoice_id VARCHAR(30)
@@ -666,7 +616,7 @@ BEGIN
             l.Unit_Price                             AS Don_gia,
             l.Discount                               AS Giam_gia,
             (l.Quantity * l.Unit_Price - l.Discount) AS Thanh_tien,
-            p.Tax_Rate                               AS VAT_pct
+            l.Tax_Rate                               AS VAT_pct
     FROM    Invoice_Line l
     JOIN    Product      p ON p.Barcode = l.Barcode
     WHERE   l.Invoice_ID = p_invoice_id
@@ -675,18 +625,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.4 sp_get_invoice_payments: Chi tiết các đợt thanh toán của hóa đơn
---     Tien_khach_dua la MOT COT SO RIENG (DECIMAL), khong CONCAT vao
---     Chi_tiet nua: ban cu cho ra "Khach dua: 500000.00" -- dinh dang tien
---     nam trong SQL thi Java khong dinh dang lai duoc (plan/14 loi #22).
---     NULL cho the va vi dien tu: hai phuong thuc do khong co tien khach dua.
---
---     HOP DONG COT: 5 cot, va cho goi phai sua theo (plan/14 muc 5.9b):
---       0 Ma_TT | 1 So_tien | 2 Phuong_thuc | 3 Chi_tiet | 4 Tien_khach_dua
---
---     Ba chuoi trong CASE dau GIU NGUYEN TUNG CHU: PayMethod.label() phia
---     Java phai tra dung ba chuoi nay, neu khong mot hoa don se hien hai
---     cach viet cho cung mot phuong thuc (plan/14 muc 3.6).
+-- 3.4 sp_get_invoice_payments (BR12, BR13): Chi tiet thanh toan hoa don
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_payments(
     IN p_invoice_id VARCHAR(30)
@@ -714,41 +653,29 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.5 sp_get_invoice_adjusted: HOA DON DIEU CHINH = Invoice_Line - Return
---     Thay cho sp_get_invoice_returns (bang "Tra hang" liet ke tung luot tra
---     kem cot Lan_tra). Moi dong o day la MOT DONG CUA HOA DON GOC, voi so
---     luong / thanh tien SAU KHI tru phan da tra -- dong khong bi tra van
---     hien (SL_tra = 0) de hoa don dieu chinh day du, dat canh hoa don goc.
---
---     Return_ID VAN CON trong database (khoa chinh cua bang `Return`), chi
---     khong hien ra giao dien nua: cot dau la Ma_HD.
---
---     HOP DONG COT voi InvoiceViewPanel (doc theo chi so):
---       0 Ma_HD | 1 Dong | 2 San_pham | 3 DVT | 4 SL_mua | 5 SL_tra
---       6 SL_con_lai | 7 Don_gia | 8 Thanh_tien_goc | 9 Tien_hoan
---       10 Thanh_tien_moi | 11 Ngay_tra
+-- 3.5 sp_get_invoice_adjusted (BR16): Hoa don dieu chinh = Invoice_Line - Return
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_adjusted(
     IN p_invoice_id VARCHAR(30)
 )
 BEGIN
-    SELECT  l.Invoice_ID                                         AS Ma_HD,
-            l.Line_Number                                        AS Dong,
-            p.Name                                               AS San_pham,
-            p.Unit                                               AS DVT,
-            l.Quantity                                           AS SL_mua,
-            fn_line_returned_qty(l.Invoice_ID, l.Line_Number)    AS SL_tra,
+    SELECT  l.Invoice_ID                                          AS Ma_HD,
+            l.Line_Number                                         AS Dong,
+            p.Name                                                AS San_pham,
+            p.Unit                                                AS DVT,
+            l.Quantity                                            AS SL_mua,
+            fn_line_returned_qty(l.Invoice_ID, l.Line_Number)     AS SL_tra,
             l.Quantity
               - fn_line_returned_qty(l.Invoice_ID, l.Line_Number) AS SL_con_lai,
-            l.Unit_Price                                         AS Don_gia,
-            (l.Quantity * l.Unit_Price - l.Discount)             AS Thanh_tien_goc,
-            fn_line_refund(l.Invoice_ID, l.Line_Number)          AS Tien_hoan,
+            l.Unit_Price                                          AS Don_gia,
+            (l.Quantity * l.Unit_Price - l.Discount)              AS Thanh_tien_goc,
+            fn_line_refund(l.Invoice_ID, l.Line_Number)           AS Tien_hoan,
             (l.Quantity * l.Unit_Price - l.Discount)
-              - fn_line_refund(l.Invoice_ID, l.Line_Number)      AS Thanh_tien_moi,
+              - fn_line_refund(l.Invoice_ID, l.Line_Number)       AS Thanh_tien_moi,
             (SELECT MAX(r.Return_Date)
              FROM   `Return` r
              WHERE  r.Invoice_ID  = l.Invoice_ID
-               AND  r.Line_Number = l.Line_Number)               AS Ngay_tra
+               AND  r.Line_Number = l.Line_Number)                AS Ngay_tra
     FROM    Invoice_Line l
     JOIN    Product      p ON p.Barcode = l.Barcode
     WHERE   l.Invoice_ID = p_invoice_id
@@ -757,24 +684,21 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.6 sp_get_returnable_lines: Cac dong cua hoa don kem SO LUONG CON TRA DUOC
---     Ten cot la hop dong voi Java (plan/12 muc 5.6) -- doi ten phai sua ca hai ben.
---     LEFT JOIN (khong phai JOIN) de dong chua bi tra lan nao van hien ra
---     voi SL_da_tra = 0.
+-- 3.6 sp_get_returnable_lines (BR16): Cac dong hang & SL con tra duoc
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_returnable_lines(
     IN p_invoice_id VARCHAR(30)
 )
 BEGIN
-    SELECT  l.Line_Number                                      AS Dong,
-            p.Name                                             AS San_pham,
-            p.Unit                                             AS DVT,
-            l.Quantity                                         AS SL_mua,
-            COALESCE(SUM(r.Return_Quantity), 0)                AS SL_da_tra,
-            l.Quantity - COALESCE(SUM(r.Return_Quantity), 0)   AS SL_con_lai,
-            l.Unit_Price                                       AS Don_gia,
-            l.Discount                                         AS Giam_gia,
-            (l.Quantity * l.Unit_Price - l.Discount)           AS Thanh_tien
+    SELECT  l.Line_Number                                    AS Dong,
+            p.Name                                           AS San_pham,
+            p.Unit                                           AS DVT,
+            l.Quantity                                       AS SL_mua,
+            COALESCE(SUM(r.Return_Quantity), 0)              AS SL_da_tra,
+            l.Quantity - COALESCE(SUM(r.Return_Quantity), 0) AS SL_con_lai,
+            l.Unit_Price                                     AS Don_gia,
+            l.Discount                                       AS Giam_gia,
+            (l.Quantity * l.Unit_Price - l.Discount)         AS Thanh_tien
     FROM    Invoice_Line l
     JOIN    Product      p ON p.Barcode = l.Barcode
     LEFT JOIN `Return`   r ON r.Invoice_ID  = l.Invoice_ID
@@ -787,13 +711,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.7 sp_get_invoice_edit_fields: Cac truong THO cua mot hoa don, dung cho
---     hop thoai sua (EditInvoiceDialog).
---     Khac sp_get_invoice_header: tra ve MA (Counter_ID, Cashier_ID,
---     Customer_ID) chu khong phai TEN, va KHONG join Invoice_Line nen hoa
---     don chua co dong hang nao van doc duoc.
---     Thu tu 7 cot la hop dong voi Java (InvoiceViewPanel doc theo chi so
---     r[1]..r[6]) -- plan/13 muc 3.5.
+-- 3.7 sp_get_invoice_edit_fields: Cac truong tho cua mot hoa don
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_edit_fields(
     IN p_invoice_id VARCHAR(30)
@@ -812,11 +730,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 3.8 sp_get_invoice_line_edit_fields: 4 truong THO cua MOT dong hang,
---     dung cho hop thoai sua dong (EditLineDialog).
---     Thay cau SQL tho cuoi cung cua tang UI (InvoiceViewPanel -- khoi 4
---     da xoa cau con lai, khoi 5 xoa cau nay).
---     Thu tu 4 cot la hop dong voi Java: cho goi doc theo chi so r[0]..r[3].
+-- 3.8 sp_get_invoice_line_edit_fields: 4 truong tho cua mot dong hang
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_get_invoice_line_edit_fields(
     IN p_invoice_id  VARCHAR(30),
@@ -834,15 +748,12 @@ END$$
 
 
 -- =====================================================================
--- PHẦN 4: THỦ TỤC BÁO CÁO (REPORTS)
+-- PHAN 4: THU TUC BAO CAO (REPORTS - Q2, Q3, Q4, Q5 & BONUS)
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 4.1 sp_report_daily_takings: Doanh thu theo ngày của từng shop (7 ngày)
---     Doanh thu = gia tri HOA DON DIEU CHINH (Invoice_Line - Return), va
---     hoa don duoc tinh theo fn_invoice_in_revenue: PAID, hoac VOIDED vi tra
---     hang. Truoc day loc "Status = 'PAID'" nen tra MOT mon la ca hoa don
---     bien mat khoi doanh thu.
+-- 4.1 sp_report_daily_takings (Q2):
+--     Doanh thu thuan theo ngay cua tung shop trong 7 ngay gan nhat
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_daily_takings()
 BEGIN
@@ -857,14 +768,15 @@ BEGIN
     JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
     JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
     WHERE   fn_invoice_in_revenue(i.Invoice_ID) = 1
-      AND   i.`Date` >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      AND   i.`Date` BETWEEN DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND DATE_SUB(CURDATE(), INTERVAL 1 DAY)
     GROUP BY s.Shop_ID, s.Address, i.`Date`
     ORDER BY i.`Date` DESC, s.Shop_ID;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 4.2 sp_report_price_rise: Sản phẩm tăng giá > 10% trong năm nay
+-- 4.2 sp_report_price_rise (Q3):
+--     San pham tang gia > 10% trong nam nay
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_price_rise()
 BEGIN
@@ -890,8 +802,8 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 4.3 sp_report_best_cashier: Thu ngân có giỏ hàng trung bình cao nhất
---     Gio hang = gia tri hoa don dieu chinh; cung quy tac chon hoa don nhu 4.1.
+-- 4.3 sp_report_best_cashier (Q4):
+--     Thu ngan co gio hang trung binh cao nhat (hoa don PAID, tru hoan tra)
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_best_cashier()
 BEGIN
@@ -914,10 +826,8 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 4.4 sp_report_big_returns: Hóa đơn bị trả hàng quá 50% giá trị
---     Tien hoan goi fn_return_refund -- khong chep lai cong thuc
---     (plan/12 muc 2.2). JOIN Invoice_Line trong bang dan xuat bo duoc
---     vi ham da tu tra Invoice_Line.
+-- 4.4 sp_report_big_returns (Q5, BR16):
+--     Hoa don PAID bi tra hang qua 50% gia tri goc (sau chiet khau)
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_big_returns()
 BEGIN
@@ -935,34 +845,14 @@ BEGIN
                    SUM(fn_return_refund(r.Invoice_ID, r.Line_Number, r.Return_Quantity)) AS Tien_tra
             FROM   `Return` r
             GROUP BY r.Invoice_ID) tra ON tra.Invoice_ID = i.Invoice_ID
-    WHERE   tra.Tien_tra > tong.Tong_HD / 2
+    WHERE   fn_invoice_in_revenue(i.Invoice_ID) = 1
+      AND   tra.Tien_tra > tong.Tong_HD / 2
     ORDER BY Phan_tram_tra DESC;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 4.5 sp_report_old_price_proof: Chứng minh hóa đơn cũ giữ giá cũ
---
---     DOI O KHOI 6 -- HAI VIEC, VA CA HAI LA DOI HOP DONG COT
---     (plan/15 muc 5.3, chỗ gọi: ReportDao.oldPriceProof -> Ui.fill):
---
---     1. THEM WHERE. Ban cu KHONG CO WHERE nen no tra MOI DONG HANG CUA
---        MOI HOA DON -- voi seed 91 ngay la ~1.200 dong, cho mot bao cao
---        mang ten "chung minh" (plan/15 loi #19). Dieu kien dung la "don
---        gia tren hoa don KHAC gia hom nay": do chinh la dinh nghia cua
---        "giu gia cu".
---        (Ban trong 03_queries.sql phan BONUS co WHERE ... LIKE 'INV-OLD%'
---         -- hai ban chep da lech nhau TU TRUOC khoi 6. Nay ca hai deu loc
---         theo "gia khac gia hom nay", nen chung noi cung mot chuyen.)
---
---     2. GOM THEO (san pham, don gia da dong bang) thay vi liet ke tung
---        dong. Moi dong ket qua tra loi dung cau hoi cua de bai: "co bao
---        nhieu dong hang dang ghi gia nay, va gia hom nay la bao nhieu".
---        ~8 dong thay vi ~1.200.
---
---     3. Dung fn_get_product_price thay cho subquery chep tay -- MOT BAN
---        CHEP NUA BIEN MAT. Ham do la dinh nghia cua "gia tai mot ngay",
---        va bat bien R1 cua 05_invariants.sql cung dung chinh no.
+-- 4.5 sp_report_old_price_proof (BR8): Chung minh hoa don cu giu gia cu
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_old_price_proof()
 BEGIN
@@ -982,22 +872,7 @@ END$$
 
 
 -- ---------------------------------------------------------------------
--- 4.6 sp_report_price_30_days: Gia cua MOT san pham, SO LUONG 1, 30 ngay
---     Note cua nhom: "chung minh gia tien moi ngay thay doi" + "bang gia su
---     thay doi gia cua 1 mon hang voi so luong 1 trong 30 ngay".
---
---     Moi dong la MOT NGAY (CURDATE()-29 .. CURDATE()), sinh bang CTE de quy
---     -- ngay khong co moc gia moi van hien, voi gia cua moc gan nhat truoc
---     no. Ca ba con so goi DUNG cac ham ma tab 1 dung khi lap hoa don:
---       Don_gia        = fn_get_product_price(ma, ngay)
---       KM_phan_tram   = fn_active_promo_pct(ma, ngay)
---       Thanh_tien_SL1 = Don_gia - fn_line_discount(ma, ngay, 1, Don_gia)
---     nen "mua 1 cai vao ngay X" trong bang nay bang dung con so tab 1 se
---     ghi neu doi o "Ngay ban" ve ngay X.
---     Chenh_lech = so voi NGAY HOM TRUOC (LAG -- window function cua MySQL 8).
---
---     HOP DONG COT: 0 Ngay | 1 Don_gia | 2 KM_phan_tram | 3 Thanh_tien_SL1
---                   4 Chenh_lech
+-- 4.6 sp_report_price_30_days (BR6, BR11): Bien dong gia + KM 30 ngay
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_report_price_30_days(
     IN p_barcode VARCHAR(20)
@@ -1009,7 +884,7 @@ BEGIN
         SELECT n - 1 FROM d WHERE n > 0
     ),
     gia AS (
-        SELECT  DATE_SUB(CURDATE(), INTERVAL d.n DAY)                         AS Ngay,
+        SELECT  DATE_SUB(CURDATE(), INTERVAL d.n DAY)                                  AS Ngay,
                 fn_get_product_price(p_barcode, DATE_SUB(CURDATE(), INTERVAL d.n DAY)) AS Don_gia
         FROM    d
     ),
@@ -1031,34 +906,109 @@ END$$
 
 
 -- =====================================================================
--- PHẦN 5: THỦ TỤC GHI DỮ LIỆU (INSERT TRONG TRANSACTION)
+-- PHAN 5: THU TUC GHI, SUA, XOA DU LIEU TRONG TRANSACTION
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 5.1 sp_create_invoice_header: Tạo thông tin đầu hóa đơn
---     Trang thai 'OPEN' DA BI BO (01_schema.sql muc 9): hoa don chi co
---     PAID va VOIDED. Dau hoa don duoc ghi THANG la 'PAID', va
---     sp_settle_invoice o CUOI transaction kiem lai "co dong hang + thu du
---     tien" -- sai thi SIGNAL, Java ROLLBACK, hoa don khong bao gio ton tai.
---     Trong luc transaction chua commit, khong ai khac nhin thay dong nay
---     (InnoDB, REPEATABLE READ), nen "PAID nhung chua co tien" khong lo ra.
+-- 5.1 sp_create_invoice_header (BR1, BR2, BR3, BR4):
+--     - Sinh ma <Shop_ID>-<Counter_ID>-<YYYYMMDD>-<SEQ> tu dong (BR1).
+--     - Lay ngay/gio tu dong ho server (BR2).
+--     - Bat buoc chay trong transaction, khong luu hoa don nhap (BR3).
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_create_invoice_header(
-    IN p_invoice_id  VARCHAR(30),
-    IN p_date        DATE,
-    IN p_time        TIME,
-    IN p_counter_id  VARCHAR(10),
-    IN p_cashier_id  VARCHAR(10),
-    IN p_customer_id VARCHAR(15)
+    IN  p_date        DATE,
+    IN  p_time        TIME,
+    IN  p_counter_id  VARCHAR(10),
+    IN  p_cashier_id  VARCHAR(10),
+    IN  p_customer_id VARCHAR(15),
+    OUT p_invoice_id  VARCHAR(30)
 )
 BEGIN
+    DECLARE v_shop_id       VARCHAR(10)     DEFAULT NULL;
+    DECLARE v_now           DATETIME;
+    DECLARE v_date_server   DATE;
+    DECLARE v_prefix        VARCHAR(64);
+    DECLARE v_last_invoice  VARCHAR(30)     DEFAULT NULL;
+    DECLARE v_max_sequence  BIGINT UNSIGNED DEFAULT 0;
+    DECLARE v_next_sequence BIGINT UNSIGNED;
+    DECLARE v_generated_id  VARCHAR(64);
+    DECLARE v_not_found     BOOLEAN         DEFAULT FALSE;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_not_found = TRUE;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_create_invoice = NULL;
+        RESIGNAL;
+    END;
+    IF p_counter_id IS NULL OR p_cashier_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Counter and logged-in cashier are required (BR1/BR4)';
+    END IF;
+
+    SET v_now = NOW();
+    SET v_date_server = DATE(v_now);
+
+    SELECT Shop_ID INTO v_shop_id
+    FROM   Counter
+    WHERE  Counter_ID = p_counter_id
+    FOR UPDATE;
+
+    IF v_not_found OR v_shop_id IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Unknown counter or counter has no shop (BR1)';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM Cashier WHERE Cashier_ID = p_cashier_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unknown cashier (BR4)';
+    END IF;
+
+    IF p_customer_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM Customer WHERE Customer_ID = p_customer_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unknown customer (BR10)';
+    END IF;
+
+    SET v_prefix = CONCAT(v_shop_id, '-', p_counter_id, '-', DATE_FORMAT(v_date_server, '%Y%m%d'), '-');
+    SET v_not_found = FALSE;
+
+    SELECT Invoice_ID INTO v_last_invoice
+    FROM   Invoice
+    WHERE  Counter_ID = p_counter_id
+      AND  `Date` = v_date_server
+      AND  LEFT(Invoice_ID, CHAR_LENGTH(v_prefix)) = v_prefix
+    ORDER BY CAST(SUBSTRING_INDEX(Invoice_ID, '-', -1) AS UNSIGNED) DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT v_not_found THEN
+        SET v_max_sequence = CAST(SUBSTRING_INDEX(v_last_invoice, '-', -1) AS UNSIGNED);
+    END IF;
+
+    SET v_next_sequence = v_max_sequence + 1;
+    SET v_generated_id = CONCAT(
+        v_prefix,
+        LPAD(CAST(v_next_sequence AS CHAR),
+             GREATEST(4, CHAR_LENGTH(CAST(v_next_sequence AS CHAR))), '0')
+    );
+
+    IF CHAR_LENGTH(v_generated_id) > 30 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Generated invoice code exceeds Invoice_ID VARCHAR(30)';
+    END IF;
+
+    SET p_invoice_id = v_generated_id;
+
+    SET @retail_create_invoice = 1;
     INSERT INTO Invoice (Invoice_ID, `Date`, `Time`, Status, Counter_ID, Cashier_ID, Customer_ID)
-    VALUES (p_invoice_id, p_date, p_time, 'PAID', p_counter_id, p_cashier_id, p_customer_id);
+    VALUES (v_generated_id, v_date_server, TIME(v_now), 'PAID',
+            p_counter_id, p_cashier_id, p_customer_id);
+    SET @retail_create_invoice = NULL;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.2 sp_add_invoice_line: Thêm một dòng sản phẩm vào hóa đơn
+-- 5.2 sp_add_invoice_line (BR5, BR7, BR8, BR9, BR11):
+--     - Tu dong cong don so luong neu san pham da co tren hoa don (BR7).
+--     - Tu dong lay don gia & khuyen mai cao nhat tu he thong (BR5/BR8/BR11).
+--     - Khoa cung Tax_Rate tu Product (BR9).
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_add_invoice_line(
     IN p_invoice_id  VARCHAR(30),
@@ -1069,15 +1019,92 @@ CREATE PROCEDURE sp_add_invoice_line(
     IN p_discount    DECIMAL(12,2)
 )
 BEGIN
-    INSERT INTO Invoice_Line (Invoice_ID, Line_Number, Barcode, Quantity, Unit_Price, Discount)
-    VALUES (p_invoice_id, p_line_number, p_barcode, p_quantity, p_unit_price, p_discount);
+    DECLARE v_invoice_date DATE          DEFAULT NULL;
+    DECLARE v_status       VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_unit         VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_price        DECIMAL(12,2) DEFAULT NULL;
+    DECLARE v_tax_rate     DECIMAL(5,2)  DEFAULT NULL;
+    DECLARE v_pct          DECIMAL(5,2)  DEFAULT 0;
+    DECLARE v_discount     DECIMAL(12,2) DEFAULT 0;
+    DECLARE v_old_qty      DECIMAL(10,3) DEFAULT NULL;
+    DECLARE v_line_number  INT           DEFAULT NULL;
+    DECLARE v_not_found    BOOLEAN       DEFAULT FALSE;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_not_found = TRUE;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_line_write = NULL;
+        RESIGNAL;
+    END;
+    IF p_quantity IS NULL OR p_quantity <= 0 OR p_barcode IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Barcode is required and quantity must be greater than zero (BR7)';
+    END IF;
+
+    SELECT `Date`, Status INTO v_invoice_date, v_status
+    FROM   Invoice
+    WHERE  Invoice_ID = p_invoice_id
+    FOR UPDATE;
+
+    IF v_not_found OR v_invoice_date IS NULL OR v_status <> 'PAID' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice not found or is not editable';
+    END IF;
+
+    SET v_not_found = FALSE;
+    SELECT Unit, Tax_Rate INTO v_unit, v_tax_rate
+    FROM   Product
+    WHERE  Barcode = p_barcode;
+
+    IF v_not_found OR v_unit IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unknown product barcode';
+    END IF;
+
+    IF v_unit IN ('PIECE','PACK','BOX') AND p_quantity <> FLOOR(p_quantity) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Packaged products require an integer quantity (BR7)';
+    END IF;
+
+    SET v_price = fn_get_product_price(p_barcode, v_invoice_date);
+    IF v_price IS NULL OR v_price <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'No valid price exists for this product on invoice date (BR6/BR8)';
+    END IF;
+
+    SET v_pct = fn_active_promo_pct(p_barcode, v_invoice_date);
+
+    SET v_not_found = FALSE;
+    SELECT Line_Number, Quantity INTO v_line_number, v_old_qty
+    FROM   Invoice_Line
+    WHERE  Invoice_ID = p_invoice_id AND Barcode = p_barcode
+    FOR UPDATE;
+
+    IF NOT v_not_found THEN
+        SET v_old_qty = v_old_qty + p_quantity;
+        SET v_discount = ROUND(v_old_qty * v_price * v_pct / 100, 2);
+        SET @retail_line_write = 1;
+        UPDATE Invoice_Line
+        SET    Quantity = v_old_qty,
+               Discount = v_discount
+        WHERE  Invoice_ID = p_invoice_id AND Line_Number = v_line_number;
+        SET @retail_line_write = NULL;
+    ELSE
+        SELECT COALESCE(MAX(Line_Number), 0) + 1 INTO v_line_number
+        FROM   Invoice_Line
+        WHERE  Invoice_ID = p_invoice_id;
+        SET v_discount = ROUND(p_quantity * v_price * v_pct / 100, 2);
+        SET @retail_line_write = 1;
+        INSERT INTO Invoice_Line
+            (Invoice_ID, Line_Number, Barcode, Quantity, Unit_Price, Discount, Tax_Rate)
+        VALUES
+            (p_invoice_id, v_line_number, p_barcode, p_quantity, v_price, v_discount, v_tax_rate);
+        SET @retail_line_write = NULL;
+    END IF;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.3 sp_add_payment: Ghi thông tin thanh toán & tự động rẽ nhánh
---     vào bảng con (Cash_Payment, Card_Payment, EWallet_Payment)
---     Đây là ví dụ điển hình SQL Dev che giấu cấu trúc bảng con cho Java!
+-- 5.3 sp_add_payment (BR12, BR13):
+--     Ghi nhan thanh toan da phuong thuc va re nhanh vao bang con ISA.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_add_payment(
     IN p_payment_id VARCHAR(20),
@@ -1088,54 +1115,86 @@ CREATE PROCEDURE sp_add_payment(
     IN p_detail2    VARCHAR(100)
 )
 BEGIN
-    -- 1. Ghi vào bảng cha Payment
+    DECLARE v_status VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_due    DECIMAL(12,2) DEFAULT 0;
+    DECLARE v_paid   DECIMAL(12,2) DEFAULT 0;
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_payment_write = NULL;
+        RESIGNAL;
+    END;
+    IF p_payment_id IS NULL OR p_amount IS NULL OR p_amount <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Payment ID and positive amount are required';
+    END IF;
+
+    SELECT Status INTO v_status
+    FROM   Invoice
+    WHERE  Invoice_ID = p_invoice_id
+    FOR UPDATE;
+
+    IF v_status IS NULL OR v_status <> 'PAID' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Payment requires an existing checkout invoice';
+    END IF;
+
+    SET v_due = fn_invoice_amount_due(p_invoice_id);
+    SET v_paid = fn_invoice_amount_paid(p_invoice_id);
+    IF v_due <= 0 OR p_amount > v_due - v_paid THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Applied payment exceeds the remaining invoice balance (BR13)';
+    END IF;
+
+    IF p_method = 'CASH' THEN
+        IF p_detail1 IS NULL OR CAST(p_detail1 AS DECIMAL(12,2)) < p_amount THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Cash tendered must be at least the applied amount (BR13)';
+        END IF;
+    ELSEIF p_method = 'CARD' THEN
+        IF p_detail1 IS NULL OR p_detail2 IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Card number and authorization code are required';
+        END IF;
+    ELSEIF p_method = 'EWALLET' THEN
+        IF p_detail1 IS NULL OR p_detail2 IS NULL THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Wallet provider and transaction reference are required';
+        END IF;
+    ELSE
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unsupported payment method';
+    END IF;
+
+    SET @retail_payment_write = 1;
     INSERT INTO Payment (Payment_ID, Amount, Invoice_ID)
     VALUES (p_payment_id, p_amount, p_invoice_id);
 
-    -- 2. Dựa vào phương thức, rẽ nhánh ghi vào đúng bảng con
     IF p_method = 'CASH' THEN
         INSERT INTO Cash_Payment (Payment_ID, Tendered_Amount)
         VALUES (p_payment_id, CAST(p_detail1 AS DECIMAL(12,2)));
-
     ELSEIF p_method = 'CARD' THEN
         INSERT INTO Card_Payment (Payment_ID, Card_number, Auth_code)
         VALUES (p_payment_id, p_detail1, p_detail2);
-
-    ELSEIF p_method = 'EWALLET' THEN
+    ELSE
         INSERT INTO EWallet_Payment (Payment_ID, Wallet_provider, Transaction_Ref)
         VALUES (p_payment_id, p_detail1, p_detail2);
     END IF;
+    SET @retail_payment_write = NULL;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.4 sp_settle_invoice: CHOT hoa don -- phai co dong hang va thu du tien
---     Java goi thu tuc nay o cuoi transaction lap hoa don, TRUOC commit,
---     tren cung mot Connection (InvoiceDao.createInvoice) -- dung nhu
---     sp_add_invoice_line va sp_add_payment.
---
---     KHONG tra ResultSet: Java goi bang cs.executeUpdate(), va
---     Connector/J nem loi "Can not issue SELECT via executeUpdate()" neu
---     thu tuc tra ve bang.
---
---     DOI NGHIA KHI BO 'OPEN': truoc day tra thieu la mot trang thai hop le
---     (hoa don o lai 'OPEN'). Nay tra thieu la LOI -- thu tuc SIGNAL va
---     transaction cua Java ROLLBACK, nen database khong bao gio chua mot
---     hoa don chua thu du tien. Tab 1 da chan truoc o giao dien; day la
---     chot cuoi cho moi duong ghi khac (seed, script, ContractCheck).
+-- 5.4 sp_settle_invoice (BR3, BR14):
+--     Chot hoa don truoc khi COMMIT: phai co >= 1 dong hang va da thu du.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_settle_invoice(
     IN p_invoice_id VARCHAR(30)
 )
 BEGIN
-    DECLARE v_status   VARCHAR(10)   DEFAULT NULL;
-    DECLARE v_has_line INT           DEFAULT 0;
+    DECLARE v_status   VARCHAR(10)  DEFAULT NULL;
+    DECLARE v_has_line INT          DEFAULT 0;
     DECLARE v_msg      VARCHAR(255);
-
-    -- Khoa dong hoa don trong suot transaction: hai cua so app khong the
-    -- cung di qua phep kiem ben duoi (cung ly do nhu sp_add_return).
-    SELECT Status
-    INTO   v_status
+    SELECT Status INTO v_status
     FROM   Invoice
     WHERE  Invoice_ID = p_invoice_id
     FOR UPDATE;
@@ -1154,86 +1213,76 @@ BEGIN
     SELECT EXISTS (SELECT 1 FROM Invoice_Line WHERE Invoice_ID = p_invoice_id)
     INTO   v_has_line;
 
-    -- Hoa don rong KHONG bao gio PAID, du co bao nhieu tien: fn_invoice_amount_due
-    -- tra 0.00 cho hoa don rong nen phep so sanh mot minh se noi "da thu du".
     IF v_has_line = 0 THEN
-        SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' khong co dong hang nao');
+        SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' khong co dong hang nao (BR3)');
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
 
     IF fn_invoice_amount_paid(p_invoice_id) < fn_invoice_amount_due(p_invoice_id) THEN
         SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' chua thu du tien: phai thu ',
                            fn_invoice_amount_due(p_invoice_id), ', moi ghi nhan ',
-                           fn_invoice_amount_paid(p_invoice_id));
+                           fn_invoice_amount_paid(p_invoice_id), ' (BR14)');
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.5 sp_void_invoice: Huy mot hoa don
---     HUY KHAC XOA: du lieu van con nguyen (dong hang, thanh toan, tra
---     hang). Muon xoa sach thi dung sp_delete_invoice.
---
---     HAI NGUOI GOI, HAI NGHIA cua 'VOIDED':
---       1. Nut "Huy hoa don" (InvoiceDao.voidInvoice): hoa don khong co dong
---          Return nao -> fn_invoice_in_revenue = 0, ra khoi bao cao.
---       2. Tra hang (InvoiceDao.processReturn, SAU cac sp_add_return, cung
---          transaction): hoa don co dong Return -> bao cao van tinh theo gia
---          tri hoa don dieu chinh (Invoice_Line - Return). Hoa don VOIDED
---          khong tra hang them duoc nua (sp_add_return chi nhan PAID).
---
---     CAC DONG Payment DA GHI KHONG BI XOA: huy khong xoa dau vet tien.
---     Viec tra lai so tien do la nghiep vu hoan tien -- plan/13 muc 2.3.
---
---     Huy mot hoa don DA huy la LOI (khac sp_settle_invoice im lang): o day
---     nguoi dung vua bam mot nut va can biet viec ho tuong minh lam da xay
---     ra tu truoc.
+-- 5.5 sp_void_invoice (BR3): Huy hoa don sau thanh toan boi MANAGER
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_void_invoice(
-    IN p_invoice_id VARCHAR(30)
+    IN p_invoice_id    VARCHAR(30),
+    IN p_supervisor_id VARCHAR(10)
 )
 BEGIN
     DECLARE v_status VARCHAR(10) DEFAULT NULL;
-    DECLARE v_msg    VARCHAR(255);
+    DECLARE v_role   VARCHAR(10) DEFAULT NULL;
 
-    SELECT Status
-    INTO   v_status
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_manager_void = NULL;
+        RESIGNAL;
+    END;
+    SELECT Status INTO v_status
     FROM   Invoice
     WHERE  Invoice_ID = p_invoice_id
     FOR UPDATE;
 
     IF v_status IS NULL THEN
-        SET v_msg = CONCAT('Khong tim thay hoa don ', p_invoice_id);
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice not found';
     END IF;
 
-    IF v_status = 'VOIDED' THEN
-        SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' da bi huy truoc do');
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+    SELECT Role INTO v_role
+    FROM   Cashier
+    WHERE  Cashier_ID = p_supervisor_id;
+
+    IF v_role IS NULL OR v_role <> 'MANAGER' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Only a MANAGER may void a settled invoice (BR3)';
     END IF;
 
-    UPDATE Invoice
-    SET    Status = 'VOIDED'
-    WHERE  Invoice_ID = p_invoice_id;
+    IF v_status <> 'PAID' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice is already VOIDED';
+    END IF;
+
+    -- BR16: hoa don da tra hang phai giu nguyen PAID. Huy no se loai ca phan
+    -- khach con giu khoi doanh thu (fn_invoice_in_revenue = 0) trong khi tien
+    -- hoan da chi -- doanh thu thuan bi tru HAI lan.
+    IF EXISTS (SELECT 1 FROM `Return` WHERE Invoice_ID = p_invoice_id) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice has returns and must stay PAID; it cannot be voided (BR16)';
+    END IF;
+
+    SET @retail_manager_void = 1;
+    UPDATE Invoice SET Status = 'VOIDED' WHERE Invoice_ID = p_invoice_id;
+    SET @retail_manager_void = NULL;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.6 sp_add_return: Ghi MOT luot tra hang cho mot dong hoa don
---     Java quan ly ranh gioi transaction (InvoiceDao.processReturn goi thu tuc
---     nay N lan tren cung mot Connection) -- dung nhu sp_add_invoice_line.
---     Thu tuc nay la CHOT CUOI cua cac quy tac nghiep vu: plan/12 muc 3.4.
---
---     TRA HANG XONG THI HOA DON GOC THANH 'VOIDED': Java goi sp_void_invoice
---     ngay sau cac lan goi thu tuc nay, trong cung transaction. Van KHONG
---     them RETURNED vao ENUM (plan/13 muc 3.3): "VOIDED + co dong Return" la
---     du de phan biet voi hoa don bi huy (fn_invoice_in_revenue), va gia tri
---     con lai doc tu hoa don dieu chinh (sp_get_invoice_adjusted).
---
---     Thu tuc nay CHI DOC cot Invoice.Status, khong bao gio ghi. Chi hoa don
---     'PAID' moi tra hang duoc: hoa don 'VOIDED' da bi huy (hoac da tra
---     hang roi), hoan tien them cho no la vo nghia.
+-- 5.6 sp_add_return (BR7, BR15, BR16):
+--     Ghi nhan luot tra hang, bat buoc MANAGER duyet, hoa don PAID,
+--     so luong nguyen voi hang dong goi, va khong vuot SL con lai.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_add_return(
     IN p_invoice_id  VARCHAR(30),
@@ -1245,83 +1294,81 @@ CREATE PROCEDURE sp_add_return(
 BEGIN
     DECLARE v_line_qty  DECIMAL(10,3) DEFAULT NULL;
     DECLARE v_status    VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_unit      VARCHAR(10)   DEFAULT NULL;
     DECLARE v_returned  DECIMAL(10,3) DEFAULT 0;
     DECLARE v_remaining DECIMAL(10,3) DEFAULT 0;
     DECLARE v_return_id INT           DEFAULT 1;
-    DECLARE v_msg       VARCHAR(255);
+    DECLARE v_role      VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_ret_date  DATE          DEFAULT NULL;
+    DECLARE v_not_found BOOLEAN       DEFAULT FALSE;
 
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_not_found = TRUE;
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_return_write = NULL;
+        RESIGNAL;
+    END;
     IF p_quantity IS NULL OR p_quantity <= 0 THEN
         SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'So luong tra phai lon hon 0';
+            SET MESSAGE_TEXT = 'Return quantity must be greater than zero (BR16)';
     END IF;
 
-    -- Khoa dong hoa don goc trong suot transaction. Hai muc dich:
-    --   1. hai cua so app khong the cung di qua phep kiem "con lai" ben duoi
-    --   2. fn_next_return_id (MAX + 1) nho the moi an toan
-    SELECT l.Quantity, i.Status
-    INTO   v_line_qty, v_status
+    SELECT Role INTO v_role
+    FROM   Cashier
+    WHERE  Cashier_ID = p_approved_by;
+
+    IF v_role IS NULL OR v_role <> 'MANAGER' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Only a MANAGER may approve a return (BR15)';
+    END IF;
+
+    SET v_not_found = FALSE;
+    SELECT l.Quantity, i.Status, p.Unit
+    INTO   v_line_qty, v_status, v_unit
     FROM   Invoice_Line l
     JOIN   Invoice      i ON i.Invoice_ID = l.Invoice_ID
+    JOIN   Product      p ON p.Barcode    = l.Barcode
     WHERE  l.Invoice_ID  = p_invoice_id
       AND  l.Line_Number = p_line_number
     FOR UPDATE;
 
-    IF v_line_qty IS NULL THEN
-        SET v_msg = CONCAT('Khong tim thay dong ', p_line_number,
-                           ' cua hoa don ', p_invoice_id);
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+    IF v_not_found OR v_line_qty IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Original invoice line not found';
     END IF;
 
-    -- '<> PAID' chu khong '= VOIDED': khong co ke ho neu sau nay ENUM co
-    -- them gia tri. Thong diep neu dung trang thai
-    -- dang gap de nguoi dung biet vi sao bi tu choi (plan/13 muc 4.9).
     IF v_status <> 'PAID' THEN
-        SET v_msg = CONCAT('Hoa don ', p_invoice_id, ' dang o trang thai ', v_status,
-                           ', chi hoa don da thanh toan (PAID) moi tra hang duoc');
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Only original PAID invoices may be returned (BR16)';
     END IF;
 
-    SELECT COALESCE(SUM(Return_Quantity), 0)
-    INTO   v_returned
+    IF v_unit IN ('PIECE','PACK','BOX') AND p_quantity <> FLOOR(p_quantity) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Packaged products (PIECE/PACK/BOX) require an integer return quantity (BR7/BR16)';
+    END IF;
+
+    SELECT COALESCE(SUM(Return_Quantity), 0) INTO v_returned
     FROM   `Return`
-    WHERE  Invoice_ID  = p_invoice_id
-      AND  Line_Number = p_line_number;
+    WHERE  Invoice_ID = p_invoice_id AND Line_Number = p_line_number;
 
     SET v_remaining = v_line_qty - v_returned;
-
     IF p_quantity > v_remaining THEN
-        SET v_msg = CONCAT('Dong ', p_line_number, ': chi con ', v_remaining,
-                           ' co the tra (da mua ', v_line_qty,
-                           ', da tra ', v_returned, '), khong tra duoc ', p_quantity);
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Return quantity exceeds remaining purchased quantity (BR16)';
     END IF;
 
+    SET v_ret_date = COALESCE(p_return_date, CURDATE());
     SET v_return_id = fn_next_return_id(p_invoice_id, p_line_number);
-
-    INSERT INTO `Return` (Invoice_ID, Line_Number, Return_ID,
-                          Return_Date, Return_Quantity, Approved_By)
-    VALUES (p_invoice_id, p_line_number, v_return_id,
-            p_return_date, p_quantity, p_approved_by);
+    SET @retail_return_write = 1;
+    INSERT INTO `Return`
+        (Invoice_ID, Line_Number, Return_ID, Return_Date, Return_Quantity, Approved_By)
+    VALUES
+        (p_invoice_id, p_line_number, v_return_id, v_ret_date, p_quantity, p_approved_by);
+    SET @retail_return_write = NULL;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.7 sp_delete_return: Huy tra hang cua MOT DONG hoa don
---     DOI HOP DONG: truoc day xoa MOT luot (theo Return_ID). Return_ID nay
---     da an khoi giao dien (hoa don dieu chinh hien theo dong), nen thu tuc
---     xoa MOI luot tra cua dong do. Return_ID van la khoa chinh trong DB.
---
---     MO KHOA LAI HOA DON: hoa don goc VOIDED vi tra hang. Xoa xong ma hoa
---     don KHONG CON dong Return nao thi viec tra hang coi nhu chua tung xay
---     ra -> tro ve 'PAID'. Day la duong DUY NHAT ra khoi 'VOIDED', va chi
---     mo voi hoa don VOIDED-vi-tra-hang: hoa don bi bam "Huy" khong co dong
---     Return nao nen p_deleted = 0 va khong vao nhanh nay.
---
---     p_deleted (OUT) = so luot tra da xoa; 0 nghia la dong nay khong co
---     luot tra nao (co the ai khac da huy truoc). Dung OUT thay cho
---     executeUpdate() vi thu tuc co HAI cau ghi -- so dong tra ve cua
---     executeUpdate la cua cau cuoi, khong phai cua DELETE.
---     Java goi trong MOT transaction (InvoiceDao.deleteLineReturns).
+-- 5.7 sp_delete_return: Chan xoa lich su tra hang de bao toan audit
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_delete_return(
     IN  p_invoice_id  VARCHAR(30),
@@ -1329,102 +1376,28 @@ CREATE PROCEDURE sp_delete_return(
     OUT p_deleted     INT
 )
 BEGIN
-    DECLARE v_status VARCHAR(10) DEFAULT NULL;
-
-    SELECT Status INTO v_status
-    FROM   Invoice
-    WHERE  Invoice_ID = p_invoice_id
-    FOR UPDATE;
-
-    DELETE FROM `Return`
-    WHERE Invoice_ID  = p_invoice_id
-      AND Line_Number = p_line_number;
-    SET p_deleted = ROW_COUNT();
-
-    IF v_status = 'VOIDED' AND p_deleted > 0
-       AND NOT EXISTS (SELECT 1 FROM `Return` WHERE Invoice_ID = p_invoice_id) THEN
-        UPDATE Invoice SET Status = 'PAID' WHERE Invoice_ID = p_invoice_id;
-    END IF;
-END$$
-
-
--- =====================================================================
--- PHẦN 5: THỦ TỤC XÁC THỰC TÀI KHOẢN & SỬA/XÓA TRỰC TIẾP DATABASE
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 5.1 sp_authenticate_account: Kiểm tra đăng nhập
---     Cot Cashier_ID cho Java biet tai khoan nay ung voi nhan vien nao
---     (dung lam nguoi duyet tra hang -- plan/12 muc 3.3). Co the NULL.
--- ---------------------------------------------------------------------
-CREATE PROCEDURE sp_authenticate_account(
-    IN p_username VARCHAR(50),
-    IN p_password VARCHAR(100)
-)
-BEGIN
-    SELECT Username, Role, Full_Name, Cashier_ID
-    FROM   Account
-    WHERE  Username = p_username
-      AND  Password = p_password;
+    SET p_deleted = 0;
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Return records are immutable for audit; use an approved correction workflow';
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.2 sp_delete_invoice: Xóa an toàn hóa đơn và các quan hệ khóa ngoại
---     Thứ tự xóa bắt buộc theo quan hệ cha - con:
---     1. Return (bảng con của Invoice_Line)
---     2. Cash_Payment / Card_Payment / EWallet_Payment (bảng con của Payment)
---     3. Payment (bảng con của Invoice)
---     4. Invoice_Line (bảng con của Invoice)
---     5. Invoice (bảng cha)
+-- 5.8 sp_delete_invoice: Chan xoa hoa don da chot ngoai maintenance wipe
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_delete_invoice(
     IN p_invoice_id VARCHAR(30)
 )
 BEGIN
-    -- 1. Xóa các lượt trả hàng thuộc các dòng của hóa đơn này
-    DELETE FROM `Return`
-    WHERE Invoice_ID = p_invoice_id;
-
-    -- 2. Xóa các chi tiết phương thức thanh toán bảng con
-    DELETE FROM Cash_Payment
-    WHERE Payment_ID IN (SELECT Payment_ID FROM Payment WHERE Invoice_ID = p_invoice_id);
-
-    DELETE FROM Card_Payment
-    WHERE Payment_ID IN (SELECT Payment_ID FROM Payment WHERE Invoice_ID = p_invoice_id);
-
-    DELETE FROM EWallet_Payment
-    WHERE Payment_ID IN (SELECT Payment_ID FROM Payment WHERE Invoice_ID = p_invoice_id);
-
-    -- 3. Xóa các lượt thanh toán chính
-    DELETE FROM Payment
-    WHERE Invoice_ID = p_invoice_id;
-
-    -- 4. Xóa các dòng hàng
-    DELETE FROM Invoice_Line
-    WHERE Invoice_ID = p_invoice_id;
-
-    -- 5. Xóa phần đầu hóa đơn
-    DELETE FROM Invoice
-    WHERE Invoice_ID = p_invoice_id;
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Finalized invoices and their payment/return history cannot be deleted; use maintenance wipe only';
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.3 sp_update_invoice_header: Chỉnh sửa thông tin chung của hóa đơn
---     p_status KHONG con la "trang thai muon dat" ma la MOT PHEP KIEM:
---     no phai BANG trang thai dang co trong database. Moi chuyen doi trang
---     thai chi di qua sp_settle_invoice (-> PAID) hoac sp_void_invoice
---     (-> VOIDED) -- plan/13 muc 3.2.
---     Giu nguyen 7 tham so de khong pha hop dong voi Java (docs/05 Quy tac 2).
---
---     GHI CHU TRUNG THUC: InvoiceDao.updateInvoiceHeader chay o che do
---     autocommit nen phep kiem va cau UPDATE KHONG nguyen tu -- ve ly thuyet
---     co khe ho neu hai cua so app cung sua mot hoa don trong vai micro-giay.
---     Khong bit bang FOR UPDATE (vo ich duoi autocommit) cung khong bang
---     WHERE ... AND Status = p_status (vi luu ma khong sua gi thi ROW_COUNT()
---     tra 0 va ta se bao mot loi khong co that). Hau qua xau nhat cua khe ho
---     la ghi de ngay/gio/quay -- khong phai tien, khong phai trang thai.
+-- 5.9 sp_update_invoice_header (BR2, BR3, BR4, BR10):
+--     Chi cho phep gan/cap nhat khach hang thanh vien (Customer_ID);
+--     cam sua Date, Time, Status, Counter_ID, Cashier_ID.
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_update_invoice_header(
     IN p_invoice_id  VARCHAR(30),
@@ -1436,46 +1409,42 @@ CREATE PROCEDURE sp_update_invoice_header(
     IN p_customer_id VARCHAR(15)
 )
 BEGIN
-    DECLARE v_old VARCHAR(10) DEFAULT NULL;
-    DECLARE v_msg VARCHAR(255);
+    DECLARE v_date    DATE        DEFAULT NULL;
+    DECLARE v_time    TIME        DEFAULT NULL;
+    DECLARE v_status  VARCHAR(10) DEFAULT NULL;
+    DECLARE v_counter VARCHAR(10) DEFAULT NULL;
+    DECLARE v_cashier VARCHAR(10) DEFAULT NULL;
 
-    SELECT Status INTO v_old
+    SELECT `Date`, `Time`, Status, Counter_ID, Cashier_ID
+    INTO   v_date, v_time, v_status, v_counter, v_cashier
     FROM   Invoice
-    WHERE  Invoice_ID = p_invoice_id;
+    WHERE  Invoice_ID = p_invoice_id
+    FOR UPDATE;
 
-    IF v_old IS NULL THEN
-        SET v_msg = CONCAT('Khong tim thay hoa don ', p_invoice_id);
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+    IF v_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice not found';
     END IF;
 
-    IF p_status IS NULL OR p_status <> v_old THEN
-        IF v_old = 'VOIDED' THEN
-            SET v_msg = CONCAT('Hoa don ', p_invoice_id,
-                   ' da bi huy, khong doi trang thai duoc nua');
-        ELSEIF p_status = 'VOIDED' THEN
-            SET v_msg = 'Khong huy hoa don bang hop thoai sua. Dung nut "Huy hoa don" o tab Xem hoa don';
-        ELSEIF p_status = 'PAID' THEN
-            SET v_msg = 'Khong tu dat PAID. Hoa don tu chuyen sang PAID khi da thu du tien';
-        ELSE
-            SET v_msg = CONCAT('Khong mo lai hoa don da thu tien (',
-                   v_old, ' -> ', COALESCE(p_status, 'NULL'), ')');
-        END IF;
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
+    IF NOT (p_date <=> v_date) OR NOT (p_time <=> v_time)
+       OR NOT (p_status <=> v_status) OR NOT (p_counter_id <=> v_counter)
+       OR NOT (p_cashier_id <=> v_cashier) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice timestamp, counter, cashier and status are immutable (BR2/BR3/BR4)';
+    END IF;
+
+    IF p_customer_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM Customer WHERE Customer_ID = p_customer_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unknown customer (BR10)';
     END IF;
 
     UPDATE Invoice
-    SET    `Date`      = p_date,
-           `Time`      = p_time,
-           Status      = p_status,   -- = v_old, giu lai cho ro rang
-           Counter_ID  = p_counter_id,
-           Cashier_ID  = p_cashier_id,
-           Customer_ID = p_customer_id
-    WHERE  Invoice_ID  = p_invoice_id;
+    SET    Customer_ID = p_customer_id
+    WHERE  Invoice_ID = p_invoice_id;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.4 sp_update_invoice_line: Chỉnh sửa dòng hàng trong hóa đơn
+-- 5.10 sp_update_invoice_line (BR8): Cam sua dong hoa don sau checkout
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_update_invoice_line(
     IN p_invoice_id  VARCHAR(30),
@@ -1486,125 +1455,472 @@ CREATE PROCEDURE sp_update_invoice_line(
     IN p_discount    DECIMAL(12,2)
 )
 BEGIN
-    UPDATE Invoice_Line
-    SET    Barcode    = p_barcode,
-           Quantity   = p_quantity,
-           Unit_Price = p_unit_price,
-           Discount   = p_discount
-    WHERE  Invoice_ID  = p_invoice_id
-      AND  Line_Number = p_line_number;
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invoice lines are immutable after checkout; price and discount cannot be edited (BR8)';
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 5.5 sp_delete_invoice_line: Xóa 1 dòng hàng cụ thể trong hóa đơn
+-- 5.11 sp_delete_invoice_line (BR16): Cam xoa dong hoa don sau checkout
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_delete_invoice_line(
     IN p_invoice_id  VARCHAR(30),
     IN p_line_number INT
 )
 BEGIN
-    DECLARE v_returns INT DEFAULT 0;
-
-    -- Xóa lượt trả hàng tham chiếu đến dòng này nếu có
-    DELETE FROM `Return`
-    WHERE Invoice_ID = p_invoice_id
-      AND Line_Number = p_line_number;
-    SET v_returns = ROW_COUNT();
-
-    -- Xóa dòng hàng
-    DELETE FROM Invoice_Line
-    WHERE Invoice_ID = p_invoice_id
-      AND Line_Number = p_line_number;
-
-    -- Cung quy tac voi sp_delete_return: hoa don VOIDED-vi-tra-hang mat
-    -- dong Return cuoi cung thi tro ve 'PAID' -- neu khong no se bi coi la
-    -- hoa don bi huy va bien mat khoi doanh thu.
-    IF v_returns > 0
-       AND NOT EXISTS (SELECT 1 FROM `Return` WHERE Invoice_ID = p_invoice_id) THEN
-        UPDATE Invoice SET Status = 'PAID'
-        WHERE  Invoice_ID = p_invoice_id AND Status = 'VOIDED';
-    END IF;
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'A finalized invoice line cannot be deleted; preserve the original sale and return history (BR16)';
 END$$
 
 
 -- =====================================================================
--- PHAN 6: DUNG CU XOA DU LIEU -- app billing KHONG goi (plan/16)
---
---   Nguoi goi: 02_seed.sql (khoi 0), nut "Xoa du lieu" cua Setup App
---   (scripts/*/sql-wipe-data.*), va seed tu viet cua nguoi hoc:
---       CALL sp_wipe_transactions();   -- dau file seed => chay lai duoc
---
---   Xoa DONG, giu BANG: 16 bang, moi ham / thu tuc va moi thu khac trong
---   database deu con nguyen. Goi hai lan cung nhu goi mot lan.
---
---   Thu tu la NGUOC CHIEU KHOA NGOAI: bang con truoc, bang cha sau.
---   Doc tu duoi len la doc dung thu tu CREATE TABLE cua 01_schema.sql.
---
---   KHONG dung SET FOREIGN_KEY_CHECKS = 0: ngan hon 14 dong, nhung no
---   day nguoi hoc tat toan ven du lieu de do phai nghi ve thu tu -- nguoc
---   han muc dich cua repo nay. Va no IM LANG khi thu tu sai, trong khi
---   cach duoi day BAO LOI (plan/15 muc 4.2).
---   TRUNCATE cung khong dung duoc: MySQL tu choi TRUNCATE tren bang dang
---   duoc mot khoa ngoai tham chieu.
---
---   KHONG boc transaction: thu tuc chet giua duong thi lan goi sau lam
---   not. Va START TRANSACTION ben trong thu tuc se TU COMMIT transaction
---   dang mo cua nguoi goi -- ai boc seed cua minh trong transaction roi
---   goi thu tuc nay o dau se bi commit ngam ma khong biet.
---
---   THEM BANG MOI vao 01_schema.sql thi them no vao DAY, va vao danh sach
---   dem cua sql-wipe-data.ps1 / .sh. Quen buoc nay: bang con co khoa ngoai
---   se lam DELETE bang cha BAO LOI (on, dung cho); bang khong co khoa
---   ngoai thi sot du lieu IM LANG -- plan/16 muc 9.
+-- PHAN 6: DUNG CU DON DU LIEU (15 BANG THEO 01_schema.sql)
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 6.1 sp_wipe_transactions: xoa 7 bang GIAO DICH, giu 9 bang danh muc
---     (ranh gioi cua docs/05 muc 8.1). Khong the vi pham khoa ngoai:
---     khoa ngoai chi tro tu giao dich sang danh muc, khong co chieu nguoc.
---     Xoa xong, fn_next_invoice_id / fn_next_payment_id tu quay ve
---     INV-0001 / PAY-0001 vi chung lay MAX(...) + 1.
+-- 6.1 sp_wipe_transactions: Xoa 7 bang giao dich, giu 8 bang danh muc
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_wipe_transactions()
 BEGIN
-    DELETE FROM `Return`;             -- con cua Invoice_Line
-    DELETE FROM Cash_Payment;         -- 3 bang con cua Payment
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_maintenance = NULL;
+        RESIGNAL;
+    END;
+
+    SET @retail_maintenance = 1;
+    DELETE FROM `Return`;
+    DELETE FROM Cash_Payment;
     DELETE FROM Card_Payment;
     DELETE FROM EWallet_Payment;
-    DELETE FROM Payment;              -- con cua Invoice
-    DELETE FROM Invoice_Line;         -- con cua Invoice (va cua Product)
+    DELETE FROM Payment;
+    DELETE FROM Invoice_Line;
     DELETE FROM Invoice;
+    SET @retail_maintenance = NULL;
 END$$
 
 
 -- ---------------------------------------------------------------------
--- 6.2 sp_wipe_all_data: xoa ca 16 bang. Account cung mat, nen app billing
---     KHONG dang nhap duoc cho toi khi seed them lai tai khoan.
+-- 6.2 sp_wipe_all_data: Xoa toan bo 15 bang theo nguoc chieu khoa ngoai
 -- ---------------------------------------------------------------------
 CREATE PROCEDURE sp_wipe_all_data()
 BEGIN
-    CALL sp_wipe_transactions();      -- 7 bang con phai di truoc
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET @retail_maintenance = NULL;
+        RESIGNAL;
+    END;
 
-    DELETE FROM Account;              -- con cua Cashier
-    DELETE FROM Applies_To;           -- con cua Product va Promotion
+    SET @retail_maintenance = 1;
+    CALL sp_wipe_transactions();
+    SET @retail_maintenance = 1;
+
+    DELETE FROM Applies_To;
     DELETE FROM Promotion;
-    DELETE FROM Price_History;        -- con cua Product
+    DELETE FROM Price_History;
     DELETE FROM Product;
     DELETE FROM Customer;
-    DELETE FROM Counter;              -- con cua Shop
+    DELETE FROM Counter;
     DELETE FROM Shop;
 
-    -- Cashier TU THAM CHIEU chinh no (Supervisor_ID -> Cashier_ID), nen mot
-    -- cau DELETE duy nhat se that bai: InnoDB kiem khoa ngoai TUNG DONG, va
-    -- xoa E01 trong khi E02..E05 con tro vao no la vi pham.
-    -- Thao lien ket truoc, roi moi xoa.
     UPDATE Cashier SET Supervisor_ID = NULL;
     DELETE FROM Cashier;
+    SET @retail_maintenance = NULL;
 END$$
 
 
+-- =====================================================================
+-- PHAN 7: TRIGGERS -- CHOT CHAN CAP CSDL CHO 16 BUSINESS RULES
+-- =====================================================================
+
+-- BR6/BR8: Price_History la append-only, bat bien voi UPDATE/DELETE
+CREATE TRIGGER trg_price_history_bi
+BEFORE INSERT ON Price_History
+FOR EACH ROW
+BEGIN
+    IF COALESCE(@retail_price_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Use sp_add_price_history to append a new effective-dated price (BR6/BR8)';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_price_history_bu
+BEFORE UPDATE ON Price_History
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Price history is immutable; insert a new effective-dated price instead (BR6/BR8)';
+END$$
+
+CREATE TRIGGER trg_price_history_bd
+BEFORE DELETE ON Price_History
+FOR EACH ROW
+BEGIN
+    IF COALESCE(@retail_maintenance, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Price history cannot be deleted (BR6/BR8)';
+    END IF;
+END$$
+
+-- BR1/BR2: Dong ho server la chuan duy nhat, ma hoa don dung dinh dang
+CREATE TRIGGER trg_invoice_bi
+BEFORE INSERT ON Invoice
+FOR EACH ROW
+BEGIN
+    DECLARE v_shop_id         VARCHAR(10) DEFAULT NULL;
+    DECLARE v_expected_prefix VARCHAR(64);
+    DECLARE v_server_now      DATETIME;
+
+    IF COALESCE(@retail_create_invoice, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoices must be created through sp_create_invoice_header (BR1/BR3)';
+    END IF;
+
+    SELECT Shop_ID INTO v_shop_id
+    FROM   Counter
+    WHERE  Counter_ID = NEW.Counter_ID;
+
+    SET v_server_now = NOW();
+    SET NEW.`Date` = DATE(v_server_now);
+    SET NEW.`Time` = TIME(v_server_now);
+    SET v_expected_prefix = CONCAT(v_shop_id, '-', NEW.Counter_ID, '-',
+                                   DATE_FORMAT(NEW.`Date`, '%Y%m%d'), '-');
+
+    IF v_shop_id IS NULL
+       OR LEFT(NEW.Invoice_ID, CHAR_LENGTH(v_expected_prefix)) <> v_expected_prefix THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice_ID must contain the server shop, counter and date prefix (BR1)';
+    END IF;
+END$$
+
+-- BR1/BR2/BR3/BR4: Bat bien thong tin goc cua hoa don; chi MANAGER huy duoc PAID -> VOIDED
+CREATE TRIGGER trg_invoice_bu
+BEFORE UPDATE ON Invoice
+FOR EACH ROW
+BEGIN
+    IF NEW.Invoice_ID <> OLD.Invoice_ID
+       OR NEW.`Date` <> OLD.`Date`
+       OR NEW.`Time` <> OLD.`Time`
+       OR NEW.Counter_ID <> OLD.Counter_ID
+       OR NEW.Cashier_ID <> OLD.Cashier_ID THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice identity, timestamp, counter and cashier are immutable (BR1/BR2/BR4)';
+    END IF;
+
+    IF NEW.Status <> OLD.Status THEN
+        IF NOT (OLD.Status = 'PAID' AND NEW.Status = 'VOIDED'
+                AND COALESCE(@retail_manager_void, 0) = 1) THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'Only an authorized manager may change PAID to VOIDED (BR3)';
+        END IF;
+    END IF;
+END$$
+
+-- BR5/BR7/BR8/BR9/BR11: Khoa cung gia, thue, khuyen mai tot nhat luc them dong
+CREATE TRIGGER trg_invoice_line_bi
+BEFORE INSERT ON Invoice_Line
+FOR EACH ROW
+BEGIN
+    DECLARE v_invoice_date DATE          DEFAULT NULL;
+    DECLARE v_status       VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_unit         VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_price        DECIMAL(12,2) DEFAULT NULL;
+    DECLARE v_tax          DECIMAL(5,2)  DEFAULT NULL;
+    DECLARE v_pct          DECIMAL(5,2)  DEFAULT 0;
+
+    IF COALESCE(@retail_line_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice lines must be created or accumulated through sp_add_invoice_line (BR5/BR7)';
+    END IF;
+
+    SELECT `Date`, Status INTO v_invoice_date, v_status
+    FROM   Invoice
+    WHERE  Invoice_ID = NEW.Invoice_ID;
+
+    IF v_status IS NULL OR v_status <> 'PAID' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice line requires an active checkout invoice';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM Payment WHERE Invoice_ID = NEW.Invoice_ID) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice lines cannot be added after payment begins';
+    END IF;
+
+    SELECT Unit, Tax_Rate INTO v_unit, v_tax
+    FROM   Product
+    WHERE  Barcode = NEW.Barcode;
+
+    IF v_unit IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unknown product barcode';
+    END IF;
+
+    IF NEW.Quantity <= 0
+       OR (v_unit IN ('PIECE','PACK','BOX') AND NEW.Quantity <> FLOOR(NEW.Quantity)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity for product unit (BR7)';
+    END IF;
+
+    SET v_price = fn_get_product_price(NEW.Barcode, v_invoice_date);
+    IF v_price IS NULL OR v_price <= 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No valid price on invoice date (BR6/BR8)';
+    END IF;
+
+    SET v_pct = fn_active_promo_pct(NEW.Barcode, v_invoice_date);
+    SET NEW.Unit_Price = v_price;
+    SET NEW.Tax_Rate   = v_tax;
+    SET NEW.Discount   = ROUND(NEW.Quantity * v_price * v_pct / 100, 2);
+END$$
+
+CREATE TRIGGER trg_invoice_line_bu
+BEFORE UPDATE ON Invoice_Line
+FOR EACH ROW
+BEGIN
+    DECLARE v_invoice_date DATE         DEFAULT NULL;
+    DECLARE v_unit         VARCHAR(10)  DEFAULT NULL;
+    DECLARE v_pct          DECIMAL(5,2) DEFAULT 0;
+
+    IF COALESCE(@retail_line_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice lines may only be changed through sp_add_invoice_line quantity accumulation (BR7/BR8)';
+    END IF;
+
+    IF NEW.Barcode <> OLD.Barcode
+       OR NEW.Unit_Price <> OLD.Unit_Price
+       OR NEW.Tax_Rate <> OLD.Tax_Rate THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Barcode, frozen unit price and tax snapshot cannot be edited (BR8/BR9)';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM Payment WHERE Invoice_ID = OLD.Invoice_ID) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Paid invoice lines cannot be edited';
+    END IF;
+
+    SELECT `Date` INTO v_invoice_date FROM Invoice WHERE Invoice_ID = OLD.Invoice_ID;
+    SELECT Unit   INTO v_unit         FROM Product WHERE Barcode    = OLD.Barcode;
+
+    IF NEW.Quantity <= 0
+       OR (v_unit IN ('PIECE','PACK','BOX') AND NEW.Quantity <> FLOOR(NEW.Quantity)) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid quantity for product unit (BR7)';
+    END IF;
+
+    SET v_pct = fn_active_promo_pct(OLD.Barcode, v_invoice_date);
+    SET NEW.Discount = ROUND(NEW.Quantity * OLD.Unit_Price * v_pct / 100, 2);
+END$$
+
+CREATE TRIGGER trg_invoice_line_bd
+BEFORE DELETE ON Invoice_Line
+FOR EACH ROW
+BEGIN
+    IF COALESCE(@retail_maintenance, 0) <> 1
+       AND (EXISTS (SELECT 1 FROM Payment WHERE Invoice_ID = OLD.Invoice_ID)
+            OR EXISTS (SELECT 1 FROM `Return`
+                       WHERE Invoice_ID = OLD.Invoice_ID AND Line_Number = OLD.Line_Number)) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Paid or returned invoice lines cannot be deleted (BR16)';
+    END IF;
+END$$
+
+-- BR7/BR15/BR16: Tra hang phai co MANAGER duyet, hoa don PAID, ngay tra >= ngay mua,
+-- so luong nguyen voi hang dong goi, va tong tra luy ke <= so luong da mua.
+CREATE TRIGGER trg_return_bi
+BEFORE INSERT ON `Return`
+FOR EACH ROW
+BEGIN
+    DECLARE v_role     VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_status   VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_inv_date DATE          DEFAULT NULL;
+    DECLARE v_unit     VARCHAR(10)   DEFAULT NULL;
+    DECLARE v_qty      DECIMAL(10,3) DEFAULT NULL;
+    DECLARE v_returned DECIMAL(10,3) DEFAULT 0;
+
+    IF COALESCE(@retail_return_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Returns must be recorded through sp_add_return';
+    END IF;
+
+    SELECT Role INTO v_role
+    FROM   Cashier
+    WHERE  Cashier_ID = NEW.Approved_By;
+
+    IF v_role IS NULL OR v_role <> 'MANAGER' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Return approver must have MANAGER role (BR15)';
+    END IF;
+
+    SELECT i.Status, i.`Date`, l.Quantity, p.Unit
+    INTO   v_status, v_inv_date, v_qty, v_unit
+    FROM   Invoice      i
+    JOIN   Invoice_Line l ON l.Invoice_ID = i.Invoice_ID
+    JOIN   Product      p ON p.Barcode    = l.Barcode
+    WHERE  l.Invoice_ID  = NEW.Invoice_ID
+      AND  l.Line_Number = NEW.Line_Number;
+
+    IF v_status IS NULL OR v_status <> 'PAID' THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Returns are allowed only for original PAID invoices (BR16)';
+    END IF;
+
+    IF NEW.Return_Date < v_inv_date THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Return_Date cannot be earlier than original Invoice Date (BR16)';
+    END IF;
+
+    IF NEW.Return_Quantity <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Return quantity must be greater than zero (BR16)';
+    END IF;
+
+    IF v_unit IN ('PIECE','PACK','BOX') AND NEW.Return_Quantity <> FLOOR(NEW.Return_Quantity) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Packaged products (PIECE/PACK/BOX) require an integer return quantity (BR7/BR16)';
+    END IF;
+
+    SELECT COALESCE(SUM(Return_Quantity), 0) INTO v_returned
+    FROM   `Return`
+    WHERE  Invoice_ID = NEW.Invoice_ID AND Line_Number = NEW.Line_Number;
+
+    IF v_returned + NEW.Return_Quantity > v_qty THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Cumulative return quantity exceeds the purchased quantity (BR16)';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_return_bu
+BEFORE UPDATE ON `Return`
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Return records are immutable for audit (BR16)';
+END$$
+
+CREATE TRIGGER trg_return_bd
+BEFORE DELETE ON `Return`
+FOR EACH ROW
+BEGIN
+    IF COALESCE(@retail_maintenance, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Return records cannot be deleted outside maintenance';
+    END IF;
+END$$
+
+-- =====================================================================
+-- PAYMENT ISA: Total + Disjoint & BR12 / BR13
+-- =====================================================================
+CREATE TRIGGER trg_payment_bi
+BEFORE INSERT ON Payment
+FOR EACH ROW
+BEGIN
+    IF COALESCE(@retail_payment_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Payment must be created through sp_add_payment (ISA Total)';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_payment_bu
+BEFORE UPDATE ON Payment
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Payment records are immutable';
+END$$
+
+CREATE TRIGGER trg_payment_bd
+BEFORE DELETE ON Payment
+FOR EACH ROW
+BEGIN
+    IF COALESCE(@retail_maintenance, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Payment records cannot be deleted outside maintenance';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_cash_payment_bi
+BEFORE INSERT ON Cash_Payment
+FOR EACH ROW
+BEGIN
+    DECLARE v_amount DECIMAL(12,2) DEFAULT NULL;
+    IF COALESCE(@retail_payment_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Use sp_add_payment for cash payments';
+    END IF;
+    IF EXISTS (SELECT 1 FROM Card_Payment WHERE Payment_ID = NEW.Payment_ID)
+       OR EXISTS (SELECT 1 FROM EWallet_Payment WHERE Payment_ID = NEW.Payment_ID) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype violates ISA Disjoint';
+    END IF;
+    SELECT Amount INTO v_amount FROM Payment WHERE Payment_ID = NEW.Payment_ID;
+    IF v_amount IS NULL OR NEW.Tendered_Amount < v_amount THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cash tendered must be >= applied payment amount (BR13)';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_card_payment_bi
+BEFORE INSERT ON Card_Payment
+FOR EACH ROW
+BEGIN
+    DECLARE v_invoice_id VARCHAR(30) DEFAULT NULL;
+    IF COALESCE(@retail_payment_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Use sp_add_payment for card payments';
+    END IF;
+    IF EXISTS (SELECT 1 FROM Cash_Payment WHERE Payment_ID = NEW.Payment_ID)
+       OR EXISTS (SELECT 1 FROM EWallet_Payment WHERE Payment_ID = NEW.Payment_ID) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype violates ISA Disjoint';
+    END IF;
+    SELECT Invoice_ID INTO v_invoice_id FROM Payment WHERE Payment_ID = NEW.Payment_ID;
+    IF v_invoice_id IS NULL OR fn_invoice_amount_paid(v_invoice_id) > fn_invoice_amount_due(v_invoice_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Card payment cannot exceed invoice balance (BR13)';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_ewallet_payment_bi
+BEFORE INSERT ON EWallet_Payment
+FOR EACH ROW
+BEGIN
+    DECLARE v_invoice_id VARCHAR(30) DEFAULT NULL;
+    IF COALESCE(@retail_payment_write, 0) <> 1 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Use sp_add_payment for e-wallet payments';
+    END IF;
+    IF EXISTS (SELECT 1 FROM Cash_Payment WHERE Payment_ID = NEW.Payment_ID)
+       OR EXISTS (SELECT 1 FROM Card_Payment WHERE Payment_ID = NEW.Payment_ID) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype violates ISA Disjoint';
+    END IF;
+    SELECT Invoice_ID INTO v_invoice_id FROM Payment WHERE Payment_ID = NEW.Payment_ID;
+    IF v_invoice_id IS NULL OR fn_invoice_amount_paid(v_invoice_id) > fn_invoice_amount_due(v_invoice_id) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'E-wallet payment cannot exceed invoice balance (BR13)';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_cash_payment_bu BEFORE UPDATE ON Cash_Payment FOR EACH ROW
+BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records are immutable'; END$$
+CREATE TRIGGER trg_card_payment_bu BEFORE UPDATE ON Card_Payment FOR EACH ROW
+BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records are immutable'; END$$
+CREATE TRIGGER trg_ewallet_payment_bu BEFORE UPDATE ON EWallet_Payment FOR EACH ROW
+BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records are immutable'; END$$
+CREATE TRIGGER trg_cash_payment_bd BEFORE DELETE ON Cash_Payment FOR EACH ROW
+BEGIN IF COALESCE(@retail_maintenance, 0) <> 1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records cannot be deleted outside maintenance'; END IF; END$$
+CREATE TRIGGER trg_card_payment_bd BEFORE DELETE ON Card_Payment FOR EACH ROW
+BEGIN IF COALESCE(@retail_maintenance, 0) <> 1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records cannot be deleted outside maintenance'; END IF; END$$
+CREATE TRIGGER trg_ewallet_payment_bd BEFORE DELETE ON EWallet_Payment FOR EACH ROW
+BEGIN IF COALESCE(@retail_maintenance, 0) <> 1 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payment subtype records cannot be deleted outside maintenance'; END IF; END$$
+
 DELIMITER ;
 
-SELECT 'Cac ham va thu tuc SQL (04_routines.sql) da tao thanh cong!' AS ket_qua;
+-- View 1: Change_Due theo từng giao dịch thanh toán tiền mặt
+CREATE OR REPLACE VIEW vw_cash_change_due AS
+SELECT ca.Payment_ID,
+       p.Invoice_ID,
+       ca.Tendered_Amount,
+       p.Amount                                 AS Paid_Amount,
+       (ca.Tendered_Amount - p.Amount)          AS Change_Due
+FROM Cash_Payment ca
+JOIN Payment p ON p.Payment_ID = ca.Payment_ID;
 
+-- View 2: Total theo từng dòng hóa đơn
+CREATE OR REPLACE VIEW vw_invoice_line_total AS
+SELECT l.Invoice_ID,
+       l.Line_Number,
+       l.Barcode,
+       l.Quantity,
+       l.Unit_Price,
+       l.Discount,
+       (l.Quantity * l.Unit_Price - l.Discount) AS Total
+FROM Invoice_Line l;
+
+SELECT '04_routines.sql created successfully' AS ket_qua;

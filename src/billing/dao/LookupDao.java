@@ -4,6 +4,7 @@ import billing.db.QueryResult;
 import billing.model.CustomerRef;
 import billing.model.IdName;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,12 +27,39 @@ public class LookupDao {
     }
 
     /**
+     * Danh sách quản lý (Role = MANAGER) để chọn người duyệt hủy hóa đơn / trả
+     * hàng (BR3, BR15): sp_lookup_managers. SQL vẫn tự kiểm Role lần nữa trong
+     * sp_void_invoice / sp_add_return -- danh sách này chỉ để chọn cho đúng.
+     */
+    public List<IdName> managers() {
+        QueryResult qr = QueryResult.call("{call sp_lookup_managers()}");
+        return toIdNames(qr);
+    }
+
+    /**
+     * Ngày hiện tại THEO ĐỒNG HỒ SERVER (BR2). Tab 1 dùng ngày này để xem
+     * trước giá và khuyến mãi, vì sp_add_invoice_line tính giá theo ngày của
+     * server chứ không theo đồng hồ máy quầy -- lấy LocalDate.now() thì máy
+     * quầy lệch ngày (hoặc giỏ hàng mở qua nửa đêm) sẽ cho số trên màn hình
+     * khác số được lưu.
+     *
+     * <p>Câu SQL thô duy nhất của DAO và là CÓ CHỦ Ý: nó đọc đồng hồ, không
+     * đọc dữ liệu nghiệp vụ nào, nên không cần một thủ tục riêng.
+     */
+    public LocalDate serverDate() {
+        Object v = QueryResult.run("SELECT CURDATE()").rows.get(0)[0];
+        if (v instanceof java.sql.Date d) return d.toLocalDate();
+        if (v instanceof LocalDate d)     return d;
+        return LocalDate.parse(String.valueOf(v));
+    }
+
+    /**
      * Tìm khách hàng theo TIỀN TỐ số điện thoại:
      * {@code sp_search_customers_by_phone(p_prefix)}.
      *
      * <p>Thủ tục, KHÔNG phải SQL thô: câu {@code SELECT ... WHERE Phone LIKE ?}
      * cũ là câu SQL thô cuối cùng của tầng DAO và nó phá quy ước
-     * {@code Swing -> DAO -> Stored Procedure} (docs/05 mục 1).
+     * {@code Swing -> DAO -> Stored Procedure}.
      *
      * <p>Trả về {@link CustomerRef} với ba field riêng, KHÔNG ghép sẵn chuỗi
      * hiển thị: ghép chuỗi để hiện trên màn hình là việc của tầng UI. Bản cũ

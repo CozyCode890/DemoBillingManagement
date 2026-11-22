@@ -2,8 +2,7 @@ package billing;
 
 import billing.db.Db;
 import billing.db.SqlLog;
-import billing.model.UserSession;
-import billing.ui.AppFlow;
+import billing.ui.MainWindow;
 
 import javax.swing.*;
 
@@ -13,7 +12,7 @@ import javax.swing.*;
  * ====================================================================
  *  Việc đầu tiên: thử kết nối MySQL. Nếu hỏng thì báo lỗi rõ ràng ngay
  *  thay vì để app mở ra rồi mỗi nút bấm lại văng một exception khó hiểu.
- *  Sau khi kết nối thành công: Hiển thị màn hình Đăng nhập (LoginDialog).
+ *  Sau khi kết nối thành công: mở thẳng cửa sổ chính (MainWindow).
  */
 public class Main {
 
@@ -49,21 +48,7 @@ public class Main {
         // Xem tab "5. SQL Log" của Setup App.
         SqlLog.appStart(Db.getUrl());
 
-        // --- Đăng nhập nhanh: thử auto-login trước khi mở màn hình đăng nhập --
-        // Thứ tự ưu tiên: --login=... > quick.login.auto > hiện màn hình đăng nhập.
-        // Auto-login VẪN xác thực thật qua sp_authenticate_account, và thất bại
-        // thì rơi về màn hình đăng nhập kèm lý do -- không bao giờ làm app thoát.
-        // Xem plan/11-KE-HOACH-KHOI-2-DANG-NHAP-NHANH.md muc 3.2.
-        AppFlow.AutoLoginResult auto = AppFlow.tryAutoLogin(args);
-        switch (auto.kind()) {
-            case SUCCESS -> {
-                AppFlow.announceAutoLogin(auto);
-                UserSession.setCurrentUser(auto.account());
-                AppFlow.openMainWindow(true);
-            }
-            case FAILED  -> AppFlow.showLogin(auto.message());   // sai mật khẩu / không tìm thấy
-            case NONE    -> AppFlow.showLogin(null);             // đường mặc định
-        }
+        SwingUtilities.invokeLater(() -> new MainWindow().setVisible(true));
     }
 }
 

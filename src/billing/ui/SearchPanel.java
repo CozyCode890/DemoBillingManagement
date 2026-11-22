@@ -83,7 +83,7 @@ public class SearchPanel extends JPanel {
         // Create the specific filter panels and add them to filterPanels and to the cardLayout
         String[] tableNames = {
                 "Product", "Invoice", "Invoice_Line", "Price_History",
-                "Promotion", "Return", "Customer", "Cashier",
+                "Promotion", "Applies_To", "Return", "Customer", "Cashier",
                 "Shop", "Counter", "Payment", "Cash_Payment", "Card_Payment", "EWallet_Payment"
         };
         // Sort table names alphabetically
@@ -177,6 +177,7 @@ public class SearchPanel extends JPanel {
             case "Invoice_Line":    return I18n.msg("Dòng hàng của hóa đơn", "Invoice items");
             case "Price_History":   return I18n.msg("Lịch sử giá", "Price history");
             case "Promotion":       return I18n.msg("Khuyến mãi", "Promotions");
+            case "Applies_To":      return I18n.msg("Áp dụng khuyến mãi", "Promotion items");
             case "Return":          return I18n.msg("Trả hàng", "Returns");
             case "Customer":        return I18n.msg("Khách hàng", "Customers");
             case "Cashier":         return I18n.msg("Thu ngân", "Cashiers");
@@ -945,9 +946,9 @@ public class SearchPanel extends JPanel {
         // SQL. Cach doan do khong sai, no chi khong duoc phep tu dung
         // DecimalFormat rieng (plan/14 muc 5.9c).
 
-        // Tax_Rate la PHAN TRAM, va day tung la ban DUY NHAT biet dinh dang
-        // phan tram trong ca du an -- nhung di qua double.
-        if (columnName != null && columnName.equalsIgnoreCase("Tax_Rate")) {
+        // Tax_Rate va Discount_Percent la PHAN TRAM, dinh dang qua Ui.percent.
+        if (columnName != null && (columnName.equalsIgnoreCase("Tax_Rate")
+                || columnName.equalsIgnoreCase("Discount_Percent"))) {
             return Ui.percent(value);
         }
 

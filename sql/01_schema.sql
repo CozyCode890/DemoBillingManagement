@@ -1,12 +1,6 @@
 -- =====================================================================
---  01_schema.sql  --  Tạo database và 15 bảng cho hệ thống Retail Invoicing
+--  01_schema.sql  --  Tạo database và 15 bảng cho hệ thống Retail Invoicing.
 --  Chạy bằng:  mysql -u root -p < 01_schema.sql
--- =====================================================================
---  LƯU Ý CHO NGƯỜI MỚI:
---  - ENGINE=InnoDB là bắt buộc nếu muốn dùng FOREIGN KEY và TRANSACTION.
---  - Thứ tự CREATE TABLE quan trọng: bảng cha phải có trước bảng con,
---    vì bảng con tham chiếu (REFERENCES) tới bảng cha.
---  - Bảng Return phải bọc trong dấu backtick vì RETURN là từ khóa MySQL.
 -- =====================================================================
 
 DROP DATABASE IF EXISTS retail_billing;
@@ -22,7 +16,7 @@ USE retail_billing;
 CREATE TABLE Shop (
     Shop_ID   VARCHAR(10)  NOT NULL,
     Address   VARCHAR(255) NOT NULL,
-    PRIMARY KEY (Shop_ID)
+    CONSTRAINT PK_shop PRIMARY KEY (Shop_ID)
 ) ENGINE=InnoDB;
 
 
@@ -32,24 +26,30 @@ CREATE TABLE Shop (
 CREATE TABLE Counter (
     Counter_ID VARCHAR(10) NOT NULL,
     Shop_ID    VARCHAR(10) NOT NULL,
-    PRIMARY KEY (Counter_ID),
-    CONSTRAINT fk_counter_shop
+    CONSTRAINT PK_counter PRIMARY KEY (Counter_ID),
+    CONSTRAINT FK_counter_shop
         FOREIGN KEY (Shop_ID) REFERENCES Shop (Shop_ID)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
 -- 3. Cashier -- thu ngân. Supervisor_ID trỏ ngược về chính bảng này
---    (quan hệ "tự tham chiếu": nhân viên có thể có người quản lý là
---     một nhân viên khác). Cho phép NULL vì sếp to nhất không có sếp.
+--    (quan hệ tự tham chiếu). Cho phép NULL vì cấp cao nhất không có sếp.
+--    Role: BR15 yêu cầu chỉ người có Role = MANAGER mới duyệt trả hàng
+--    (được kiểm tra bằng trigger ở file 04_routines).
 -- ---------------------------------------------------------------------
 CREATE TABLE Cashier (
     Cashier_ID    VARCHAR(10)  NOT NULL,
     Name          VARCHAR(100) NOT NULL,
+    Role          ENUM('CASHIER', 'MANAGER') NOT NULL,
     Supervisor_ID VARCHAR(10)  NULL,
-    PRIMARY KEY (Cashier_ID),
-    CONSTRAINT fk_cashier_supervisor
+    CONSTRAINT PK_cashier PRIMARY KEY (Cashier_ID),
+    CONSTRAINT FK_cashier_supervisor
         FOREIGN KEY (Supervisor_ID) REFERENCES Cashier (Cashier_ID)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 
@@ -60,38 +60,40 @@ CREATE TABLE Customer (
     Customer_ID VARCHAR(15)  NOT NULL,
     Name        VARCHAR(100) NOT NULL,
     Phone       VARCHAR(20)  NOT NULL,
-    PRIMARY KEY (Customer_ID),
-    UNIQUE KEY uq_customer_phone (Phone)   -- số điện thoại không trùng
+    CONSTRAINT PK_customer PRIMARY KEY (Customer_ID),
+    UNIQUE KEY UQ_customer_phone (Phone)   -- số điện thoại không trùng
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 5. Product -- sản phẩm. KHÔNG có cột Price ở đây!
---    Giá nằm riêng ở bảng Price_History (xem giải thích bên dưới).
+-- 5. Product -- sản phẩm. KHÔNG có cột Price ở đây (giá ở Price_History).
 -- ---------------------------------------------------------------------
 CREATE TABLE Product (
     Barcode  VARCHAR(20)  NOT NULL,
     Name     VARCHAR(150) NOT NULL,
     Unit     ENUM('PIECE','KG','LITER','PACK','BOX') NOT NULL,
     Tax_Rate DECIMAL(5,2) NOT NULL,      -- ví dụ 8.00 nghĩa là VAT 8%
-    PRIMARY KEY (Barcode)
+    CONSTRAINT PK_product PRIMARY KEY (Barcode),
+    CONSTRAINT CK_product_tax CHECK (Tax_Rate >= 0 AND Tax_Rate <= 100)
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 6. Price_History -- *** BẢNG QUAN TRỌNG NHẤT CỦA ĐỀ BÀI ***
---    Mỗi dòng = "từ ngày X, sản phẩm Y có giá Z".
---    Khóa chính là (Barcode, Valid_From_Date): một sản phẩm chỉ có
---    đúng 1 giá bắt đầu từ 1 ngày cụ thể.
---    Nhờ bảng này mà hóa đơn cũ VẪN GIỮ giá cũ.
+-- 6. Price_History -- mỗi dòng = "từ ngày X, sản phẩm Y có giá Z".
+--    Khóa chính (Barcode, Valid_From_Date) => hóa đơn cũ giữ giá cũ.
+--    BR6/BR8: Valid_From_Date mới phải lớn hơn mọi ngày cũ của cùng
+--    sản phẩm -> kiểm tra bằng trigger BEFORE INSERT (04_routines).
 -- ---------------------------------------------------------------------
 CREATE TABLE Price_History (
     Barcode         VARCHAR(20)   NOT NULL,
     Valid_From_Date DATE          NOT NULL,
     Price           DECIMAL(12,2) NOT NULL,
-    PRIMARY KEY (Barcode, Valid_From_Date),
-    CONSTRAINT fk_price_product
+    CONSTRAINT PK_price_history PRIMARY KEY (Barcode, Valid_From_Date),
+    CONSTRAINT CK_price_value CHECK (Price > 0),
+    CONSTRAINT FK_price_product
         FOREIGN KEY (Barcode) REFERENCES Product (Barcode)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 
@@ -101,17 +103,15 @@ CREATE TABLE Price_History (
 CREATE TABLE Promotion (
     Promo_ID         VARCHAR(15)  NOT NULL,
     Rule_Description VARCHAR(255) NOT NULL,
-    Status           ENUM('ACTIVE','PAUSED','EXPIRED') NOT NULL,
+    Status           ENUM('ACTIVE','EXPIRED') NOT NULL,
     Expiry_Date      DATE NOT NULL,
-    PRIMARY KEY (Promo_ID)
+    CONSTRAINT PK_promotion PRIMARY KEY (Promo_ID)
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 8. Applies_To -- bảng trung gian N-N: 1 khuyến mãi áp cho nhiều sản
---    phẩm, 1 sản phẩm có thể dính nhiều khuyến mãi.
---    Discount_Percent nằm Ở ĐÂY chứ không nằm ở Promotion, vì mức giảm
---    phụ thuộc vào CẢ CẶP (sản phẩm + khuyến mãi).
+-- 8. Applies_To -- bảng trung gian N-N giữa Product và Promotion.
+--    Discount_Percent nằm ở đây vì mức giảm phụ thuộc cả cặp.
 -- ---------------------------------------------------------------------
 CREATE TABLE Applies_To (
     Barcode          VARCHAR(20)  NOT NULL,
@@ -119,53 +119,63 @@ CREATE TABLE Applies_To (
     Promo_Start_date DATE         NOT NULL,
     Promo_End_date   DATE         NOT NULL,
     Discount_Percent DECIMAL(5,2) NOT NULL,
-    PRIMARY KEY (Barcode, Promo_ID),
-    CONSTRAINT fk_applies_product
-        FOREIGN KEY (Barcode)  REFERENCES Product   (Barcode),
-    CONSTRAINT fk_applies_promo
+    CONSTRAINT PK_applies_to PRIMARY KEY (Barcode, Promo_ID),
+    CONSTRAINT CK_promo_dates CHECK (Promo_Start_date <= Promo_End_date),
+    CONSTRAINT CK_discount_percent CHECK (Discount_Percent >= 0 AND Discount_Percent <= 100),
+    CONSTRAINT FK_applies_product
+        FOREIGN KEY (Barcode)  REFERENCES Product   (Barcode)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT FK_applies_promo
         FOREIGN KEY (Promo_ID) REFERENCES Promotion (Promo_ID)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 9. Invoice -- phần ĐẦU hóa đơn (thông tin chung, chưa có sản phẩm)
---    Customer_ID cho phép NULL = khách vãng lai không xuất trình thẻ.
---
---    Status CHỈ CÓ HAI GIÁ TRỊ. Trạng thái 'OPEN' (thu thiếu tiền vẫn lưu)
---    đã bị bỏ: hóa đơn chưa thu đủ tiền thì KHÔNG được lưu. ENUM là chỗ
---    MySQL tự chặn -- INSERT/UPDATE giá trị khác 'PAID'/'VOIDED' báo lỗi
---    "Data truncated for column 'Status'" (chế độ STRICT mặc định của 8.0).
---      PAID   = đã thu đủ tiền
---      VOIDED = bị hủy (nút "Huy hoa don"), HOẶC đã trả hàng -- hai trường
---               hợp phân biệt bằng việc có dòng trong bảng `Return` hay
---               không (xem fn_invoice_in_revenue ở 04_routines.sql).
+-- 9. Invoice -- phần ĐẦU hóa đơn.
+--    Customer_ID NULL = khách vãng lai.
+--    BR2: Date/Time mặc định lấy từ đồng hồ của SERVER (không phải máy
+--    quầy). Trigger BEFORE INSERT (04_routines) ghi đè giá trị client gửi lên.
+--    BR3: Status chỉ có hai giá trị PAID / VOIDED (ENUM tự chặn giá trị
+--    khác với chế độ STRICT mặc định của MySQL 8.0).
 -- ---------------------------------------------------------------------
 CREATE TABLE Invoice (
     Invoice_ID  VARCHAR(30) NOT NULL,
-    `Date`      DATE NOT NULL,
-    `Time`      TIME NOT NULL,
+    `Date`      DATE NOT NULL DEFAULT (CURRENT_DATE),
+    `Time`      TIME NOT NULL DEFAULT (CURRENT_TIME),
     Status      ENUM('PAID','VOIDED') NOT NULL,
     Counter_ID  VARCHAR(10) NOT NULL,
     Cashier_ID  VARCHAR(10) NOT NULL,
     Customer_ID VARCHAR(15) NULL,
-    PRIMARY KEY (Invoice_ID),
-    CONSTRAINT fk_invoice_counter
-        FOREIGN KEY (Counter_ID)  REFERENCES Counter  (Counter_ID),
-    CONSTRAINT fk_invoice_cashier
-        FOREIGN KEY (Cashier_ID)  REFERENCES Cashier  (Cashier_ID),
-    CONSTRAINT fk_invoice_customer
+    CONSTRAINT PK_invoice PRIMARY KEY (Invoice_ID),
+    CONSTRAINT FK_invoice_counter
+        FOREIGN KEY (Counter_ID)  REFERENCES Counter  (Counter_ID)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT,
+    CONSTRAINT FK_invoice_cashier
+        FOREIGN KEY (Cashier_ID)  REFERENCES Cashier  (Cashier_ID)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT,
+    CONSTRAINT FK_invoice_customer
         FOREIGN KEY (Customer_ID) REFERENCES Customer (Customer_ID)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
+
+-- INDEX (yêu cầu mục 2.3): hỗ trợ CÂU 2 trong 03_queries.sql và
+-- sp_report_daily_takings -- "Daily takings per shop for the last week".
+-- Truy vấn lọc Invoice theo `Date` rồi nối sang Counter -> Shop qua Counter_ID.
+CREATE INDEX idx_invoice_date_counter ON Invoice (`Date`, Counter_ID);
 
 
 -- ---------------------------------------------------------------------
--- 10. Invoice_Line -- từng dòng sản phẩm trên hóa đơn
---     *** WEAK ENTITY ***: Line_Number chỉ có ý nghĩa BÊN TRONG 1 hóa đơn.
---     Dòng số 1 của HD001 và dòng số 1 của HD002 là hai thứ khác nhau.
---     => Khóa chính phải là CẶP (Invoice_ID, Line_Number).
---
---     Unit_Price được CHÉP LẠI từ Price_History lúc lập hóa đơn.
---     Đây không phải dư thừa dữ liệu -- đây là "giá lịch sử đóng băng".
+-- 10. Invoice_Line -- WEAK ENTITY, khóa chính (Invoice_ID, Line_Number).
+--     BR7: UNIQUE (Invoice_ID, Barcode) -> mỗi sản phẩm tối đa 1 dòng
+--          trên 1 hóa đơn (cộng dồn số lượng); Quantity > 0.
+--     BR9: dòng không âm: Discount <= Quantity * Unit_Price.
+--     Unit_Price và Tax_Rate được CHÉP LẠI lúc lập hóa đơn (giá đóng băng).
 -- ---------------------------------------------------------------------
 CREATE TABLE Invoice_Line (
     Invoice_ID  VARCHAR(30)   NOT NULL,
@@ -174,19 +184,32 @@ CREATE TABLE Invoice_Line (
     Quantity    DECIMAL(10,3) NOT NULL,
     Unit_Price  DECIMAL(12,2) NOT NULL,
     Discount    DECIMAL(12,2) NOT NULL DEFAULT 0,
-    PRIMARY KEY (Invoice_ID, Line_Number),
-    CONSTRAINT fk_line_invoice
+    Tax_Rate    DECIMAL(5,2)  NOT NULL,                         -- Khóa cứng Tax lúc hoàn thành giao dịch
+    CONSTRAINT PK_invoice_line PRIMARY KEY (Invoice_ID, Line_Number),
+    UNIQUE KEY UQ_line_invoice_barcode (Invoice_ID, Barcode),
+    CONSTRAINT CK_line_number   CHECK (Line_Number > 0),
+    CONSTRAINT CK_line_tax      CHECK (Tax_Rate >= 0 AND Tax_Rate <= 100),
+    CONSTRAINT CK_line_quantity CHECK (Quantity > 0),
+    CONSTRAINT CK_line_price    CHECK (Unit_Price > 0),
+    CONSTRAINT CK_line_discount CHECK (Discount >= 0),
+    CONSTRAINT CK_line_disc_max CHECK (Discount <= Quantity * Unit_Price),
+    CONSTRAINT FK_line_invoice
         FOREIGN KEY (Invoice_ID) REFERENCES Invoice (Invoice_ID)
-        ON DELETE CASCADE,          -- xóa hóa đơn thì xóa luôn các dòng
-    CONSTRAINT fk_line_product
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT,
+    CONSTRAINT FK_line_product
         FOREIGN KEY (Barcode) REFERENCES Product (Barcode)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 11. Return -- trả hàng, gắn với DÒNG hóa đơn gốc (không phải hóa đơn)
---     Khóa ngoại là CẶP (Invoice_ID, Line_Number) vì khóa chính bên
---     Invoice_Line cũng là một cặp.
+-- 11. Return -- trả hàng, gắn với DÒNG hóa đơn gốc.
+--     Amount_refunded là thuộc tính DẪN XUẤT (nét đứt trong ERD) nên
+--     không lưu: = Return_Quantity * ((Quantity*Unit_Price - Discount)/Quantity).
+--     BR15: Approved_By phải là manager      -> trigger (04_routines)
+--     BR16: Return_Quantity <= số lượng còn lại -> trigger (04_routines)
 -- ---------------------------------------------------------------------
 CREATE TABLE `Return` (
     Invoice_ID      VARCHAR(30)   NOT NULL,
@@ -195,78 +218,78 @@ CREATE TABLE `Return` (
     Return_Date     DATE          NOT NULL,
     Return_Quantity DECIMAL(10,3) NOT NULL,
     Approved_By     VARCHAR(10)   NOT NULL,
-    PRIMARY KEY (Invoice_ID, Line_Number, Return_ID),
-    CONSTRAINT fk_return_line
-        FOREIGN KEY (Invoice_ID, Line_Number)
-        REFERENCES Invoice_Line (Invoice_ID, Line_Number),
-    CONSTRAINT fk_return_cashier
+    CONSTRAINT PK_return PRIMARY KEY (Invoice_ID, Line_Number, Return_ID),
+    CONSTRAINT CK_return_id       CHECK (Return_ID > 0),
+    CONSTRAINT CK_return_quantity CHECK (Return_Quantity > 0),
+    CONSTRAINT FK_return_line
+        FOREIGN KEY (Invoice_ID, Line_Number) REFERENCES Invoice_Line (Invoice_ID, Line_Number)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT,
+    CONSTRAINT FK_return_cashier
         FOREIGN KEY (Approved_By) REFERENCES Cashier (Cashier_ID)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 12. Payment -- 1 hóa đơn có thể có NHIỀU dòng thanh toán
+-- 12. Payment -- 1 hóa đơn có thể có NHIỀU dòng thanh toán (BR12).
+--     BR14: tổng Amount >= tổng hóa đơn mới được PAID -> procedure/trigger.
 --     (trả 200k tiền mặt + 300k thẻ = 2 dòng Payment cùng Invoice_ID)
 -- ---------------------------------------------------------------------
 CREATE TABLE Payment (
     Payment_ID VARCHAR(20)   NOT NULL,
     Amount     DECIMAL(12,2) NOT NULL,
     Invoice_ID VARCHAR(30)   NOT NULL,
-    PRIMARY KEY (Payment_ID),
-    CONSTRAINT fk_payment_invoice
+    CONSTRAINT PK_payment PRIMARY KEY (Payment_ID),
+    CONSTRAINT CK_payment_amount CHECK (Amount > 0),
+    CONSTRAINT FK_payment_invoice
         FOREIGN KEY (Invoice_ID) REFERENCES Invoice (Invoice_ID)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT
 ) ENGINE=InnoDB;
 
 
 -- ---------------------------------------------------------------------
--- 13/14/15. Ba bảng con của Payment -- đây là kỹ thuật "THỪA KẾ"
---     trong CSDL quan hệ.
+-- 13/14/15. Ba bảng con của Payment
 --     Payment_ID vừa là PRIMARY KEY vừa là FOREIGN KEY -> quan hệ 1-1.
---     Mỗi dòng Payment chỉ xuất hiện ở ĐÚNG MỘT trong ba bảng này.
+--     Xóa Payment thì xóa luôn dòng chuyên biệt hóa -> CASCADE.
+--     Ràng buộc "mỗi Payment nằm trong đúng một bảng con" cần trigger (04_routines).
+--     BR13: Cash_Payment.Tendered_Amount >= Payment.Amount (trigger);
+--           Card/E-wallet không có tiền thừa.
 -- ---------------------------------------------------------------------
 CREATE TABLE Cash_Payment (
     Payment_ID      VARCHAR(20)   NOT NULL,
     Tendered_Amount DECIMAL(12,2) NOT NULL,   -- khách đưa bao nhiêu tiền
-    PRIMARY KEY (Payment_ID),
-    CONSTRAINT fk_cash_payment
+    CONSTRAINT PK_cash_payment PRIMARY KEY (Payment_ID),
+    CONSTRAINT CK_cash_tendered CHECK (Tendered_Amount > 0),
+    CONSTRAINT FK_cash_payment
         FOREIGN KEY (Payment_ID) REFERENCES Payment (Payment_ID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE Card_Payment (
     Payment_ID  VARCHAR(20) NOT NULL,
     Card_number VARCHAR(25) NOT NULL,
     Auth_code   VARCHAR(20) NOT NULL,
-    PRIMARY KEY (Payment_ID),
-    CONSTRAINT fk_card_payment
+    CONSTRAINT PK_card_payment PRIMARY KEY (Payment_ID),
+    CONSTRAINT FK_card_payment
         FOREIGN KEY (Payment_ID) REFERENCES Payment (Payment_ID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE EWallet_Payment (
     Payment_ID      VARCHAR(20) NOT NULL,
     Wallet_provider VARCHAR(50) NOT NULL,
     Transaction_Ref VARCHAR(60) NOT NULL,
-    PRIMARY KEY (Payment_ID),
-    UNIQUE KEY uq_wallet_txn (Transaction_Ref),
-    CONSTRAINT fk_wallet_payment
+    CONSTRAINT PK_ewallet_payment PRIMARY KEY (Payment_ID),
+    UNIQUE KEY UQ_wallet_txn (Transaction_Ref),
+    CONSTRAINT FK_wallet_payment
         FOREIGN KEY (Payment_ID) REFERENCES Payment (Payment_ID)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 16. Account -- Bảng lưu tài khoản người dùng và phân quyền hệ thống
--- ---------------------------------------------------------------------
-CREATE TABLE Account (
-    Username   VARCHAR(50)  NOT NULL,
-    Password   VARCHAR(100) NOT NULL,
-    Role       ENUM('cashier', 'manager') NOT NULL,
-    Full_Name  VARCHAR(100) NULL,
-    -- Nhan vien tuong ung trong bang Cashier. NULL = tai khoan khong gan voi
-    -- nhan vien nao (khi do khong duyet duoc tra hang -- xem plan/12 muc 3.3).
-    Cashier_ID VARCHAR(10)  NULL,
-    PRIMARY KEY (Username),
-    CONSTRAINT fk_account_cashier
-        FOREIGN KEY (Cashier_ID) REFERENCES Cashier (Cashier_ID)
-) ENGINE=InnoDB;
-
-
-SELECT 'Schema da tao xong! 16 bang (bao gom Account).' AS ket_qua;
+SELECT 'Schema da tao xong! 15 bang' AS ket_qua;

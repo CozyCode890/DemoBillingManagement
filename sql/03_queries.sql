@@ -11,8 +11,23 @@ USE retail_billing;
 -- ---------------------------------------------------------------------
 -- Ý tưởng: Invoice_Line JOIN Product để lấy tên sản phẩm.
 -- Thành tiền mỗi dòng = Quantity * Unit_Price - Discount.
+--
+-- Mã hóa đơn có dạng <Shop>-<Counter>-<YYYYMMDD>-<SEQ> (BR1) và ngày trong
+-- mã là ngày THẬT của hóa đơn, nên không gõ cứng được một mã cố định.
+-- Hóa đơn mẫu của seed là hóa đơn ĐẦU TIÊN được sinh ra: quầy C01 (shop S01),
+-- ngày CURDATE() - 90, số thứ tự 0001 -- seed ép nó có 3 dòng, dòng 1 là
+-- 8934001 với SL 2 (02_seed.sql, tìm 'v_sample').
+-- Muốn xem hóa đơn khác thì đổi mã trong câu SET, ví dụ:
+--     SET @inv = (SELECT Invoice_ID FROM Invoice WHERE Invoice_ID = 'S02-C03-20261120-0001');
+-- @inv được đọc TỪ BẢNG (không gán thẳng chuỗi) để mang collation của cột
+-- Invoice_ID; gán chuỗi thẳng thì MySQL báo "Illegal mix of collations" khi
+-- so sánh, vì biến mang collation của kết nối.
 -- =====================================================================
-SELECT '=== CAU 1: Chi tiet hoa don INV-0001 ===' AS ' ';
+SET @inv = (SELECT Invoice_ID FROM Invoice
+            WHERE  Invoice_ID = CONCAT('S01-C01-',
+                       DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 90 DAY), '%Y%m%d'), '-0001'));
+
+SELECT CONCAT('=== CAU 1: Chi tiet hoa don ', @inv, ' ===') AS ' ';
 
 SELECT  l.Line_Number                              AS Dong,
         p.Name                                     AS San_pham,
@@ -23,7 +38,7 @@ SELECT  l.Line_Number                              AS Dong,
         (l.Quantity * l.Unit_Price - l.Discount)   AS Thanh_tien
 FROM    Invoice_Line l
 JOIN    Product      p ON p.Barcode = l.Barcode
-WHERE   l.Invoice_ID = 'INV-0001'
+WHERE   l.Invoice_ID = @inv
 ORDER BY l.Line_Number;
 
 -- Phần tổng của hóa đơn đó
@@ -42,7 +57,7 @@ JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
 JOIN    Cashier      c  ON c.Cashier_ID  = i.Cashier_ID
 LEFT JOIN Customer   cu ON cu.Customer_ID = i.Customer_ID   -- LEFT vi khach co the NULL
 JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
-WHERE   i.Invoice_ID = 'INV-0001'
+WHERE   i.Invoice_ID = @inv
 GROUP BY i.Invoice_ID, i.`Date`, i.`Time`, s.Shop_ID, c.Name, cu.Name;
 
 
@@ -53,13 +68,16 @@ GROUP BY i.Invoice_ID, i.`Date`, i.`Time`, s.Shop_ID, c.Name, cu.Name;
 -- GROUP BY 2 cột (shop, ngày) => mỗi ô là doanh thu 1 shop trong 1 ngày.
 --
 -- DOANH THU = HÓA ĐƠN ĐIỀU CHỈNH (Invoice_Line − Return), áp dụng cho MỌI câu
--- tính doanh thu trong file này (câu 2, 4, 6, 7, 8, 10):
---   * Hóa đơn được tính khi fn_invoice_in_revenue(...) = 1: PAID, hoặc VOIDED
---     VÌ TRẢ HÀNG (trả hàng xong hóa đơn gốc thành VOIDED). VOIDED do bấm
---     "Huy hoa don" thì không có dòng Return nào -> bị loại.
+-- tính doanh thu trong file này (câu 2, 4, 5, 6, 7, 8, 10):
+--   * Hóa đơn được tính khi fn_invoice_in_revenue(...) = 1, tức là PAID.
+--     Trả hàng KHÔNG đổi trạng thái hóa đơn (BR16: hóa đơn gốc giữ PAID), nên
+--     hóa đơn có trả hàng vẫn được tính; VOIDED (Manager hủy, BR3) thì bị loại.
 --   * Tiền của một dòng = thành tiền − fn_line_refund(dòng đó).
--- Hai hàm nằm ở 04_routines.sql (mục 1.10–1.13) -- bản chép DUY NHẤT của quy
+-- Hai hàm nằm ở 04_routines.sql (mục 1.10–1.12) -- bản chép DUY NHẤT của quy
 -- tắc, để các câu ở đây và báo cáo trong app luôn ra cùng một con số.
+--
+-- "7 ngày gần nhất" = 7 NGÀY ĐÃ TRỌN (hôm qua lùi về 7 ngày), KHÔNG tính hôm
+-- nay vì ngày hôm nay chưa kết thúc -- giống hệt sp_report_daily_takings.
 -- =====================================================================
 SELECT '=== CAU 2: Doanh thu 7 ngay gan nhat theo cua hang ===' AS ' ';
 
@@ -74,7 +92,8 @@ JOIN    Counter      ct ON ct.Counter_ID = i.Counter_ID
 JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
 JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
 WHERE   fn_invoice_in_revenue(i.Invoice_ID) = 1
-  AND   i.`Date` >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+  AND   i.`Date` BETWEEN DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                     AND DATE_SUB(CURDATE(), INTERVAL 1 DAY)
 GROUP BY s.Shop_ID, s.Address, i.`Date`
 ORDER BY i.`Date` DESC, s.Shop_ID;
 
@@ -141,16 +160,20 @@ ORDER BY Gio_hang_TB DESC;
 -- =====================================================================
 -- CÂU 5: Hóa đơn bị trả hàng quá NỬA giá trị
 -- ---------------------------------------------------------------------
--- Giá trị trả lại của 1 dòng được tính theo TỶ LỆ:
---     (số lượng trả / số lượng mua) * thành tiền của dòng
--- Nhờ vậy phần giảm giá cũng được trừ đúng tỷ lệ.
+-- Giá trị trả lại của 1 lượt trả được tính theo TỶ LỆ (BR16):
+--     Effective_Price = (Quantity * Unit_Price - Discount) / Quantity
+--     Amount_Refunded = Return_Quantity * Effective_Price
+-- Nhờ vậy phần giảm giá cũng được trừ đúng tỷ lệ. Công thức nằm DUY NHẤT ở
+-- fn_return_refund (04_routines.sql mục 1.5) -- làm tròn theo từng lượt trả,
+-- đúng con số đã hiện cho khách lúc trả, và đúng con số của
+-- sp_report_big_returns trong app.
 -- =====================================================================
 SELECT '=== CAU 5: Hoa don co tien tra hang > 50% ===' AS ' ';
 
 SELECT  i.Invoice_ID                                                AS Ma_HD,
         i.`Date`                                                    AS Ngay,
         tong.Tong_HD                                                AS Tong_hoa_don,
-        tra.Tien_tra                                                AS Tien_tra_lai,
+        ROUND(tra.Tien_tra, 2)                                      AS Tien_tra_lai,
         ROUND(tra.Tien_tra / tong.Tong_HD * 100, 2)                 AS Phan_tram_tra
 FROM    Invoice i
 JOIN   (SELECT Invoice_ID,
@@ -158,14 +181,11 @@ JOIN   (SELECT Invoice_ID,
         FROM   Invoice_Line
         GROUP BY Invoice_ID) tong  ON tong.Invoice_ID = i.Invoice_ID
 JOIN   (SELECT r.Invoice_ID,
-               SUM( r.Return_Quantity / l.Quantity
-                    * (l.Quantity * l.Unit_Price - l.Discount) ) AS Tien_tra
+               SUM(fn_return_refund(r.Invoice_ID, r.Line_Number, r.Return_Quantity)) AS Tien_tra
         FROM   `Return` r
-        JOIN   Invoice_Line l
-               ON l.Invoice_ID  = r.Invoice_ID
-              AND l.Line_Number = r.Line_Number
         GROUP BY r.Invoice_ID) tra  ON tra.Invoice_ID = i.Invoice_ID
-WHERE   tra.Tien_tra > tong.Tong_HD / 2
+WHERE   fn_invoice_in_revenue(i.Invoice_ID) = 1
+  AND   tra.Tien_tra > tong.Tong_HD / 2
 ORDER BY Phan_tram_tra DESC;
 
 
@@ -179,12 +199,10 @@ ORDER BY Phan_tram_tra DESC;
 -- hỏi của đề bài: "có bao nhiêu dòng hàng đang ghi giá này, và giá hôm nay
 -- là bao nhiêu".
 --
--- Bản cũ lọc `LIKE 'INV-OLD%'` còn bản trong `sp_report_old_price_proof`
--- KHÔNG có `WHERE` nào -- hai bản chép của cùng một báo cáo đã lệch nhau.
--- Nay cả hai lọc theo "đơn giá khác giá hôm nay", tức là theo ĐỊNH NGHĨA
--- của "giữ giá cũ" thay vì theo một tiền tố mã hóa đơn (plan/15 mục 5.3).
--- Hai hóa đơn INV-OLD-* vẫn nằm trong kết quả, chỉ là không còn là bằng
--- chứng duy nhất.
+-- Lọc theo "đơn giá khác giá hôm nay", tức là theo ĐỊNH NGHĨA của "giữ giá
+-- cũ" (BR8), giống hệt sp_report_old_price_proof trong app. Với seed hiện
+-- tại, các mốc đổi giá nằm giữa cửa sổ 91 ngày nên mọi dòng hàng bán trước
+-- một mốc đổi giá đều hiện ở đây.
 -- =====================================================================
 SELECT '=== BONUS: Hoa don cu van giu gia cu ===' AS ' ';
 
@@ -327,20 +345,38 @@ LIMIT 5;
 -- =====================================================================  
 -- CÂU 11: Thống kê hiệu quả giảm giá theo các chương trình khuyến mãi  
 -- ---------------------------------------------------------------------  
--- Đường đi: Promotion -> Applies_To -> Invoice_Line.  
--- Đo lường tổng số tiền thực tế hệ thống đã giảm cho khách qua từng chương trình.  
--- =====================================================================  
-SELECT '=== CAU 11: Thong ke tong tien giam gia theo chuong trinh khuyen mai ===' AS ' ';  
+-- Đường đi: Invoice_Line -> Invoice (ngày bán) -> chương trình ĐÃ ÁP DỤNG.
+-- Đo lường tổng số tiền thực tế hệ thống đã giảm cho khách qua từng chương trình.
+--
+-- Invoice_Line chỉ lưu SỐ TIỀN giảm, không lưu Promo_ID (BR11, giữ 3NF), nên
+-- chương trình của một dòng được suy lại đúng như lúc bán: chương trình tốt
+-- nhất còn hiệu lực TẠI NGÀY BÁN, bằng nhau thì hết hạn sớm hơn -- cùng điều
+-- kiện và thứ tự với sp_get_active_promo. Mỗi dòng có giảm giá thuộc ĐÚNG
+-- MỘT chương trình: nối thẳng Invoice_Line với Applies_To theo Barcode (bản
+-- cũ) sẽ đếm một dòng cho MỌI chương trình từng áp lên sản phẩm đó, kể cả
+-- chương trình chưa bắt đầu hoặc đã hết hạn vào ngày bán.
+-- =====================================================================
+SELECT '=== CAU 11: Thong ke tong tien giam gia theo chuong trinh khuyen mai ===' AS ' ';
 
-SELECT pr.Promo_ID AS Ma_Khuyen_Mai,  
-       pr.Rule_Description AS Mo_Ta_Chuong_Trinh,  
-       pr.Status AS Trang_Thai,  
-       COUNT(l.Barcode) AS So_Luot_Ap_Dung,  
-       ROUND(SUM(l.Discount), 2) AS Tong_Tien_Da_Giam  
-FROM Promotion pr  
-JOIN Applies_To a ON a.Promo_ID = pr.Promo_ID  
-JOIN Invoice_Line l ON l.Barcode = a.Barcode  
-GROUP BY pr.Promo_ID, pr.Rule_Description, pr.Status  
+SELECT pr.Promo_ID              AS Ma_Khuyen_Mai,
+       pr.Rule_Description      AS Mo_Ta_Chuong_Trinh,
+       pr.Status                AS Trang_Thai,
+       COUNT(*)                 AS So_Luot_Ap_Dung,
+       ROUND(SUM(l.Discount), 2) AS Tong_Tien_Da_Giam
+FROM   Invoice_Line l
+JOIN   Invoice      i  ON i.Invoice_ID = l.Invoice_ID
+JOIN   Promotion    pr ON pr.Promo_ID = (
+           SELECT a2.Promo_ID
+           FROM   Applies_To a2
+           JOIN   Promotion  p2 ON p2.Promo_ID = a2.Promo_ID
+           WHERE  a2.Barcode = l.Barcode
+             AND  i.`Date` BETWEEN a2.Promo_Start_date AND a2.Promo_End_date
+             AND  p2.Status = 'ACTIVE'
+             AND  p2.Expiry_Date >= i.`Date`
+           ORDER BY a2.Discount_Percent DESC, p2.Expiry_Date ASC, a2.Promo_ID ASC
+           LIMIT 1)
+WHERE  l.Discount > 0
+GROUP BY pr.Promo_ID, pr.Rule_Description, pr.Status
 ORDER BY Tong_Tien_Da_Giam DESC;
 
 

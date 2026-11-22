@@ -40,7 +40,7 @@ public final class AppConfig {
      * Giá trị của khoá, đã {@code trim()}.
      *
      * @param fallback dùng khi khoá không có hoặc giá trị chỉ gồm khoảng trắng
-     *                 -- khoá để trống trong file (ví dụ {@code quick.login.auto=})
+     *                 -- khoá để trống trong file (ví dụ {@code qr.account.name=})
      *                 phải tương đương với không khai báo khoá đó
      */
     public static String get(String key, String fallback) {

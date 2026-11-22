@@ -226,4 +226,4 @@ Nguyên tắc thực dụng: **chuẩn hóa tới 3NF trước, chỉ phá vỡ 
 ## Liên quan
 
 - [02-JDBC.md](02-JDBC.md) — Java nói chuyện với MySQL như thế nào
-- [03-SCHEMA.md](03-SCHEMA.md) — giải thích từng bảng và quan hệ
+- [09-BUSINESS-RULES.md](09-BUSINESS-RULES.md) — 16 quy tắc nghiệp vụ; từng bảng có comment trong `sql/01_schema.sql`
