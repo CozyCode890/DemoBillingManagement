@@ -2,7 +2,10 @@
 --  05_invariants.sql -- Kiem tra bat bien du lieu cho Retail Invoicing (Topic 19)
 --  Chay bang:  mysql -u root -p retail_billing < 05_invariants.sql
 --              roi:  CALL sp_check_seed(@v); SELECT @v;
---  Doi chieu 01_schema.sql, 02_seed.sql, 04_routines.sql (BR1 - BR17).
+--  Doi chieu 01_schema.sql, 02_seed.sql, 04_routines.sql va 16 Business
+--  Rules BR1 - BR16 (docs/09-BUSINESS-RULES.md).
+--  17 quy tac R1..R17 la BAT BIEN DU LIEU, khong phai 17 business rule:
+--  mot BR co the can nhieu bat bien (vi du BR3 -> R3, R4, R17).
 --  Moi quy tac tra ve SO DONG VI PHAM -- tat ca phai bang 0.
 -- =====================================================================
 --  VI SAO LA MOT FILE RIENG, KHONG NAM TRONG 04_routines.sql:
@@ -261,7 +264,7 @@ BEGIN
         'BR7 / BR9');
 
     -- -----------------------------------------------------------------
-    -- R17 -- BR3 / BR17: Trang thai hoa don chi thuoc PAID/VOIDED, khong
+    -- R17 -- BR3 (Zero Draft Clutter): Trang thai hoa don chi thuoc PAID/VOIDED, khong
     --        co trang thai nhap/Draft hay hoa don PAID bi xoa sach dong hang.
     -- -----------------------------------------------------------------
     INSERT INTO tmp_check_seed VALUES (17, 'R17',
@@ -270,7 +273,7 @@ BEGIN
          FROM   Invoice i
          WHERE  i.Status NOT IN ('PAID', 'VOIDED')
             OR  TRIM(COALESCE(i.Status, '')) = ''),
-        'BR3 / BR17');
+        'BR3');
 
     -- -----------------------------------------------------------------
     -- Bang ket qua + tong so vi pham qua tham so OUT.

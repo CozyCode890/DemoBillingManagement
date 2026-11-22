@@ -1,7 +1,8 @@
 -- =====================================================================
---  04_routines_Final.sql -- Retail Invoicing (Topic 19)
---  Doi chieu 01_schema.sql (15 bang) & 16 Business Rules (BR1 - BR16)
---  Chay sau 01_schema.sql: mysql -u root -p retail_billing < 04_routines_Final.sql
+--  04_routines.sql -- Retail Invoicing (Topic 19)
+--  Doi chieu 01_schema.sql (15 bang) & 16 Business Rules (BR1 - BR16,
+--  dinh nghia day du: docs/09-BUSINESS-RULES.md)
+--  Chay sau 01_schema.sql: mysql -u root -p retail_billing < 04_routines.sql
 -- =====================================================================
 --  LUU Y:
 --  1. Caller phai BEGIN/START TRANSACTION, goi create -> add lines ->
@@ -36,6 +37,7 @@ DROP FUNCTION IF EXISTS fn_invoice_in_revenue;
 
 DROP PROCEDURE IF EXISTS sp_lookup_counters;
 DROP PROCEDURE IF EXISTS sp_lookup_cashiers;
+DROP PROCEDURE IF EXISTS sp_lookup_managers;
 DROP PROCEDURE IF EXISTS sp_lookup_customers;
 DROP PROCEDURE IF EXISTS sp_search_customers_by_phone;
 DROP PROCEDURE IF EXISTS sp_get_all_products;
@@ -403,6 +405,19 @@ CREATE PROCEDURE sp_lookup_cashiers()
 BEGIN
     SELECT Cashier_ID, Name
     FROM   Cashier
+    ORDER BY Cashier_ID;
+END$$
+
+
+-- ---------------------------------------------------------------------
+-- 2.2b sp_lookup_managers (BR3, BR15): Nhan vien co Role = MANAGER -- danh
+--      sach nguoi duoc chon de duyet huy hoa don / tra hang.
+-- ---------------------------------------------------------------------
+CREATE PROCEDURE sp_lookup_managers()
+BEGIN
+    SELECT Cashier_ID, Name
+    FROM   Cashier
+    WHERE  Role = 'MANAGER'
     ORDER BY Cashier_ID;
 END$$
 
@@ -1248,6 +1263,14 @@ BEGIN
 
     IF v_status <> 'PAID' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice is already VOIDED';
+    END IF;
+
+    -- BR16: hoa don da tra hang phai giu nguyen PAID. Huy no se loai ca phan
+    -- khach con giu khoi doanh thu (fn_invoice_in_revenue = 0) trong khi tien
+    -- hoan da chi -- doanh thu thuan bi tru HAI lan.
+    IF EXISTS (SELECT 1 FROM `Return` WHERE Invoice_ID = p_invoice_id) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invoice has returns and must stay PAID; it cannot be voided (BR16)';
     END IF;
 
     SET @retail_manager_void = 1;

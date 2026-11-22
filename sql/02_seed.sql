@@ -6,7 +6,7 @@
 --  Đảm bảo:
 --   1. Mọi bảng (15/15 bảng) đều có >= 15 dòng dữ liệu thực tế.
 --   2. Tuân thủ 100% Triggers & Stored Procedures trong 04_routines.sql
---      và 17 Business Rules (BR1 - BR17).
+--      và 16 Business Rules (BR1 - BR16, docs/09-BUSINESS-RULES.md).
 --   3. Giữ nguyên cấu trúc dữ liệu (đầu số SĐT, mã sản phẩm, các mốc
 --      tăng giá > 10%, trả hàng > 50%...) để giao diện Java hoạt động
 --      không cần chỉnh sửa.
