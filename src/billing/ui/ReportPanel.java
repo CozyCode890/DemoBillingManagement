@@ -87,15 +87,6 @@ public class ReportPanel extends JPanel {
                         + "Refunds follow the returned quantity, discounts included."),
                 dao::bigReturns));
 
-        row1.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
-                I18n.text("So sánh giá ghi trên hóa đơn (giá lúc bán) với giá hôm nay. "
-                        + "Mỗi dòng: bao nhiêu dòng hàng đang ghi giá đó, bán từ ngày nào đến ngày nào, "
-                        + "và giá hôm nay là bao nhiêu -- giá trên hóa đơn cũ không đổi khi giá mới được áp dụng.",
-                          "Compares the price on each invoice (the price at the time of sale) with today's price. "
-                        + "Each row: how many item lines carry that price, when they were sold, "
-                        + "and today's price -- old invoices keep their price when a new price takes effect."),
-                dao::oldPriceProof));
-
         // --- Báo cáo 5: cần chọn sản phẩm -> nút riêng + ô chọn -----------
         JButton btPrice30 = new JButton(I18n.text("5. Giá 30 ngày (SL 1)", "5. 30-day price (qty 1)"));
         reportButtons.add(btPrice30);
@@ -123,6 +114,15 @@ public class ReportPanel extends JPanel {
         pricePanel.add(cbPriceProduct);
         pricePanel.add(btPrice30);
         row2.add(pricePanel);
+        // Đặt Bonus ở hàng 2 để hàng 1 (nhãn tiếng Anh dài hơn) không bị xuống dòng và che mất nút Bonus.
+        row2.add(makeButton(I18n.text("Bonus: hóa đơn cũ giữ giá cũ", "Bonus: old invoices keep old prices"),
+                I18n.text("So sánh giá ghi trên hóa đơn (giá lúc bán) với giá hôm nay. "
+                        + "Mỗi dòng: bao nhiêu dòng hàng đang ghi giá đó, bán từ ngày nào đến ngày nào, "
+                        + "và giá hôm nay là bao nhiêu -- giá trên hóa đơn cũ không đổi khi giá mới được áp dụng.",
+                          "Compares the price on each invoice (the price at the time of sale) with today's price. "
+                        + "Each row: how many item lines carry that price, when they were sold, "
+                        + "and today's price -- old invoices keep their price when a new price takes effect."),
+                dao::oldPriceProof));
         loadPriceProducts();
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
@@ -160,7 +160,7 @@ public class ReportPanel extends JPanel {
      */
     private void runReport(JButton b, String label, String explain,
                            Supplier<QueryResult> action) {
-        taWhat.setText(explain);
+        taWhat.setText(I18n.translate(explain));
         taWhat.setCaretPosition(0);
 
         // Khoá cả sáu nút và đổi nhãn nút đang chạy: một cửa sổ không
