@@ -190,14 +190,14 @@ BEGIN
             OR  (l.Quantity * l.Unit_Price - l.Discount) < 0),
         'BR7 / BR9');
 
-    -- R17 -- BR3: invoice status is only PAID or VOIDED, no empty PAID invoice
+    -- R17 (BR17): invoice status is only PAID or VOIDED, no draft in DB
     INSERT INTO tmp_check_seed VALUES (17, 'R17',
         'Trang thai chi PAID/VOIDED (khong luu Draft trong CSDL)',
         (SELECT COUNT(*)
          FROM   Invoice i
          WHERE  i.Status NOT IN ('PAID', 'VOIDED')
             OR  TRIM(COALESCE(i.Status, '')) = ''),
-        'BR3');
+        'BR17');
 
     -- Result table and total number of violations
     SELECT  Quy_tac                                  AS Quy_tac,

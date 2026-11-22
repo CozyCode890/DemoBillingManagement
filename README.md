@@ -187,7 +187,7 @@ only to show a friendly message before MySQL says no.
 | BR14 | When the payments reach the total, the invoice becomes PAID | `sp_settle_invoice`, `trg_invoice_bu` |
 | BR15 | Only a manager can approve a return; the manager is saved on it | `sp_add_return`, `trg_return_bi` |
 | BR16 | A return takes lines of a PAID invoice, 0 < quantity ≤ quantity not yet returned. The original invoice is never changed. Refund = Return_Quantity × (line total ÷ Quantity) | `trg_return_bi`, `fn_return_refund` |
-| BR17 | While items are being scanned, the cart lives only in the app's memory; no draft invoice is ever saved | Java cart (`CartLine`), saved in one transaction by `InvoiceDao.createInvoice` |
+| BR17 | While items are being scanned, the cart lives only in the app's memory; no draft invoice is ever saved | Java cart (`CartLine`), saved in one transaction by `InvoiceDao.createInvoice`, `sp_check_seed` (R17) |
 
 One more rule comes from the ER diagram: **each payment is exactly one type** (cash, card or
 e-wallet, never two). It is enforced by `trg_cash_payment_bi`, `trg_card_payment_bi` and
@@ -218,7 +218,7 @@ means the data is correct. You can run it any time, also after you changed data 
 | R14 | Promotion expiry date ≥ its end date |
 | R15 | Cashier exists, and the customer (if any) exists |
 | R16 | Whole quantities for PIECE / PACK / BOX, and line total ≥ 0 |
-| R17 | Status is only PAID or VOIDED (no draft) |
+| R17 | Status is only PAID or VOIDED, no draft in DB (BR17) |
 
 Run it with the **Check seed** button, or from a terminal:
 

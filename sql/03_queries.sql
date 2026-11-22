@@ -47,7 +47,7 @@ SELECT  s.Shop_ID                                     AS Shop,
         COUNT(DISTINCT i.Invoice_ID)                  AS Invoice_Count,
         ROUND(SUM(l.Quantity * l.Unit_Price - l.Discount
                   - fn_line_refund(l.Invoice_ID, l.Line_Number)), 2) AS Revenue
-FROM    Invoice      i
+FROM    Invoice      i FORCE INDEX (idx_invoice_date_counter)
 JOIN    Counter      ct ON ct.Counter_ID = i.Counter_ID
 JOIN    Shop         s  ON s.Shop_ID     = ct.Shop_ID
 JOIN    Invoice_Line l  ON l.Invoice_ID  = i.Invoice_ID
