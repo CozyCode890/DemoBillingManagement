@@ -56,7 +56,7 @@ Hàng nút phụ dưới năm bước:
 | **Nạp lại database** | Xoá và nạp lại từ `sql/` dù SQL không đổi — về đúng dữ liệu mẫu |
 | **Xoá dữ liệu...** | Xoá các dòng, giữ mọi bảng và hàm/thủ tục. Hai mức: chỉ giao dịch (vẫn đăng nhập được) hoặc toàn bộ (kể cả tài khoản) — dành cho người tập viết seed |
 | **Chạy 03_queries.sql** | Chạy bài tập truy vấn, in kết quả dạng bảng vào log |
-| **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (plan/15) |
+| **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (docs/plan/15) |
 | **Tắt MySQL** | Tắt MySQL riêng của Setup App. MySQL có sẵn trên máy (service MySQL80, Homebrew...) thì không đụng tới |
 
 Tab **Nhật ký SQL** hiện mọi câu SQL mà app billing gửi xuống MySQL.
@@ -92,6 +92,18 @@ Setup App không bao giờ sửa MySQL không phải của nó. Nếu cổng 330
 ### Chạy bằng IDE (IntelliJ / Eclipse)
 
 Mở thư mục repo, IDE nhận `pom.xml`. Bấm CHẠY trong Setup App **một lần** để có MySQL và database, sau đó chạy `billing.Main` từ IDE như bình thường (thư mục làm việc = gốc repo, để app đọc được `config.properties`).
+
+### App gọn `billing2`
+
+`src/billing2/` là bản viết lại gọn của `src/billing/`: **cùng bộ khung** (package `db / model / dao / ui`, cùng tên lớp, cùng tên hàm như `ProductDao.priceOn()`, `InvoiceDao.createInvoice()`) và **gọi đúng các thủ tục SQL đó**, nên nghiệp vụ giữ nguyên — khoảng 4.000 dòng thay vì 11.800. Giao diện chỉ tiếng Anh, không có tab Tra cứu và nút QR.
+
+Chạy bản gọn: đổi một dòng trong `config.properties` rồi bấm CHẠY — Setup App biên dịch cả hai app và chạy lớp ghi ở đây (từ IDE thì chạy thẳng `billing2.Main`):
+
+```properties
+app.main.class=billing2.Main
+```
+
+Quy trình: tính năng mới làm trước ở `billing`, sau đó `billing2` tham khảo cách `billing` làm và viết lại cho gọn.
 
 ---
 
@@ -173,13 +185,16 @@ DemoBillingManagement/
 │   └── 05_invariants.sql   <- 14 bất biến của dữ liệu (sp_check_seed)
 │
 ├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
+│   └── plan/               <- kế hoạch từng khối (comment trong code / SQL ghi tắt là "plan/NN")
 │
-└── src/billing/
-    ├── Main.java           <- điểm khởi động ứng dụng bán hàng
-    ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
-    ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
-    ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
-    └── ui/                 <- giao diện Swing, không có SQL
+├── src/billing/            <- app đầy đủ (song ngữ, tab Tra cứu, QR)
+│   ├── Main.java           <- điểm khởi động ứng dụng bán hàng
+│   ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
+│   ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
+│   ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
+│   └── ui/                 <- giao diện Swing, không có SQL
+│
+└── src/billing2/           <- app gọn: cùng khung và cùng thủ tục SQL với billing (xem mục "App gọn billing2")
 ```
 
 Kiến trúc ba tầng: **ui → dao → db → MySQL**. Tầng giao diện không được viết SQL, tầng DAO không được mở cửa sổ. Đây cũng là cách Spring Boot tổ chức code, chỉ khác tên gọi.
@@ -230,7 +245,7 @@ Gần như mọi lỗi môi trường đều sửa được bằng cách **bấm
 | `UnsupportedClassVersionError ... class file version 69` | `SetupApp.jar` bị đóng gói bằng JDK mới hơn JDK đang chạy. Đóng gói lại bằng script `build-setup` (script đã khoá `--release 21`) |
 | Bấm đúp `Setup.exe` báo `side-by-side configuration is incorrect` | `tools/launcher/app.manifest` hỏng cú pháp XML — chạy `scripts\ps1\build-launcher.ps1`, nó kiểm tra và chỉ ra lỗi |
 | *"MySQL riêng không cho root đăng nhập"* | Tắt Setup App, xoá thư mục `~/.retail-billing/mysql-data` rồi bấm CHẠY — MySQL riêng được khởi tạo lại |
-| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `plan/15` đang bị vi phạm. Bấm **Nạp lại database** là về 0. R12 (91 ngày liên tục) sai riêng một mình thường chỉ vì database được nạp từ nhiều ngày trước |
+| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `docs/plan/15` đang bị vi phạm. Bấm **Nạp lại database** là về 0. R12 (91 ngày liên tục) sai riêng một mình thường chỉ vì database được nạp từ nhiều ngày trước |
 
 Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
 
