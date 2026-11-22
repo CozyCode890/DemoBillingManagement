@@ -23,7 +23,6 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.sql.Types;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,11 +31,13 @@ import java.util.List;
  *  ContractCheck -- kiem BON HOP DONG cua tang giao dien bang code
  * ====================================================================
  *
- *  Bon hop dong (docs/plan/14 muc 3, va docs/05 muc 7):
+ *  Cac hop dong (docs/plan/14 muc 3):
  *    1. TIEN MAT     -- tendered / recorded / change la ba con so o ba cho
  *    2. GIAM GIA     -- discount la ham cua (san pham, ngay, SO LUONG)
  *    3. DOC / HIEN SO -- hai quy tac doc so, mot ban chep moi phep dinh dang
  *    4. MA QR        -- tai khoan lay tu config.properties va CO TAC DUNG
+ *    5. TRA HANG / AUDIT -- tra hang giu PAID, chi MANAGER duyet, cac thu tuc
+ *                       xoa / sua sau khi chot deu bi SQL tu choi (BR3, BR15, BR16)
  *
  *  NHOM SEED, them o khoi 6 (docs/plan/15 muc 5.6): ba phep kiem cuoi file.
  *  Chung PHAI nam o day chu khong trong 05_invariants.sql vi hai trong ba
@@ -172,6 +173,7 @@ public class ContractCheck {
         System.out.println("=== Tab 1: khach dua du, thoi tien, so luong, chi tiet the (CashRules) ===");
         cashRules();
 
+
         System.out.println();
         System.out.println("=== 7.8  Ma QR (loi #27) ===");
         qr();
@@ -181,15 +183,15 @@ public class ContractCheck {
         e2e();
 
         System.out.println();
-        System.out.println("=== TRA HANG -> VOIDED + HOA DON DIEU CHINH (Invoice_Line - Return) ===");
+        System.out.println("=== TRA HANG: hoa don giu PAID + HOA DON DIEU CHINH (Invoice_Line - Return) ===");
         returnsFlow();
 
         System.out.println();
-        System.out.println("=== Bao cao 6: gia 30 ngay, SL 1 (gia doi moi ngay) ===");
+        System.out.println("=== Bao cao 5: gia 30 ngay, SL 1 (gia doi moi ngay) ===");
         price30();
 
         System.out.println();
-        System.out.println("=== SEED (khoi 6)  14 bat bien du lieu + hai ban chep ===");
+        System.out.println("=== SEED (khoi 6)  17 bat bien du lieu + hai ban chep ===");
         seed();
 
         System.out.println();
@@ -225,6 +227,30 @@ public class ContractCheck {
             return false;
         } catch (RuntimeException ex) {
             return true;
+        }
+    }
+
+    /** Danh dau mot tham so OUT kieu INTEGER cho rejectsSql. */
+    static final Object OUT_INT = new Object();
+
+    /**
+     * Goi thang mot thu tuc; tra true neu MySQL tu choi bang SIGNAL '45000'
+     * (loi nghiep vu). Loi khac (sai ten thu tuc, mat ket noi) KHONG tinh la
+     * "tu choi" -- in ra va tra false, de phep kiem khong xanh nham.
+     */
+    static boolean rejectsSql(String call, Object... params) {
+        try (Connection c = billing.db.Db.getConnection();
+             CallableStatement cs = c.prepareCall(call)) {
+            for (int i = 0; i < params.length; i++) {
+                if (params[i] == OUT_INT) cs.registerOutParameter(i + 1, Types.INTEGER);
+                else cs.setObject(i + 1, params[i]);
+            }
+            cs.execute();
+            return false;
+        } catch (java.sql.SQLException e) {
+            if ("45000".equals(e.getSQLState())) return true;
+            System.out.println("  (loi khong phai nghiep vu: " + e.getMessage() + ")");
+            return false;
         }
     }
 
@@ -278,6 +304,8 @@ public class ContractCheck {
      *   #r1-#r4  tra mot phan dong 1 (MANAGER E01) -> van PAID, van tinh doanh thu, tinh dung tien hoan
      *   #r5a-#r5c tra lan 2 hop le; tra vuot bi tu choi; CASHIER E16 duyet bi tu choi
      *   #r6a-#r6d cac thu tuc xoa/sua lich su audit deu tu choi (SQLSTATE 45000)
+ *   #r6e-#r6f hoa don da tra hang khong huy duoc (BR16)
+ *   #r9a-#r9c doi khach hang (BR10): ma hop le / ma la bi tu choi / ve vang lai
      *   #r7a-#r7c huy hoa don thu 2: E16 bi tu choi, E01 -> VOIDED & fn_invoice_in_revenue = 0
      *   #r8      sp_check_seed van 0 vi pham sau khi don dep
      */
@@ -309,8 +337,7 @@ public class ContractCheck {
         try {
             List<PaymentEntry> pays = new ArrayList<>();
             pays.add(new PaymentEntry(PayMethod.CASH.code(), due, due, null, null));
-            id = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
+            id = dao.createInvoice(lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
 
             List<InvoiceDao.ReturnItem> items = new ArrayList<>();
             items.add(new InvoiceDao.ReturnItem(lines.get(0).product.name, 1, new BigDecimal("1")));
@@ -345,12 +372,24 @@ public class ContractCheck {
             // #r5c: CASHIER (E16) duyet tra hang -> tu choi (BR15)
             check("#r5c", rejects(() -> dao.processReturn(fid, items, "E16")), true);
 
-            // #r6: cac lenh xoa/sua lich su audit deu bi chan
-            check("#r6a", rejects(() -> dao.deleteLineReturns(fid, 1)), true);
-            check("#r6b", rejects(() -> dao.deleteInvoice(fid)), true);
-            check("#r6c", rejects(() -> dao.updateInvoiceLine(
-                    fid, 1, lines.get(0).product.barcode, BigDecimal.ONE, lines.get(0).unitPrice, BigDecimal.ZERO)), true);
-            check("#r6d", rejects(() -> dao.deleteInvoiceLine(fid, 1)), true);
+            // #r6: cac thu tuc xoa/sua lich su audit deu bi chan (SQLSTATE 45000).
+            //      DAO khong con ham goi chung -- goi thang de chung minh SQL tu choi.
+            check("#r6a", rejectsSql("{call sp_delete_return(?, ?, ?)}", fid, 1, OUT_INT), true);
+            check("#r6b", rejectsSql("{call sp_delete_invoice(?)}", fid), true);
+            check("#r6c", rejectsSql("{call sp_update_invoice_line(?, ?, ?, ?, ?, ?)}",
+                    fid, 1, lines.get(0).product.barcode, BigDecimal.ONE, lines.get(0).unitPrice, BigDecimal.ZERO), true);
+            check("#r6d", rejectsSql("{call sp_delete_invoice_line(?, ?)}", fid, 1), true);
+
+            // #r6e: hoa don DA tra hang thi KHONG huy duoc, ke ca Manager (BR16)
+            check("#r6e", rejects(() -> dao.voidInvoice(fid, "E01")), true);
+            check("#r6f", one("SELECT Status FROM Invoice WHERE Invoice_ID=?", fid), "PAID");
+
+            // #r9: doi khach hang -- truong duy nhat sua duoc sau khi chot (BR10)
+            dao.updateInvoiceCustomer(fid, "KH001");
+            check("#r9a", one("SELECT Customer_ID FROM Invoice WHERE Invoice_ID=?", fid), "KH001");
+            check("#r9b", rejects(() -> dao.updateInvoiceCustomer(fid, "KH-KHONG-CO")), true);
+            dao.updateInvoiceCustomer(fid, "");
+            check("#r9c", one("SELECT COALESCE(Customer_ID, 'NULL') FROM Invoice WHERE Invoice_ID=?", fid), "NULL");
 
             // #r7: huy hoa don thu 2 -- E16 tu choi, E01 thanh cong (BR3)
             List<CartLine> oneLine = new ArrayList<>();
@@ -358,8 +397,7 @@ public class ContractCheck {
             BigDecimal due2 = lines.get(0).lineTotal();
             List<PaymentEntry> p2 = new ArrayList<>();
             p2.add(new PaymentEntry(PayMethod.CASH.code(), due2, due2, null, null));
-            id2 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, oneLine, p2);
+            id2 = dao.createInvoice(lk.counters().get(0).id, lk.cashiers().get(0).id, null, oneLine, p2);
 
             final String fid2 = id2;
             check("#r7a", rejects(() -> dao.voidInvoice(fid2, "E16")), true);
@@ -552,10 +590,9 @@ public class ContractCheck {
             NewInvoicePanel.Split sp = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, due.add(new BigDecimal("50000.00")), due);
             List<PaymentEntry> pays = new ArrayList<>();
-            pays.add(new PaymentEntry(PayMethod.CASH.code(), sp.recorded, sp.tendered, null, null));
+            pays.add(new PaymentEntry(PayMethod.CASH.code(), sp.recorded(), sp.tendered(), null, null));
 
-            created = dao.createInvoice(null, saleDate, LocalTime.now().withNano(0),
-                    lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
+            created = dao.createInvoice(lk.counters().get(0).id, lk.cashiers().get(0).id, null, lines, pays);
             System.out.println("  " + id + ": " + created + " ban ngay " + saleDate
                     + " (" + prod.barcode + ", gia " + price + ", giam " + disc + ")");
 
@@ -642,6 +679,9 @@ public class ContractCheck {
         check("#p3", new billing.dao.ReportDao().priceRise().rows.size(), 5);
     }
 
+
+    // -----------------------------------------------------------------
+
     static void qr() {
         // #68: so tai khoan trong payload la so TRUYEN VAO, khong phai hang so
         String mine = billing.util.VietQRHelper.buildEMVCoPayload(
@@ -703,33 +743,33 @@ public class ContractCheck {
             // #27: hoa don 198.000, khach dua 500.000
             NewInvoicePanel.Split s27 = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, new BigDecimal("500000.00"), due198);
-            check("#27a", s27.recorded.toPlainString(), "198000.00");
-            check("#27b", s27.tendered.toPlainString(), "500000.00");
+            check("#27a", s27.recorded().toPlainString(), "198000.00");
+            check("#27b", s27.tendered().toPlainString(), "500000.00");
             check("#27c", s27.change().toPlainString(),  "302000.00");
 
             // #31: tien mat 100.000 -> roi tien mat 150.000
             NewInvoicePanel.Split s31a = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, new BigDecimal("100000.00"), due198);
-            check("#31a", s31a.recorded.toPlainString(), "100000.00");
+            check("#31a", s31a.recorded().toPlainString(), "100000.00");
             check("#31b", s31a.change().toPlainString(),  "0.00");
-            BigDecimal left31 = due198.subtract(s31a.recorded);
+            BigDecimal left31 = due198.subtract(s31a.recorded());
             NewInvoicePanel.Split s31b = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, new BigDecimal("150000.00"), left31);
-            check("#31c", s31b.recorded.toPlainString(), "98000.00");
-            check("#31d", s31b.tendered.toPlainString(), "150000.00");
+            check("#31c", s31b.recorded().toPlainString(), "98000.00");
+            check("#31d", s31b.tendered().toPlainString(), "150000.00");
             check("#31e", s31b.change().toPlainString(),  "52000.00");
-            check("#31f", s31a.recorded.add(s31b.recorded).toPlainString(), "198000.00");
+            check("#31f", s31a.recorded().add(s31b.recorded()).toPlainString(), "198000.00");
 
             // #32: THE ngan hang 500.000 cho hoa don 198.000 -> TU CHOI
             check("#32", NewInvoicePanel.splitPayment(
                     PayMethod.CARD, new BigDecimal("500000.00"), due198), null);
             check("#32b", NewInvoicePanel.splitPayment(
-                    PayMethod.CARD, due198, due198).recorded.toPlainString(), "198000.00");
+                    PayMethod.CARD, due198, due198).recorded().toPlainString(), "198000.00");
             check("#32c", NewInvoicePanel.splitPayment(
-                    PayMethod.CARD, due198, due198).tendered, null);
+                    PayMethod.CARD, due198, due198).tendered(), null);
             // #72: vi dien tu cung khong co tien khach dua
             check("#72", NewInvoicePanel.splitPayment(
-                    PayMethod.EWALLET, new BigDecimal("1000"), due198).tendered, null);
+                    PayMethod.EWALLET, new BigDecimal("1000"), due198).tendered(), null);
             // #34: tra du bang tien mat -> tien thoi 0
             check("#34", NewInvoicePanel.splitPayment(
                     PayMethod.CASH, due198, due198).change().toPlainString(), "0.00");
@@ -742,10 +782,9 @@ public class ContractCheck {
 
             NewInvoicePanel.Split sp = NewInvoicePanel.splitPayment(PayMethod.CASH, tendered, due);
             List<PaymentEntry> pays = new ArrayList<>();
-            pays.add(new PaymentEntry(PayMethod.CASH.code(), sp.recorded, sp.tendered, null, null));
+            pays.add(new PaymentEntry(PayMethod.CASH.code(), sp.recorded(), sp.tendered(), null, null));
 
-            String id = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                    counterId, cashierId, null, lines, pays);
+            String id = dao.createInvoice(counterId, cashierId, null, lines, pays);
             created.add(id);
             check("#idfmt", id != null && id.matches("^S\\d{2}-C\\d{2}-\\d{8}-\\d{4,}$"), true);
             System.out.println("  da luu " + id + " (due=" + due + ", khach dua=" + tendered + ")");
@@ -773,21 +812,20 @@ public class ContractCheck {
 
             NewInvoicePanel.Split a = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, new BigDecimal("100000.00"), due2);
-            BigDecimal left2 = due2.subtract(a.recorded);
+            BigDecimal left2 = due2.subtract(a.recorded());
             NewInvoicePanel.Split b = NewInvoicePanel.splitPayment(
                     PayMethod.CASH, left2.add(new BigDecimal("52000.00")), left2);
 
             List<PaymentEntry> p2 = new ArrayList<>();
-            p2.add(new PaymentEntry(PayMethod.CASH.code(), a.recorded, a.tendered, null, null));
-            p2.add(new PaymentEntry(PayMethod.CASH.code(), b.recorded, b.tendered, null, null));
+            p2.add(new PaymentEntry(PayMethod.CASH.code(), a.recorded(), a.tendered(), null, null));
+            p2.add(new PaymentEntry(PayMethod.CASH.code(), b.recorded(), b.tendered(), null, null));
 
-            String id2 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                    counterId, cashierId, null, l2, p2);
+            String id2 = dao.createInvoice(counterId, cashierId, null, l2, p2);
             created.add(id2);
-            check("#31g", a.recorded.toPlainString(), "100000.00");       // lan 1 ghi het
-            check("#31h", b.recorded.toPlainString(), left2.toPlainString());
+            check("#31g", a.recorded().toPlainString(), "100000.00");       // lan 1 ghi het
+            check("#31h", b.recorded().toPlainString(), left2.toPlainString());
             check("#31i", b.change().toPlainString(),  "52000.00");
-            check("#31j", a.recorded.add(b.recorded).toPlainString(), due2.toPlainString());
+            check("#31j", a.recorded().add(b.recorded()).toPlainString(), due2.toPlainString());
             QueryResult st2 = QueryResult.run("SELECT Status FROM Invoice WHERE Invoice_ID=?", id2);
             check("#31k", st2.rows.get(0)[0], "PAID");
             // #40: hai dong Payment co ma KHAC NHAU va lien tiep
@@ -808,8 +846,7 @@ public class ContractCheck {
                     "SELECT COUNT(*) FROM Invoice").rows.get(0)[0]);
             String msg33;
             try {
-                String id3 = dao.createInvoice(null, today, LocalTime.now().withNano(0),
-                        counterId, cashierId, null, l3, p3);
+                String id3 = dao.createInvoice(counterId, cashierId, null, l3, p3);
                 created.add(id3);
                 msg33 = "da luu " + id3;
             } catch (RuntimeException ex) {

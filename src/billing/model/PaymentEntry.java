@@ -58,8 +58,8 @@ public class PaymentEntry {
      *
      * <p>CHỖ DUY NHẤT biết rằng thủ tục nhận tiền khách đưa dưới dạng
      * <b>chuỗi</b>: {@code sp_add_payment} giữ nguyên 6 tham số và vẫn
-     * {@code CAST(p_detail1 AS DECIMAL(12,2))} cho tiền mặt (docs/05 Quy tắc 2
-     * -- đổi chữ ký thủ tục là phá hợp đồng mà không đổi được gì).
+     * {@code CAST(p_detail1 AS DECIMAL(12,2))} cho tiền mặt
+     * (đổi chữ ký thủ tục là phá hợp đồng mà không đổi được gì).
      *
      * <p>Cái đổi ở khối 5 là <b>nguồn</b> của con số đó: một {@code BigDecimal}
      * có kiểu, không phải một bản sao của {@code amount} (plan/14 lỗi #9).

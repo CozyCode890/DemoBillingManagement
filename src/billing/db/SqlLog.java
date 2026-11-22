@@ -26,7 +26,7 @@ import java.time.format.DateTimeFormatter;
  * <p>Bất biến bắt buộc: <b>một bản ghi = đúng một dòng</b>, 5 trường cách nhau
  * bằng {@code " | "}:
  * <pre>
- * 2026-10-10 14:03:21.123 | 12 ms | 3 dong | {call sp_get_invoice_lines(?)} | ? 1=INV-0001
+ * 2026-10-10 14:03:21.123 | 12 ms | 3 dong | {call sp_get_invoice_lines(?)} | ? 1=S01-C01-20261010-0001
  * </pre>
  */
 public class SqlLog {
@@ -99,7 +99,7 @@ public class SqlLog {
         return flat.length() <= max ? flat : flat.substring(0, max) + "...";
     }
 
-    /** {@code "? 1=INV-0001, 2=2026-10-10"} hoặc chuỗi rỗng nếu không có tham số. */
+    /** {@code "? 1=S01-C01-20261010-0001, 2=2026-10-10"} hoặc chuỗi rỗng nếu không có tham số. */
     private static String formatParams(Object[] params) {
         if (params == null || params.length == 0) {
             return "";

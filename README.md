@@ -15,7 +15,7 @@ Không Maven, không Spring, không Hibernate — chỉ `javac`, `java` và JDBC
 | Windows | **`Setup.exe`** |
 | macOS | **`Setup.app`** |
 
-Cửa sổ Setup App mở ra và tự bấm **CHẠY ỨNG DỤNG**. Không cần cài Java, MySQL hay gõ lệnh nào — chờ tới khi màn hình đăng nhập hiện ra là xong.
+Cửa sổ Setup App mở ra và tự bấm **CHẠY ỨNG DỤNG**. Không cần cài Java, MySQL hay gõ lệnh nào — chờ tới khi cửa sổ app hiện ra là xong.
 
 | Bước | Lần đầu tiên trên máy | Các lần sau |
 |---|---|---|
@@ -24,7 +24,7 @@ Cửa sổ Setup App mở ra và tự bấm **CHẠY ỨNG DỤNG**. Không cầ
 | 2. MySQL | Có MySQL đang chạy ở cổng 3306 và vào được bằng tài khoản trong `config.properties` → dùng luôn. Không có → tự tải MySQL 8.0 portable (~235 MB), khởi tạo và bật | bật lại trong ~2 giây |
 | 3. Database | Nạp `sql/` theo thứ tự 01 → 04 → 02 → 05 | **bỏ qua nếu SQL không đổi** |
 | 4. Biên dịch | `src/` → `out/` | bỏ qua nếu mã không đổi |
-| 5. Mở app | Màn hình đăng nhập (hoặc vào thẳng nếu chọn *Đăng nhập sẵn*) | |
+| 5. Mở app | Cửa sổ app (không có đăng nhập: thu ngân chọn ở tab 1, Manager duyệt chọn khi hủy / trả hàng) | |
 
 Mọi thứ tải về nằm trong `~/.retail-billing` (Windows: `C:\Users\<tên>\.retail-billing`) — **ngoài repo**, dùng chung cho mọi nhánh và mọi bản clone. Xoá thư mục đó là về như máy mới.
 
@@ -54,14 +54,14 @@ Hàng nút phụ dưới năm bước:
 | Nút | Làm gì |
 |---|---|
 | **Nạp lại database** | Xoá và nạp lại từ `sql/` dù SQL không đổi — về đúng dữ liệu mẫu |
-| **Xoá dữ liệu...** | Xoá các dòng, giữ mọi bảng và hàm/thủ tục. Hai mức: chỉ giao dịch (vẫn đăng nhập được) hoặc toàn bộ (kể cả tài khoản) — dành cho người tập viết seed |
+| **Xoá dữ liệu...** | Xoá các dòng, giữ mọi bảng và hàm/thủ tục. Hai mức: chỉ giao dịch (giữ danh mục: cửa hàng, nhân viên, sản phẩm...) hoặc toàn bộ 15 bảng — dành cho người tập viết seed |
 | **Chạy 03_queries.sql** | Chạy bài tập truy vấn, in kết quả dạng bảng vào log |
 | **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (docs/plan/15) |
 | **Tắt MySQL** | Tắt MySQL riêng của Setup App. MySQL có sẵn trên máy (service MySQL80, Homebrew...) thì không đụng tới |
 
 Tab **Nhật ký SQL** hiện mọi câu SQL mà app billing gửi xuống MySQL.
 
-Muốn seed tự viết chạy lại được nhiều lần, đặt `CALL sp_wipe_transactions();` ở đầu file. Chi tiết ở [docs/05 mục 8.5](docs/05-SQL-JAVA-CONVENTION.md).
+Muốn seed tự viết chạy lại được nhiều lần, đặt `CALL sp_wipe_transactions();` ở đầu file (xem comment của thủ tục đó trong `sql/04_routines.sql`).
 
 <details>
 <summary>Nếu launcher bị hệ điều hành chặn (chỉ xảy ra khi tải repo dạng ZIP)</summary>
@@ -93,37 +93,27 @@ Setup App không bao giờ sửa MySQL không phải của nó. Nếu cổng 330
 
 Mở thư mục repo, IDE nhận `pom.xml`. Bấm CHẠY trong Setup App **một lần** để có MySQL và database, sau đó chạy `billing.Main` từ IDE như bình thường (thư mục làm việc = gốc repo, để app đọc được `config.properties`).
 
-### App gọn `billing2`
-
-`src/billing2/` là bản viết lại gọn của `src/billing/`: **cùng bộ khung** (package `db / model / dao / ui`, cùng tên lớp, cùng tên hàm như `ProductDao.priceOn()`, `InvoiceDao.createInvoice()`) và **gọi đúng các thủ tục SQL đó**, nên nghiệp vụ giữ nguyên — khoảng 4.000 dòng thay vì 11.800. Giao diện chỉ tiếng Anh, không có tab Tra cứu và nút QR.
-
-Chạy bản gọn: đổi một dòng trong `config.properties` rồi bấm CHẠY — Setup App biên dịch cả hai app và chạy lớp ghi ở đây (từ IDE thì chạy thẳng `billing2.Main`):
-
-```properties
-app.main.class=billing2.Main
-```
-
-Quy trình: tính năng mới làm trước ở `billing`, sau đó `billing2` tham khảo cách `billing` làm và viết lại cho gọn.
-
 ---
 
-## Bốn màn hình của app
+## Bốn tab của app
 
-### 1. Lap hoa don
-Chọn quầy, thu ngân, khách hàng, ngày bán. Thêm sản phẩm → app tự tra giá trong `Price_History` và tự tìm khuyến mãi đang chạy. Thêm các dòng thanh toán (một hóa đơn có thể trả bằng nhiều phương thức). Bấm **LUU HOA DON** để ghi xuống database trong một transaction.
+Giao diện **song ngữ**: mặc định tiếng Việt, nút *English / Tiếng Việt* ở góc dưới (hoặc menu *Ngôn ngữ*) đổi cả cửa sổ đang mở. Quy tắc nghiệp vụ (BR1–BR16) mà các màn hình tuân theo nằm ở [docs/09-BUSINESS-RULES.md](docs/09-BUSINESS-RULES.md).
 
-> **Thử ngay điều này:** đổi ô *Ngay ban* về khoảng 400 ngày trước rồi thêm sản phẩm *Thit ba chi*. Đơn giá hiện **130.000** thay vì **158.000** — app không hardcode gì cả, nó hỏi database "giá của ngày hôm đó là bao nhiêu". Đây chính là yêu cầu khó nhất của đề bài.
+### 1. Lập hóa đơn
+Chọn quầy, thu ngân, khách hàng (gõ số điện thoại). Ngày bán **theo đồng hồ server**, không chọn được (BR2). Thêm sản phẩm → app tra giá hôm nay trong `Price_History` và khuyến mãi tốt nhất đang chạy; thêm trùng sản phẩm thì cộng dồn vào một dòng (BR7). Thêm các dòng thanh toán (một hóa đơn có thể trả bằng nhiều phương thức); với *Ví điện tử* có nút **Tạo mã QR** (VietQR, tài khoản nhận lấy từ các khóa `qr.*` trong `config.properties`). Bấm **LƯU HÓA ĐƠN** để ghi xuống database trong một transaction — mã hóa đơn `<Shop>-<Counter>-<YYYYMMDD>-<SEQ>` do SQL tự sinh (BR1).
 
-### 2. Xem hoa don
-Danh sách hóa đơn bên trái, bấm vào để xem chi tiết bên phải: thông tin chung, các dòng hàng, các lần thanh toán, các lần trả hàng. Mỗi cú click chạy 4 câu SELECT.
+### 2. Tra cứu
+Xem và lọc trực tiếp từng bảng trong database (sản phẩm, hóa đơn, lịch sử giá, khuyến mãi, trả hàng...).
 
-### 3. Bao cao
-Bốn câu truy vấn đề bài yêu cầu. Mỗi nút hiện **câu SQL** ở khung đen và **kết quả** ở bảng bên dưới, kèm một đoạn giải thích câu lệnh đó đang làm gì.
+### 3. Xem hóa đơn
+Danh sách hóa đơn bên trái, bấm vào để xem chi tiết bên phải: thông tin chung, các dòng hàng, hóa đơn điều chỉnh (sau trả hàng), các lần thanh toán. Hóa đơn đã chốt chỉ còn ba thao tác: **Sửa khách hàng** (BR10), **Hủy hóa đơn** (Manager duyệt, hóa đơn chưa có trả hàng — BR3) và **Trả hàng** (Manager duyệt, hóa đơn giữ *Đã thanh toán*, trả được nhiều lần — BR15, BR16).
 
-### 4. Nhat ky SQL
-Mọi câu lệnh app đã gửi xuống MySQL, kèm thời gian chạy và số dòng trả về.
+### 4. Báo cáo
+Các câu truy vấn đề bài yêu cầu (Q2–Q5), bảng giá 30 ngày của một sản phẩm và báo cáo *hóa đơn cũ giữ giá cũ*. Mỗi nút kèm một đoạn giải thích báo cáo đó tính gì.
 
-> **Thử ngay điều này:** vào tab này bấm *Xoa nhat ky*, sang tab 1 thêm một sản phẩm, quay lại bấm *Lam moi*. Bạn sẽ thấy đúng 2 câu SELECT: một câu tra giá, một câu tra khuyến mãi.
+> **Thử ngay điều này:** bấm *Bonus: hóa đơn cũ giữ giá cũ* — các dòng hàng bán trước mốc tăng giá vẫn ghi giá cũ, cạnh giá hôm nay. App không hardcode gì cả, nó hỏi database "giá của ngày hôm đó là bao nhiêu". Đây chính là yêu cầu khó nhất của đề bài.
+
+Mọi câu lệnh app gửi xuống MySQL được ghi vào `logs/sql.log` — xem ở tab *SQL Log* của Setup App.
 
 ---
 
@@ -133,8 +123,8 @@ Mọi câu lệnh app đã gửi xuống MySQL, kèm thời gian chạy và số
 |---|---|---|
 | 1 | [docs/01-NORMALIZATION.md](docs/01-NORMALIZATION.md) | **Chuẩn hóa là cái gì** — giải thích từ đầu bằng chính schema này |
 | 2 | [docs/02-JDBC.md](docs/02-JDBC.md) | **Java nói chuyện với MySQL ra sao** — 6 bước JDBC, PreparedStatement, transaction, BigDecimal |
-| 3 | [docs/03-SCHEMA.md](docs/03-SCHEMA.md) | Giải thích từng bảng và 3 điểm khó của đề bài |
-| 4 | [docs/04-CODE-LEARNING-GUIDE.md](docs/04-CODE-LEARNING-GUIDE.md) | **Hướng dẫn học code toàn diện (Frontend & Backend)** — Flow đọc code, cạm bẫy, đường vòng và đối chiếu Spring/React |
+| 3 | [docs/04-CODE-LEARNING-GUIDE.md](docs/04-CODE-LEARNING-GUIDE.md) | **Hướng dẫn học code toàn diện (Frontend & Backend)** — Flow đọc code, cạm bẫy, đường vòng và đối chiếu Spring/React |
+| 4 | [docs/09-BUSINESS-RULES.md](docs/09-BUSINESS-RULES.md) | **16 quy tắc nghiệp vụ BR1–BR16** và chỗ mỗi quy tắc được thực thi (SQL / Java / bất biến) |
 
 ---
 
@@ -158,7 +148,7 @@ Nếu bạn muốn hiểu cơ chế, đọc đúng thứ tự dưới đây, m�
 ```
 DemoBillingManagement/
 ├── README.md               <- bạn đang đọc file này
-├── config.properties       <- kết nối DB, đăng nhập nhanh, QR, thứ tự nạp SQL (db.build.files)
+├── config.properties       <- kết nối DB, lớp Main, tài khoản nhận mã QR, thứ tự nạp SQL (db.build.files)
 ├── SetupApp.jar            <- Setup App (Swing): làm mọi việc sau khi có Java
 ├── Setup.exe               <- BẤM ĐÚP trên Windows (launcher: tìm / tự tải JDK 21)
 ├── Setup.app/              <- BẤM ĐÚP trên macOS (launcher: tìm / tự tải JDK 21)
@@ -174,27 +164,26 @@ DemoBillingManagement/
 │   ├── IconGen.java        <- vẽ icon, xuất ra cả .ico lẫn .icns
 │   └── Setup.ico
 │
-├── tools/check/            <- Chốt bằng số cho 4 hợp đồng (docs/05 mục 7)
-│   └── ContractCheck.java  <- đọc/hiện số, giảm giá, tiền mặt, mã QR
+├── tools/check/            <- Chốt bằng số cho các hợp đồng của giao diện và SQL
+│   └── ContractCheck.java  <- đọc/hiện số, giảm giá, tiền mặt, mã QR, trả hàng, luật audit
 │
 ├── sql/
-│   ├── 01_schema.sql       <- 16 bảng, có comment từng bảng
-│   ├── 02_seed.sql         <- dữ liệu mẫu 90 ngày, sinh bằng vòng lặp SQL
-│   ├── 03_queries.sql      <- 5 câu truy vấn đề bài, chạy được độc lập
-│   ├── 04_routines.sql     <- Hàm (fn_) và Thủ tục (sp_) do Dev SQL quản lý
-│   └── 05_invariants.sql   <- 14 bất biến của dữ liệu (sp_check_seed)
+│   ├── 01_schema.sql       <- 15 bảng (theo ERD), CHECK / FK, có comment từng bảng
+│   ├── 02_seed.sql         <- dữ liệu mẫu 91 ngày, sinh bằng vòng lặp SQL
+│   ├── 03_queries.sql      <- các câu truy vấn đề bài (+ câu thêm), chạy được độc lập
+│   ├── 04_routines.sql     <- Hàm (fn_), Thủ tục (sp_), Trigger (trg_), View (vw_)
+│   └── 05_invariants.sql   <- 17 bất biến của dữ liệu (sp_check_seed)
 │
 ├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
 │   └── plan/               <- kế hoạch từng khối (comment trong code / SQL ghi tắt là "plan/NN")
 │
-├── src/billing/            <- app đầy đủ (song ngữ, tab Tra cứu, QR)
-│   ├── Main.java           <- điểm khởi động ứng dụng bán hàng
-│   ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
-│   ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
-│   ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
-│   └── ui/                 <- giao diện Swing, không có SQL
-│
-└── src/billing2/           <- app gọn: cùng khung và cùng thủ tục SQL với billing (xem mục "App gọn billing2")
+└── src/billing/            <- app bán hàng (giao diện gọn, song ngữ Việt/Anh)
+    ├── Main.java           <- điểm khởi động ứng dụng bán hàng
+    ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
+    ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
+    ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
+    ├── util/               <- CashRules (luật tiền mặt / số lượng / thẻ), VietQRHelper, AppConfig, Lang
+    └── ui/                 <- giao diện Swing (I18n = bộ đổi ngôn ngữ), không có SQL
 ```
 
 Kiến trúc ba tầng: **ui → dao → db → MySQL**. Tầng giao diện không được viết SQL, tầng DAO không được mở cửa sổ. Đây cũng là cách Spring Boot tổ chức code, chỉ khác tên gọi.
@@ -225,7 +214,7 @@ Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những 
 ./scripts/bash/check-seed.sh
 ```
 
-Chi tiết quy ước: [docs/05-SQL-JAVA-CONVENTION.md](docs/05-SQL-JAVA-CONVENTION.md) mục 8.
+Danh sách 17 bất biến nằm ở đầu `sql/05_invariants.sql`; chúng ứng với business rule nào thì xem [docs/09-BUSINESS-RULES.md](docs/09-BUSINESS-RULES.md).
 
 ---
 

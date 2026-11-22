@@ -9,7 +9,7 @@
 --  Moi quy tac tra ve SO DONG VI PHAM -- tat ca phai bang 0.
 -- =====================================================================
 --  VI SAO LA MOT FILE RIENG, KHONG NAM TRONG 04_routines.sql:
---  04_routines.sql la HOP DONG voi tang Java (docs/05 muc 6) -- moi routine
+--  04_routines.sql la HOP DONG voi tang Java -- moi routine
 --  trong do co mot cho goi trong app. sp_check_seed khong co: no la mot
 --  dung cu kiem, giong tools/check/ContractCheck.java cua khoi 5, chi khac
 --  la bat bien ve DU LIEU thi kiem bang SQL ngan hon nhieu.

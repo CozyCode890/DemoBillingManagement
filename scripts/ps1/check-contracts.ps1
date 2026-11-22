@@ -2,8 +2,8 @@
 #  check-contracts.ps1 -- kiem bon hop dong cua tang giao dien bang code
 # ---------------------------------------------------------------------
 #  Kiem nhung thu "sai thi khong ai thay": doc so tien / so luong, cong
-#  thuc giam gia, hop dong tien mat, va ma QR.
-#  Dac ta: docs/plan/14 muc 3 va docs/05 muc 7.
+#  thuc giam gia, hop dong tien mat, ma QR, tra hang va cac luat audit sau khi chot.
+#  Dac ta: docs/plan/14 muc 3.
 #
 #  CHI cac kich ban KHONG can bam chuot. Cac kich ban tuong tac Swing
 #  van phai kiem bang tay -- xem docs/plan/14 muc 9.3.
