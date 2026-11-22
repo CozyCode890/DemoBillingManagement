@@ -94,7 +94,7 @@ public class NewInvoicePanel extends JPanel {
     // --- Khung 4: thanh toán ----------------------------------------
     private final JComboBox<PayMethod> cbMethod = new JComboBox<>(PayMethod.values());
     private final JLabel     lbAmount  = new JLabel();
-    private final JTextField tfAmount  = new JTextField(12);
+    private final JTextField tfAmount  = new JTextField(8);
     private final JLabel     lbEcho;
     private final JTable     tbPay     = Ui.readOnlyTable();
     private final JButton    btAddPay  = new JButton("Them thanh toan");
@@ -340,13 +340,20 @@ public class NewInvoicePanel extends JPanel {
                 + "<i>Unlike the quantity field above, where <b>.</b> is the decimal separator.</i><br>"
                 + "Enter = add the payment.</html>"));
 
+        // Đảm bảo ô nhập tiền không bị GridBagLayout co nhỏ khi cửa sổ hẹp.
+        Dimension amtPref = tfAmount.getPreferredSize();
+        int amtW = 80;
+        tfAmount.setMinimumSize(new Dimension(amtW, amtPref.height));
+        tfAmount.setPreferredSize(new Dimension(amtW, amtPref.height));
+
         // Hàng 1: phương thức + ô tiền + nhãn vọng lại
         g.gridy = 0;
         g.gridx = 0; pay.add(new JLabel("Phuong thuc:"), g);
         g.gridx = 1; pay.add(cbMethod, g);
         g.gridx = 2; pay.add(lbAmount, g);
         g.gridx = 3; pay.add(tfAmount, g);
-        g.gridx = 4; pay.add(lbEcho, g);
+        g.gridx = 4; g.weightx = 1.0; pay.add(lbEcho, g);
+        g.weightx = 0;
 
         // Hàng 2: hàng nút -- xuống dòng ở ĐÂY, không theo bề rộng cửa sổ
         JPanel buttons = new JPanel(new GridLayout(1, 0, 6, 0));
