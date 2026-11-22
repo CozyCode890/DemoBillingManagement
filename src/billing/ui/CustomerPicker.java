@@ -11,24 +11,17 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
-/**
- * Ô "Customer (phone)": gõ >= 3 chữ số -> chờ 250 ms -> tìm theo TIỀN TỐ số điện thoại
- * (sp_search_customers_by_phone) -> chọn trong danh sách gợi ý (chuột, hoặc lên/xuống + Enter).
- *
- * Chỉ khách ĐƯỢC CHỌN mới gắn vào hóa đơn; gõ đủ số mà không chọn vẫn là khách vãng lai.
- */
 public class CustomerPicker extends JPanel {
-
     private final LookupDao lookupDao;
     private final JTextField tfPhone  = new JTextField(14);
     private final JLabel     lbStatus = new JLabel();
     private final DefaultListModel<CustomerRef> matches = new DefaultListModel<>();
     private final JList<CustomerRef> list  = new JList<>(matches);
     private final JPopupMenu popup = new JPopupMenu();
-    private final Timer debounce = new Timer(250, e -> runSearch());   // gõ 10 số = 1-2 câu SQL, không phải 10
+    private final Timer debounce = new Timer(250, e -> runSearch());
 
     private CustomerRef selected;
-    private boolean settingText;          // đang tự đổi chữ trong ô -> đừng coi là người dùng gõ
+    private boolean settingText;
 
     public CustomerPicker(LookupDao lookupDao) {
         super(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -40,7 +33,7 @@ public class CustomerPicker extends JPanel {
               + "Chỉ khách <b>được chọn trong danh sách</b> mới được gắn vào hóa đơn.</html>",
                 "<html>Type the customer's PHONE NUMBER (3 digits or more) and pick from the suggestions.<br>"
               + "Only a customer <b>picked from the list</b> is added to the bill.</html>"));
-        list.setFocusable(false);         // con trỏ ở lại trong ô nhập
+        list.setFocusable(false);
         list.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) { commitSelection(); }
         });
@@ -54,12 +47,11 @@ public class CustomerPicker extends JPanel {
         });
         add(tfPhone);
         add(lbStatus);
-        I18n.markDynamicText(lbStatus);                   // chữ ghép theo khách -> tự vẽ lại khi đổi ngôn ngữ
+        I18n.markDynamicText(lbStatus);
         I18n.onLanguageChange(this, this::updateStatus);
         updateStatus();
     }
 
-    /** Khách đã chọn -- CHỈ khi ô nhập vẫn đúng số điện thoại của khách đó; null = khách vãng lai. */
     public CustomerRef getSelected() {
         return selected != null && selected.phone.equals(tfPhone.getText().trim()) ? selected : null;
     }
@@ -75,7 +67,7 @@ public class CustomerPicker extends JPanel {
     private void onTyped() {
         if (settingText) return;
         String s = tfPhone.getText().trim();
-        if (selected != null && !selected.phone.equals(s)) selected = null;     // sửa số -> bỏ chọn
+        if (selected != null && !selected.phone.equals(s)) selected = null;
         updateStatus();
         if (s.length() >= 3 && s.chars().allMatch(Character::isDigit)) {
             debounce.restart();
@@ -85,7 +77,6 @@ public class CustomerPicker extends JPanel {
         }
     }
 
-    /** Tìm NGOÀI EDT; kết quả về muộn (người dùng đã gõ tiếp) thì bỏ. */
     private void runSearch() {
         String prefix = tfPhone.getText().trim();
         new SwingWorker<List<CustomerRef>, Void>() {
@@ -128,7 +119,7 @@ public class CustomerPicker extends JPanel {
     private void commitSelection() {
         CustomerRef c = list.getSelectedValue();
         if (c == null) return;
-        setTextQuietly(c.phone);          // ô nhập giữ SỐ ĐIỆN THOẠI, tên hiện ở nhãn bên cạnh
+        setTextQuietly(c.phone);
         selected = c;
         updateStatus();
         popup.setVisible(false);

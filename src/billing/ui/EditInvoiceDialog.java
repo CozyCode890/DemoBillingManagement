@@ -5,18 +5,10 @@ import billing.dao.InvoiceDao;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Đổi khách hàng của một hóa đơn (BR10) -> InvoiceDao.updateInvoiceCustomer.
- * Mọi trường khác CHỈ ĐỌC: ngày giờ theo server (BR2), quầy / thu ngân gắn cứng (BR4),
- * trạng thái chỉ đổi qua "Hủy hóa đơn" (BR3). SQL chặn lần nữa (sp_update_invoice_header,
- * trg_invoice_bu).
- */
 public class EditInvoiceDialog extends JDialog {
-
     private final JTextField tfCustomer = new JTextField(15);
     private boolean saved;
 
-    /** @param f một hàng của sp_get_invoice_edit_fields: Ma_HD, Ngay, Gio, Trang_thai, Quay, Thu_ngan, Khach */
     public EditInvoiceDialog(Window owner, InvoiceDao dao, String invoiceId, Object[] f) {
         super(owner, I18n.msg("Sửa khách hàng của hóa đơn: ", "Edit Invoice Customer: ") + invoiceId,
               ModalityType.APPLICATION_MODAL);
@@ -62,7 +54,7 @@ public class EditInvoiceDialog extends JDialog {
     private void save(InvoiceDao dao, String invoiceId) {
         String cus = tfCustomer.getText().trim();
         try {
-            dao.updateInvoiceCustomer(invoiceId, cus);   // "" -> NULL = khách vãng lai; mã lạ -> SQL từ chối
+            dao.updateInvoiceCustomer(invoiceId, cus);
             JOptionPane.showMessageDialog(this,
                     I18n.msg("Hóa đơn " + invoiceId + ": khách hàng = " + (cus.isEmpty() ? "khách vãng lai" : cus) + ".",
                              "Invoice " + invoiceId + ": customer set to " + (cus.isEmpty() ? "walk-in" : cus) + "."),

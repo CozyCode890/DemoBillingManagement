@@ -1,7 +1,4 @@
--- =====================================================================
---  01_schema.sql  --  Tạo database và 15 bảng cho hệ thống Retail Invoicing.
---  Chạy bằng:  mysql -u root -p < 01_schema.sql
--- =====================================================================
+-- 01_schema.sql -- Create the database and its 15 tables
 
 DROP DATABASE IF EXISTS retail_billing;
 CREATE DATABASE retail_billing
@@ -9,20 +6,14 @@ CREATE DATABASE retail_billing
     COLLATE utf8mb4_unicode_ci;
 USE retail_billing;
 
-
--- ---------------------------------------------------------------------
--- 1. Shop -- một cửa hàng trong chuỗi
--- ---------------------------------------------------------------------
+-- 1. Shop -- one store in the chain
 CREATE TABLE Shop (
     Shop_ID   VARCHAR(10)  NOT NULL,
     Address   VARCHAR(255) NOT NULL,
     CONSTRAINT PK_shop PRIMARY KEY (Shop_ID)
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 2. Counter -- quầy tính tiền, thuộc về đúng 1 shop
--- ---------------------------------------------------------------------
+-- 2. Counter -- a checkout counter, belongs to one shop
 CREATE TABLE Counter (
     Counter_ID VARCHAR(10) NOT NULL,
     Shop_ID    VARCHAR(10) NOT NULL,
@@ -33,13 +24,7 @@ CREATE TABLE Counter (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 3. Cashier -- thu ngân. Supervisor_ID trỏ ngược về chính bảng này
---    (quan hệ tự tham chiếu). Cho phép NULL vì cấp cao nhất không có sếp.
---    Role: BR15 yêu cầu chỉ người có Role = MANAGER mới duyệt trả hàng
---    (được kiểm tra bằng trigger ở file 04_routines).
--- ---------------------------------------------------------------------
+-- 3. Cashier -- staff member; Supervisor_ID points back to this table
 CREATE TABLE Cashier (
     Cashier_ID    VARCHAR(10)  NOT NULL,
     Name          VARCHAR(100) NOT NULL,
@@ -52,38 +37,26 @@ CREATE TABLE Cashier (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 4. Customer -- khách hàng (chỉ lưu khi khách có thẻ thành viên)
--- ---------------------------------------------------------------------
+-- 4. Customer -- member customers only
 CREATE TABLE Customer (
     Customer_ID VARCHAR(15)  NOT NULL,
     Name        VARCHAR(100) NOT NULL,
     Phone       VARCHAR(20)  NOT NULL,
     CONSTRAINT PK_customer PRIMARY KEY (Customer_ID),
-    UNIQUE KEY UQ_customer_phone (Phone)   -- số điện thoại không trùng
+    UNIQUE KEY UQ_customer_phone (Phone)
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 5. Product -- sản phẩm. KHÔNG có cột Price ở đây (giá ở Price_History).
--- ---------------------------------------------------------------------
+-- 5. Product -- products (prices are kept in Price_History)
 CREATE TABLE Product (
     Barcode  VARCHAR(20)  NOT NULL,
     Name     VARCHAR(150) NOT NULL,
     Unit     ENUM('PIECE','KG','LITER','PACK','BOX') NOT NULL,
-    Tax_Rate DECIMAL(5,2) NOT NULL,      -- ví dụ 8.00 nghĩa là VAT 8%
+    Tax_Rate DECIMAL(5,2) NOT NULL,
     CONSTRAINT PK_product PRIMARY KEY (Barcode),
     CONSTRAINT CK_product_tax CHECK (Tax_Rate >= 0 AND Tax_Rate <= 100)
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 6. Price_History -- mỗi dòng = "từ ngày X, sản phẩm Y có giá Z".
---    Khóa chính (Barcode, Valid_From_Date) => hóa đơn cũ giữ giá cũ.
---    BR6/BR8: Valid_From_Date mới phải lớn hơn mọi ngày cũ của cùng
---    sản phẩm -> kiểm tra bằng trigger BEFORE INSERT (04_routines).
--- ---------------------------------------------------------------------
+-- 6. Price_History -- each row: from date X, product Y costs Z
 CREATE TABLE Price_History (
     Barcode         VARCHAR(20)   NOT NULL,
     Valid_From_Date DATE          NOT NULL,
@@ -96,10 +69,7 @@ CREATE TABLE Price_History (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 7. Promotion -- chương trình khuyến mãi
--- ---------------------------------------------------------------------
+-- 7. Promotion -- promotion programs
 CREATE TABLE Promotion (
     Promo_ID         VARCHAR(15)  NOT NULL,
     Rule_Description VARCHAR(255) NOT NULL,
@@ -108,11 +78,7 @@ CREATE TABLE Promotion (
     CONSTRAINT PK_promotion PRIMARY KEY (Promo_ID)
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 8. Applies_To -- bảng trung gian N-N giữa Product và Promotion.
---    Discount_Percent nằm ở đây vì mức giảm phụ thuộc cả cặp.
--- ---------------------------------------------------------------------
+-- 8. Applies_To -- links products and promotions (many-to-many)
 CREATE TABLE Applies_To (
     Barcode          VARCHAR(20)  NOT NULL,
     Promo_ID         VARCHAR(15)  NOT NULL,
@@ -132,15 +98,7 @@ CREATE TABLE Applies_To (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 9. Invoice -- phần ĐẦU hóa đơn.
---    Customer_ID NULL = khách vãng lai.
---    BR2: Date/Time mặc định lấy từ đồng hồ của SERVER (không phải máy
---    quầy). Trigger BEFORE INSERT (04_routines) ghi đè giá trị client gửi lên.
---    BR3: Status chỉ có hai giá trị PAID / VOIDED (ENUM tự chặn giá trị
---    khác với chế độ STRICT mặc định của MySQL 8.0).
--- ---------------------------------------------------------------------
+-- 9. Invoice -- invoice header
 CREATE TABLE Invoice (
     Invoice_ID  VARCHAR(30) NOT NULL,
     `Date`      DATE NOT NULL DEFAULT (CURRENT_DATE),
@@ -164,19 +122,9 @@ CREATE TABLE Invoice (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- INDEX (yêu cầu mục 2.3): hỗ trợ CÂU 2 trong 03_queries.sql và
--- sp_report_daily_takings -- "Daily takings per shop for the last week".
--- Truy vấn lọc Invoice theo `Date` rồi nối sang Counter -> Shop qua Counter_ID.
 CREATE INDEX idx_invoice_date_counter ON Invoice (`Date`, Counter_ID);
 
-
--- ---------------------------------------------------------------------
--- 10. Invoice_Line -- WEAK ENTITY, khóa chính (Invoice_ID, Line_Number).
---     BR7: UNIQUE (Invoice_ID, Barcode) -> mỗi sản phẩm tối đa 1 dòng
---          trên 1 hóa đơn (cộng dồn số lượng); Quantity > 0.
---     BR9: dòng không âm: Discount <= Quantity * Unit_Price.
---     Unit_Price và Tax_Rate được CHÉP LẠI lúc lập hóa đơn (giá đóng băng).
--- ---------------------------------------------------------------------
+-- 10. Invoice_Line -- invoice lines, key (Invoice_ID, Line_Number)
 CREATE TABLE Invoice_Line (
     Invoice_ID  VARCHAR(30)   NOT NULL,
     Line_Number INT           NOT NULL,
@@ -184,7 +132,7 @@ CREATE TABLE Invoice_Line (
     Quantity    DECIMAL(10,3) NOT NULL,
     Unit_Price  DECIMAL(12,2) NOT NULL,
     Discount    DECIMAL(12,2) NOT NULL DEFAULT 0,
-    Tax_Rate    DECIMAL(5,2)  NOT NULL,                         -- Khóa cứng Tax lúc hoàn thành giao dịch
+    Tax_Rate    DECIMAL(5,2)  NOT NULL,
     CONSTRAINT PK_invoice_line PRIMARY KEY (Invoice_ID, Line_Number),
     UNIQUE KEY UQ_line_invoice_barcode (Invoice_ID, Barcode),
     CONSTRAINT CK_line_number   CHECK (Line_Number > 0),
@@ -203,14 +151,7 @@ CREATE TABLE Invoice_Line (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 11. Return -- trả hàng, gắn với DÒNG hóa đơn gốc.
---     Amount_refunded là thuộc tính DẪN XUẤT (nét đứt trong ERD) nên
---     không lưu: = Return_Quantity * ((Quantity*Unit_Price - Discount)/Quantity).
---     BR15: Approved_By phải là manager      -> trigger (04_routines)
---     BR16: Return_Quantity <= số lượng còn lại -> trigger (04_routines)
--- ---------------------------------------------------------------------
+-- 11. Return -- a return, linked to one invoice line
 CREATE TABLE `Return` (
     Invoice_ID      VARCHAR(30)   NOT NULL,
     Line_Number     INT           NOT NULL,
@@ -231,12 +172,7 @@ CREATE TABLE `Return` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 12. Payment -- 1 hóa đơn có thể có NHIỀU dòng thanh toán (BR12).
---     BR14: tổng Amount >= tổng hóa đơn mới được PAID -> procedure/trigger.
---     (trả 200k tiền mặt + 300k thẻ = 2 dòng Payment cùng Invoice_ID)
--- ---------------------------------------------------------------------
+-- 12. Payment -- one invoice can have many payments (BR12)
 CREATE TABLE Payment (
     Payment_ID VARCHAR(20)   NOT NULL,
     Amount     DECIMAL(12,2) NOT NULL,
@@ -249,18 +185,10 @@ CREATE TABLE Payment (
         ON UPDATE RESTRICT
 ) ENGINE=InnoDB;
 
-
--- ---------------------------------------------------------------------
--- 13/14/15. Ba bảng con của Payment
---     Payment_ID vừa là PRIMARY KEY vừa là FOREIGN KEY -> quan hệ 1-1.
---     Xóa Payment thì xóa luôn dòng chuyên biệt hóa -> CASCADE.
---     Ràng buộc "mỗi Payment nằm trong đúng một bảng con" cần trigger (04_routines).
---     BR13: Cash_Payment.Tendered_Amount >= Payment.Amount (trigger);
---           Card/E-wallet không có tiền thừa.
--- ---------------------------------------------------------------------
+-- 13/14/15. The three payment types (cash, card, e-wallet)
 CREATE TABLE Cash_Payment (
     Payment_ID      VARCHAR(20)   NOT NULL,
-    Tendered_Amount DECIMAL(12,2) NOT NULL,   -- khách đưa bao nhiêu tiền
+    Tendered_Amount DECIMAL(12,2) NOT NULL,
     CONSTRAINT PK_cash_payment PRIMARY KEY (Payment_ID),
     CONSTRAINT CK_cash_tendered CHECK (Tendered_Amount > 0),
     CONSTRAINT FK_cash_payment

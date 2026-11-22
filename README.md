@@ -1,210 +1,226 @@
-# Demo Retail Invoicing — Java Swing + JDBC + MySQL 8
+# Retail Invoicing — Java Swing + JDBC + MySQL 8
 
-App demo cho đề bài **19. Retail Invoicing** (IT079IU – Principles of Database Management).
+A small point-of-sale (POS) app for a chain of shops. It is the project for
+**Topic 19: Retail Invoicing** of the course IT079IU – Principles of Database Management.
 
-Mục tiêu: cho bạn thấy **tận mắt** Java gửi query xuống MySQL như thế nào. Mỗi lần bạn bấm một nút trên giao diện, app ghi lại câu SQL vừa chạy vào tab *Nhat ky SQL*.
+- **Java Swing** for the screens
+- **Plain JDBC** to talk to the database (no Spring, no Hibernate, no ORM)
+- **MySQL 8** holds all the data and most of the business rules (functions, procedures, triggers)
 
-Không Maven, không Spring, không Hibernate — chỉ `javac`, `java` và JDBC thuần.
+Every SQL statement the app sends to MySQL is written to a log, so you can see exactly
+what happens when you click a button.
+
+The full project report and the ER diagram are in [docs/](docs/):
+
+| File | What is inside |
+|---|---|
+| [docs/PDM_FinalReport_Group1.docx](docs/PDM_FinalReport_Group1.docx) | Final report: business rules, ERD, schema, functional dependencies, normalization (BCNF), queries, app design |
+| [docs/Retail_Invoicing_erd_101.pdf](docs/Retail_Invoicing_erd_101.pdf) | The Enhanced ER diagram |
 
 ---
 
-## Chạy app — một nút
+## Run the app (one click)
 
-| Hệ điều hành | Bấm đúp vào |
+| OS | Double-click |
 |---|---|
 | Windows | **`Setup.exe`** |
 | macOS | **`Setup.app`** |
 
-Cửa sổ Setup App mở ra và tự bấm **CHẠY ỨNG DỤNG**. Không cần cài Java, MySQL hay gõ lệnh nào — chờ tới khi cửa sổ app hiện ra là xong.
+The **Setup App** window opens and presses **Run** (*CHẠY ỨNG DỤNG*) by itself. You do not need to install
+Java or MySQL or type any command. Wait until the billing window appears.
 
-| Bước | Lần đầu tiên trên máy | Các lần sau |
+What the Setup App does:
+
+| Step | First time on a computer | Next times |
 |---|---|---|
-| Java | Launcher tự tải JDK 21 bản portable (~190 MB) nếu máy chưa có | dùng lại |
-| 1. Thư viện | Tải các jar khai báo trong `pom.xml` vào `lib/` (kiểm SHA-1) | bỏ qua |
-| 2. MySQL | Có MySQL đang chạy ở cổng 3306 và vào được bằng tài khoản trong `config.properties` → dùng luôn. Không có → tự tải MySQL 8.0 portable (~235 MB), khởi tạo và bật | bật lại trong ~2 giây |
-| 3. Database | Nạp `sql/` theo thứ tự 01 → 04 → 02 → 05 | **bỏ qua nếu SQL không đổi** |
-| 4. Biên dịch | `src/` → `out/` | bỏ qua nếu mã không đổi |
-| 5. Mở app | Cửa sổ app (không có đăng nhập: thu ngân chọn ở tab 1, Manager duyệt chọn khi hủy / trả hàng) | |
+| Java | Downloads a portable JDK 21 (~190 MB) if the computer has none | reuses it |
+| 1. Libraries | Downloads the jars listed in `pom.xml` into `lib/` (checks SHA-1) | skipped |
+| 2. MySQL | Uses a MySQL already running on port 3306 if it can log in with `config.properties`. Otherwise downloads a portable MySQL 8.0 (~235 MB), sets it up and starts it | starts in ~2 s |
+| 3. Database | Loads the files in `sql/` in the order 01 → 04 → 02 → 05 | **skipped if the SQL did not change** |
+| 4. Compile | Compiles `src/` into `out/` | skipped if the code did not change |
+| 5. Open app | Opens the billing window | |
 
-Mọi thứ tải về nằm trong `~/.retail-billing` (Windows: `C:\Users\<tên>\.retail-billing`) — **ngoài repo**, dùng chung cho mọi nhánh và mọi bản clone. Xoá thư mục đó là về như máy mới.
+Everything it downloads goes to `~/.retail-billing` (Windows: `C:\Users\<you>\.retail-billing`),
+**outside the repo**. Delete that folder to start fresh.
 
-### Đổi nhánh git: chỉ cần bấm CHẠY
+### Switching git branches
 
-Setup App băm nội dung các file SQL dựng database ("vân tay") và ghi vân tay đó vào MySQL mỗi lần nạp xong. Bấm CHẠY:
+The Setup App remembers a hash ("fingerprint") of the SQL files it loaded. When you press Run:
 
-- SQL giống lần nạp trước → giữ nguyên database và dữ liệu, mở app ngay;
-- SQL khác (đổi nhánh, pull seed mới, tự sửa routine...) → tự xoá và nạp lại (2–15 giây).
+- same SQL as last time → keeps the database and your data, opens the app;
+- different SQL (new branch, new seed, edited routine...) → drops and reloads the database (2–15 s).
 
-Dòng *Nhánh · SQL · Database* ngay dưới năm bước luôn cho biết database đang khớp nhánh nào, và tự cập nhật khi bạn đổi nhánh trong lúc Setup App đang mở.
+> Data you typed in the app is lost when the database is reloaded.
 
-> Dữ liệu bạn tự nhập trong app billing sẽ mất khi database được nạp lại — mỗi nhánh có schema và seed riêng nên không giữ chung được.
-
-Nhánh nào thêm file SQL mới thì khai báo thứ tự nạp trong `config.properties` của nhánh đó (không khai báo thì dùng thứ tự mặc định dưới đây):
+A branch that adds a new SQL file sets the load order in `config.properties`:
 
 ```properties
 db.build.files=01_schema.sql, 04_routines.sql, 02_seed.sql, 05_invariants.sql
 ```
 
-`03_queries.sql` không nằm trong danh sách này: sửa bài tập truy vấn không làm nạp lại database.
+`03_queries.sql` is not in this list, so editing the practice queries never reloads the database.
 
-### Công cụ database
+### Database tools in the Setup App
 
-Hàng nút phụ dưới năm bước:
+The Setup App is in Vietnamese only; the Vietnamese name of each button is in brackets.
 
-| Nút | Làm gì |
+| Button | What it does |
 |---|---|
-| **Nạp lại database** | Xoá và nạp lại từ `sql/` dù SQL không đổi — về đúng dữ liệu mẫu |
-| **Xoá dữ liệu...** | Xoá các dòng, giữ mọi bảng và hàm/thủ tục. Hai mức: chỉ giao dịch (giữ danh mục: cửa hàng, nhân viên, sản phẩm...) hoặc toàn bộ 15 bảng — dành cho người tập viết seed |
-| **Chạy 03_queries.sql** | Chạy bài tập truy vấn, in kết quả dạng bảng vào log |
-| **Kiểm tra seed** | Gọi `sp_check_seed`: 14 bất biến của dữ liệu (docs/plan/15) |
-| **Tắt MySQL** | Tắt MySQL riêng của Setup App. MySQL có sẵn trên máy (service MySQL80, Homebrew...) thì không đụng tới |
+| **Reload database** (*Nạp lại database*) | Drops and reloads from `sql/`, even if nothing changed — back to the sample data |
+| **Clear data...** (*Xoá dữ liệu...*) | Deletes rows but keeps all tables and routines. Two levels: only transactions (keeps shops, staff, products...) or all 15 tables |
+| **Run 03_queries.sql** (*Chạy 03_queries.sql*) | Runs the practice queries and prints the results as tables |
+| **Check seed** (*Kiểm tra seed*) | Calls `sp_check_seed`: checks the 17 data rules (see [Data checks](#data-checks)) |
+| **Stop MySQL** (*Tắt MySQL*) | Stops the Setup App's own MySQL. It never touches a MySQL you installed yourself |
 
-Tab **Nhật ký SQL** hiện mọi câu SQL mà app billing gửi xuống MySQL.
-
-Muốn seed tự viết chạy lại được nhiều lần, đặt `CALL sp_wipe_transactions();` ở đầu file (xem comment của thủ tục đó trong `sql/04_routines.sql`).
+The **SQL Log** tab (*Nhật ký SQL*) of the Setup App shows every SQL statement the billing app sends.
 
 <details>
-<summary>Nếu launcher bị hệ điều hành chặn (chỉ xảy ra khi tải repo dạng ZIP)</summary>
+<summary>If the OS blocks the launcher (only when you download the repo as a ZIP)</summary>
 
-`git clone` thì không gặp. Chỉ khi tải ZIP từ GitHub, hệ điều hành mới đánh dấu "tải từ Internet":
+With `git clone` this does not happen.
 
-- **Windows** hiện *"Windows protected your PC"* → bấm `More info` → `Run anyway` (`Setup.exe` chưa mua chữ ký số).
-- **macOS** báo *"không mở được vì không rõ nhà phát triển"* → mở Terminal chạy một lần:
+- **Windows** shows *"Windows protected your PC"* → click `More info` → `Run anyway`.
+- **macOS** says the app is from an unknown developer → open Terminal and run once:
 
   ```bash
-  xattr -dr com.apple.quarantine /đường/dẫn/tới/DemoBillingManagement
+  xattr -dr com.apple.quarantine /path/to/DemoBillingManagement
   ```
 
-- **macOS** báo không đọc được thư mục dự án: repo đang nằm trong Desktop / Documents / Downloads (vùng bảo vệ quyền riêng tư). Chuyển nó vào thư mục cá nhân rồi bấm đúp lại.
+- **macOS** cannot read the project folder: the repo is inside Desktop / Documents / Downloads.
+  Move it to your home folder and double-click again.
 </details>
 
 <details>
-<summary>Máy đã có MySQL riêng với mật khẩu khác 'root'</summary>
+<summary>Your computer already has its own MySQL with a different password</summary>
 
-Setup App không bao giờ sửa MySQL không phải của nó. Nếu cổng 3306 đang có một MySQL mà tài khoản trong `config.properties` không vào được, nó dừng lại và hướng dẫn chọn một trong hai:
+Put that account in `config.properties`:
 
-1. Tắt MySQL đó (Windows: `services.msc` → MySQL80 → Stop, Startup type = Manual; macOS: `brew services stop mysql`) rồi bấm CHẠY — Setup App tự bật MySQL riêng.
-2. Hoặc đổi mật khẩu `root` của MySQL đó thành `root`.
+```properties
+db.user=root
+db.password=your_password
+```
 
-**Đừng sửa `db.password` trong `config.properties` rồi commit** — mật khẩu riêng của máy bạn sẽ đi theo sang máy cả nhóm.
+Then press Run again.
 </details>
 
-### Chạy bằng IDE (IntelliJ / Eclipse)
+---
 
-Mở thư mục repo, IDE nhận `pom.xml`. Bấm CHẠY trong Setup App **một lần** để có MySQL và database, sau đó chạy `billing.Main` từ IDE như bình thường (thư mục làm việc = gốc repo, để app đọc được `config.properties`).
+## The four tabs of the app
+
+There is **no login screen**. The cashier picks the counter and the cashier name on tab 1.
+When an action needs a manager (void, return), the app asks you to pick the manager who approves it.
+
+The app is **bilingual**: Vietnamese by default. The *English / Tiếng Việt* button at the
+bottom (or the *Language* menu) switches every open window.
+
+### 1. Create Billing
+1. **Invoice details** — choose counter, cashier, and the customer by phone number
+   (or leave it empty for a walk-in customer). The date and time come from the **server clock**;
+   you cannot change them.
+2. **Add products** — pick a product and a quantity. The app shows today's price and the best
+   active promotion. Adding the same product again adds to the same line.
+3. **Items** — edit the quantity or remove a line.
+4. **Payments** — add one or more payments: cash, card or e-wallet. For e-wallet, **Create QR code**
+   shows a VietQR code for the amount still owed (bank account from the `qr.*` keys in `config.properties`).
+
+The bar at the bottom shows **Total, Paid, Remaining and Change**. **CREATE INVOICE** works only
+when the cart is not empty and nothing is left to pay. It saves the header, lines and payments in
+**one transaction**, then shows the receipt. The invoice ID `<Shop>-<Counter>-<YYYYMMDD>-<SEQ>`
+is made by SQL.
+
+### 2. Search
+Pick a table (products, invoices, invoice lines, price history, promotions, returns, customers,
+cashiers, shops, counters, payments...) and filter it by keyword, date range, amount, status and more.
+
+### 3. Invoices
+Invoice list on the left (filter: last 7 / 30 / 90 days or all), details on the right:
+header and totals, lines, payments, and the **adjusted invoice** after returns.
+A saved invoice allows only three actions:
+
+- **Edit customer** — change the customer; every other field is fixed (BR10).
+- **Void invoice** — a manager cancels a paid invoice that has **no returns**. The invoice stays
+  in the database but no longer counts as revenue (BR3).
+- **Return items** — a manager approves a return. The invoice stays *Paid*, and you can return
+  more later until everything is returned (BR15, BR16).
+
+### 4. Reports
+Each report has a short "About this report" text.
+
+| Button | Question |
+|---|---|
+| 1. 7-day revenue by shop | Q2 — revenue of each shop for each of the last 7 full days |
+| 2. Price rises > 10% | Q3 — products whose price went up more than 10% this year |
+| 3. Cashier with the highest average basket | Q4 — average invoice value per cashier |
+| 4. Invoices with > 50% returned | Q5 — paid invoices where more than half the value was returned |
+| 5. 30-day price (qty 1) | The price of one product on each of the last 30 days, after promotions |
+| Bonus: old invoices keep old prices | Compares the price saved on old invoices with today's price |
+
+Q1 (one full invoice with its lines and total) is the **receipt** shown after you save an invoice.
+
+> **Try this:** open *Bonus: old invoices keep old prices*. Lines sold before a price change still
+> show the old price, next to today's price. Nothing is hard-coded: the app asks the database
+> "what was the price on that day?". This is the hardest requirement of the topic.
 
 ---
 
-## Bốn tab của app
+## Business rules
 
-Giao diện **song ngữ**: mặc định tiếng Việt, nút *English / Tiếng Việt* ở góc dưới (hoặc menu *Ngôn ngữ*) đổi cả cửa sổ đang mở. Quy tắc nghiệp vụ (BR1–BR16) mà các màn hình tuân theo nằm ở [docs/09-BUSINESS-RULES.md](docs/09-BUSINESS-RULES.md).
+These are the 17 rules from the report (Table 3.1). The rules live **in the database** whenever
+possible, so they hold even if another program writes to it. The Java code checks input early
+only to show a friendly message before MySQL says no.
 
-### 1. Lập hóa đơn
-Chọn quầy, thu ngân, khách hàng (gõ số điện thoại). Ngày bán **theo đồng hồ server**, không chọn được (BR2). Thêm sản phẩm → app tra giá hôm nay trong `Price_History` và khuyến mãi tốt nhất đang chạy; thêm trùng sản phẩm thì cộng dồn vào một dòng (BR7). Thêm các dòng thanh toán (một hóa đơn có thể trả bằng nhiều phương thức); với *Ví điện tử* có nút **Tạo mã QR** (VietQR, tài khoản nhận lấy từ các khóa `qr.*` trong `config.properties`). Bấm **LƯU HÓA ĐƠN** để ghi xuống database trong một transaction — mã hóa đơn `<Shop>-<Counter>-<YYYYMMDD>-<SEQ>` do SQL tự sinh (BR1).
-
-### 2. Tra cứu
-Xem và lọc trực tiếp từng bảng trong database (sản phẩm, hóa đơn, lịch sử giá, khuyến mãi, trả hàng...).
-
-### 3. Xem hóa đơn
-Danh sách hóa đơn bên trái, bấm vào để xem chi tiết bên phải: thông tin chung, các dòng hàng, hóa đơn điều chỉnh (sau trả hàng), các lần thanh toán. Hóa đơn đã chốt chỉ còn ba thao tác: **Sửa khách hàng** (BR10), **Hủy hóa đơn** (Manager duyệt, hóa đơn chưa có trả hàng — BR3) và **Trả hàng** (Manager duyệt, hóa đơn giữ *Đã thanh toán*, trả được nhiều lần — BR15, BR16).
-
-### 4. Báo cáo
-Các câu truy vấn đề bài yêu cầu (Q2–Q5), bảng giá 30 ngày của một sản phẩm và báo cáo *hóa đơn cũ giữ giá cũ*. Mỗi nút kèm một đoạn giải thích báo cáo đó tính gì.
-
-> **Thử ngay điều này:** bấm *Bonus: hóa đơn cũ giữ giá cũ* — các dòng hàng bán trước mốc tăng giá vẫn ghi giá cũ, cạnh giá hôm nay. App không hardcode gì cả, nó hỏi database "giá của ngày hôm đó là bao nhiêu". Đây chính là yêu cầu khó nhất của đề bài.
-
-Mọi câu lệnh app gửi xuống MySQL được ghi vào `logs/sql.log` — xem ở tab *SQL Log* của Setup App.
-
----
-
-## Đọc tài liệu theo thứ tự này
-
-| Thứ tự | File | Nội dung |
+| ID | Rule (simple words) | Where it is enforced |
 |---|---|---|
-| 1 | [docs/01-NORMALIZATION.md](docs/01-NORMALIZATION.md) | **Chuẩn hóa là cái gì** — giải thích từ đầu bằng chính schema này |
-| 2 | [docs/02-JDBC.md](docs/02-JDBC.md) | **Java nói chuyện với MySQL ra sao** — 6 bước JDBC, PreparedStatement, transaction, BigDecimal |
-| 3 | [docs/04-CODE-LEARNING-GUIDE.md](docs/04-CODE-LEARNING-GUIDE.md) | **Hướng dẫn học code toàn diện (Frontend & Backend)** — Flow đọc code, cạm bẫy, đường vòng và đối chiếu Spring/React |
-| 4 | [docs/09-BUSINESS-RULES.md](docs/09-BUSINESS-RULES.md) | **16 quy tắc nghiệp vụ BR1–BR16** và chỗ mỗi quy tắc được thực thi (SQL / Java / bất biến) |
+| BR1 | Each checkout makes one invoice. Its ID is never typed by hand: `<Shop>-<Counter>-<YYYYMMDD>-<SEQ>` | `sp_create_invoice_header`, `trg_invoice_bi` |
+| BR2 | The invoice date and time come from the server clock, so nobody can back-date a sale | `trg_invoice_bi` |
+| BR3 | An invoice is saved only as **PAID** or **VOIDED**. Only a manager can void it, and only if it has no returns | `Status ENUM('PAID','VOIDED')`, `sp_void_invoice`, `trg_invoice_bu` |
+| BR4 | The cashier is saved on the invoice and cannot be changed later | NOT NULL foreign key, `trg_invoice_bu` |
+| BR5 | The cashier scans a barcode; the system finds the price, merges repeated products, applies discounts and computes the total | `sp_add_invoice_line`, `fn_invoice_amount_due`, `trg_invoice_line_bi` |
+| BR6 | A new price gets a later "valid from" date; old prices are never overwritten. The price used is the latest one not after the sale date | PK `(Barcode, Valid_From_Date)`, `fn_get_product_price`, `trg_price_history_*` |
+| BR7 | The same product again adds to the existing line. Quantity > 0: whole numbers for packed goods, up to 3 decimals for KG / LITER | `UNIQUE(Invoice_ID, Barcode)`, `CHECK (Quantity > 0)`, `CashRules.quantityProblem` |
+| BR8 | The unit price is copied onto the line at sale time and cannot be edited, so a later price change never alters a past invoice | snapshot columns, `trg_invoice_line_bu` / `_bd` |
+| BR9 | Line total = Quantity × Unit_Price − Discount, never negative. Prices include VAT; the tax rate is copied for the VAT breakdown only | `CHECK (0 <= Discount <= Quantity * Unit_Price)` |
+| BR10 | The cashier may find a customer by phone. Walk-in customers can stay empty | `UNIQUE(Phone)`, nullable `Customer_ID`, *Edit customer* |
+| BR11 | If several promotions match, only the biggest discount applies (tie → earliest expiry). Promotions do not stack | `fn_active_promo_pct`, `fn_line_discount` |
+| BR12 | One invoice can be paid with several methods | one Invoice → many Payment, `sp_add_payment` |
+| BR13 | Only cash gives change. Card and e-wallet are always the exact amount | `trg_cash_payment_bi`, `vw_cash_change_due`, `CashRules.checkTendered` |
+| BR14 | When the payments reach the total, the invoice becomes PAID | `sp_settle_invoice`, `trg_invoice_bu` |
+| BR15 | Only a manager can approve a return; the manager is saved on it | `sp_add_return`, `trg_return_bi` |
+| BR16 | A return takes lines of a PAID invoice, 0 < quantity ≤ quantity not yet returned. The original invoice is never changed. Refund = Return_Quantity × (line total ÷ Quantity) | `trg_return_bi`, `fn_return_refund` |
+| BR17 | While items are being scanned, the cart lives only in the app's memory; no draft invoice is ever saved | Java cart (`CartLine`), saved in one transaction by `InvoiceDao.createInvoice`, `sp_check_seed` (R17) |
+
+One more rule comes from the ER diagram: **each payment is exactly one type** (cash, card or
+e-wallet, never two). It is enforced by `trg_cash_payment_bi`, `trg_card_payment_bi` and
+`trg_ewallet_payment_bi`.
 
 ---
 
-## Đọc code theo thứ tự này
+## Data checks
 
-Nếu bạn muốn hiểu cơ chế, đọc đúng thứ tự dưới đây, mỗi file đều có comment giải thích:
+`sql/05_invariants.sql` creates `sp_check_seed`. It counts rows that break a rule. 0 everywhere
+means the data is correct. You can run it any time, also after you changed data in the app.
 
-| Thứ tự | File | Vì sao đọc |
-|---|---|---|
-| 1 | [Db.java](src/billing/db/Db.java) | Mở kết nối — điểm bắt đầu của mọi thứ |
-| 2 | [QueryResult.java](src/billing/db/QueryResult.java) | **6 bước JDBC gói gọn trong một hàm** |
-| 3 | [ProductDao.java](src/billing/dao/ProductDao.java) | Hàm `priceOn()` — trái tim của đề bài |
-| 4 | [InvoiceDao.java](src/billing/dao/InvoiceDao.java) | Hàm `createInvoice()` — **transaction commit/rollback** |
-| 5 | [ReportDao.java](src/billing/dao/ReportDao.java) | 4 câu báo cáo, mỗi câu có comment giải thích kỹ thuật |
-| 6 | [NewInvoicePanel.java](src/billing/ui/NewInvoicePanel.java) | Giao diện gọi xuống DAO như thế nào |
+| Check | What must be true |
+|---|---|
+| R1 | Line price = product price on the sale date |
+| R2 | Line discount = promotion formula on the sale date |
+| R3 | A PAID invoice is fully paid and has at least one line |
+| R4 | A VOIDED invoice was also fully paid (payments are never deleted) |
+| R5 | Cash given ≥ cash amount |
+| R6 | Each payment is in exactly one of Cash / Card / E-wallet |
+| R7 | Total returned ≤ quantity bought, per line |
+| R8 | Sale date ≤ return date ≤ today |
+| R9 | Returns are only on PAID invoices and approved by a MANAGER |
+| R10 | No invoice in the future |
+| R11 | Invoice ID matches `<Shop>-<Counter>-<YYYYMMDD>-<SEQ>` |
+| R12 | Each of the last 91 days has at least one invoice |
+| R13 | Return numbers of each line go 1, 2, 3... with no gap |
+| R14 | Promotion expiry date ≥ its end date |
+| R15 | Cashier exists, and the customer (if any) exists |
+| R16 | Whole quantities for PIECE / PACK / BOX, and line total ≥ 0 |
+| R17 | Status is only PAID or VOIDED, no draft in DB (BR17) |
 
----
-
-## Cấu trúc thư mục
-
-```
-DemoBillingManagement/
-├── README.md               <- bạn đang đọc file này
-├── config.properties       <- kết nối DB, lớp Main, tài khoản nhận mã QR, thứ tự nạp SQL (db.build.files)
-├── SetupApp.jar            <- Setup App (Swing): làm mọi việc sau khi có Java
-├── Setup.exe               <- BẤM ĐÚP trên Windows (launcher: tìm / tự tải JDK 21)
-├── Setup.app/              <- BẤM ĐÚP trên macOS (launcher: tìm / tự tải JDK 21)
-├── pom.xml                 <- danh sách thư viện: Setup App tải theo file này; IDE cũng đọc
-│
-├── scripts/                <- chỉ còn công cụ kiểm tra và đóng gói (chạy tay, không bắt buộc)
-│   ├── ps1/  check-seed, check-contracts, build-setup, build-launcher   (Windows)
-│   └── bash/ check-seed, check-contracts, build-setup, build-launcher   (macOS / Linux)
-│
-├── tools/launcher/         <- Mã nguồn của hai launcher (chỉ người bảo trì cần)
-│   ├── WindowsLauncher.cs  <- nguồn của Setup.exe, biên dịch bằng csc.exe
-│   ├── app.manifest        <- bật comctl32 v6 + DPI aware cho Setup.exe
-│   ├── IconGen.java        <- vẽ icon, xuất ra cả .ico lẫn .icns
-│   └── Setup.ico
-│
-├── tools/check/            <- Chốt bằng số cho các hợp đồng của giao diện và SQL
-│   └── ContractCheck.java  <- đọc/hiện số, giảm giá, tiền mặt, mã QR, trả hàng, luật audit
-│
-├── sql/
-│   ├── 01_schema.sql       <- 15 bảng (theo ERD), CHECK / FK, có comment từng bảng
-│   ├── 02_seed.sql         <- dữ liệu mẫu 91 ngày, sinh bằng vòng lặp SQL
-│   ├── 03_queries.sql      <- các câu truy vấn đề bài (+ câu thêm), chạy được độc lập
-│   ├── 04_routines.sql     <- Hàm (fn_), Thủ tục (sp_), Trigger (trg_), View (vw_)
-│   └── 05_invariants.sql   <- 17 bất biến của dữ liệu (sp_check_seed)
-│
-├── docs/                   <- Tài liệu giải thích chi tiết & quy chuẩn chung
-│   └── plan/               <- kế hoạch từng khối (comment trong code / SQL ghi tắt là "plan/NN")
-│
-└── src/billing/            <- app bán hàng (giao diện gọn, song ngữ Việt/Anh)
-    ├── Main.java           <- điểm khởi động ứng dụng bán hàng
-    ├── db/                 <- tầng kết nối: Db, QueryResult (call), SqlLog
-    ├── model/              <- các lớp dữ liệu: Product, CartLine, ...
-    ├── dao/                <- Gọi Stored Functions & Procedures qua CallableStatement
-    ├── util/               <- CashRules (luật tiền mặt / số lượng / thẻ), VietQRHelper, AppConfig, Lang
-    └── ui/                 <- giao diện Swing (I18n = bộ đổi ngôn ngữ), không có SQL
-```
-
-Kiến trúc ba tầng: **ui → dao → db → MySQL**. Tầng giao diện không được viết SQL, tầng DAO không được mở cửa sổ. Đây cũng là cách Spring Boot tổ chức code, chỉ khác tên gọi.
-
----
-
-## Dữ liệu mẫu có sẵn
-
-- 3 cửa hàng, 6 quầy (**2 quầy mỗi shop**), 5 thu ngân, 30 khách hàng
-- 20 sản phẩm, trong đó **5 sản phẩm tăng giá hơn 10%** trong năm nay
-- **91 ngày liên tục đều có hóa đơn** — khoảng 550 hóa đơn, mỗi shop 2 hóa đơn mỗi ngày
-- Cả **ba trạng thái** đều có hàng chục hóa đơn: đã thanh toán, đang lập (trả thiếu), đã hủy
-- Hàng trăm hóa đơn tiền mặt có **tiền thối** thật, và hàng chục hóa đơn thanh toán **tách làm hai phương thức**
-- Khoảng 50 lượt trả hàng, có cả **hai lượt trả trên cùng một dòng**, và vài hóa đơn bị trả quá nửa giá trị
-- 6 chương trình khuyến mãi phủ kín 91 ngày: hai đợt **gối nhau** trên cùng một sản phẩm (phải chọn mức cao hơn), một chương trình **tạm dừng** (có dòng trong bảng mà vẫn không được áp dụng), **2 hóa đơn từ năm ngoái dùng giá cũ**
-
-Ngày tháng trong `02_seed.sql` được tính tương đối theo `CURDATE()`, nên bạn chạy lúc nào thì cả năm báo cáo cũng có dữ liệu đáng xem.
-
-Điểm đáng xem nhất: **ngày đổi giá nằm giữa cửa sổ 90 ngày**, nên cùng một sản phẩm xuất hiện ở **hai đơn giá khác nhau** trên hai hóa đơn mà bạn thấy cạnh nhau trong tab *Xem hóa đơn* — "hóa đơn cũ giữ giá cũ" không còn phải lùi 400 ngày mới thấy.
-
-Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những thủ tục mà tab *Lập hóa đơn* đi qua**, nên mọi con số trong database là con số mà app *có thể* đã tự tạo ra. Không `Status`, `Unit_Price`, `Discount` hay `Return_ID` nào được gõ tay. Kiểm bằng nút **Kiểm tra seed** trong Setup App, hoặc từ terminal:
+Run it with the **Check seed** button, or from a terminal:
 
 ```powershell
 .\scripts\ps1\check-seed.ps1
@@ -214,61 +230,106 @@ Dữ liệu được sinh bằng **một vòng lặp SQL đi qua đúng những 
 ./scripts/bash/check-seed.sh
 ```
 
-Danh sách 17 bất biến nằm ở đầu `sql/05_invariants.sql`; chúng ứng với business rule nào thì xem [docs/09-BUSINESS-RULES.md](docs/09-BUSINESS-RULES.md).
+---
+
+## Sample data
+
+`sql/02_seed.sql` creates:
+
+- 15 shops, 30 counters (2 per shop), 30 staff (15 managers, 15 cashiers), 30 customers
+- 20 products, 15 promotions
+- **91 days in a row with invoices** — about 550 invoices, 1,100 lines and 640 payments
+- about 100 invoices paid with **two methods**, a few voided invoices, about 40 returns
+- 5 products with a **price rise > 10%**, and 3 products that change price **every day**
+
+Dates are relative to `CURDATE()`, so the reports always have data whenever you run it.
+
+The invoices are made by **a SQL loop that calls the same procedures as the Create Billing tab**.
+So every number in the database is a number the app itself could have made: no `Status`,
+`Unit_Price`, `Discount` or `Return_ID` is typed by hand.
 
 ---
 
-## Gặp lỗi?
+## Project structure
 
-| Thông báo | Cách xử lý |
-|---|---|
-Gần như mọi lỗi môi trường đều sửa được bằng cách **bấm CHẠY lần nữa** — Setup App kiểm tra lại từng bước và in lý do cụ thể vào log. Còn lại:
+```
+DemoBillingManagement/
+├── README.md
+├── config.properties     <- DB connection, main class, QR bank account, SQL load order
+├── pom.xml               <- list of libraries (the Setup App downloads them; IDEs read it)
+├── Setup.exe             <- DOUBLE-CLICK on Windows
+├── Setup.app/            <- DOUBLE-CLICK on macOS
+├── SetupApp.jar          <- the Setup App itself
+│
+├── docs/                 <- final report (.docx) and ER diagram (.pdf)
+│
+├── sql/
+│   ├── 01_schema.sql     <- 15 tables, keys, CHECK, foreign keys, one index
+│   ├── 02_seed.sql       <- sample data for 91 days
+│   ├── 03_queries.sql    <- 13 queries of the topic + the "old price" proof
+│   ├── 04_routines.sql   <- functions (fn_), procedures (sp_), triggers (trg_), views (vw_)
+│   └── 05_invariants.sql <- sp_check_seed: the 17 data checks
+│
+├── src/billing/          <- the billing app
+│   ├── Main.java         <- start: tests the DB connection, opens the window
+│   ├── db/               <- Db (connection), QueryResult (run a call into a table), SqlLog
+│   ├── dao/              <- InvoiceDao, ProductDao, LookupDao, ReportDao: all SQL lives here
+│   ├── model/            <- simple data classes: CartLine, PaymentEntry, Product, ...
+│   ├── util/             <- CashRules, VietQRHelper, AppConfig, Lang
+│   └── ui/               <- Swing screens and dialogs (no SQL here); I18n = language switch
+│
+├── scripts/              <- optional tools you run by hand
+│   ├── ps1/              <- Windows: check-seed, check-contracts, build-setup, build-launcher
+│   └── bash/             <- macOS / Linux: the same four
+│
+└── tools/
+    ├── check/ContractCheck.java  <- automatic tests for the UI rules (money, cash, QR, returns...)
+    └── launcher/                 <- source of Setup.exe and the icons
+```
 
-| Thông báo | Cách xử lý |
-|---|---|
-| *"Cổng 3306 đang có một MySQL khác chạy sẵn..."* | Máy có MySQL riêng với mật khẩu khác `root`. Xem mục *Máy đã có MySQL riêng* ở phần [Chạy app](#chạy-app--một-nút) |
-| *"Không tải được ..."* | Mất mạng giữa chừng. Bấm CHẠY lại — phần đã tải được giữ lại và tải tiếp |
-| Database báo lỗi ở `sql/xx.sql dòng N` | Lỗi nằm trong chính file SQL của nhánh đó (log in câu lệnh và mã lỗi MySQL). Sửa file rồi bấm CHẠY — database tự nạp lại |
-| *"Biên dịch thất bại"* | Lỗi Java trong `src/`, log in `file:dòng: lỗi`. Sửa rồi bấm CHẠY |
-| `Communications link failure` khi chạy `billing.Main` từ IDE | MySQL chưa bật — mở Setup App bấm CHẠY một lần |
-| `UnsupportedClassVersionError ... class file version 69` | `SetupApp.jar` bị đóng gói bằng JDK mới hơn JDK đang chạy. Đóng gói lại bằng script `build-setup` (script đã khoá `--release 21`) |
-| Bấm đúp `Setup.exe` báo `side-by-side configuration is incorrect` | `tools/launcher/app.manifest` hỏng cú pháp XML — chạy `scripts\ps1\build-launcher.ps1`, nó kiểm tra và chỉ ra lỗi |
-| *"MySQL riêng không cho root đăng nhập"* | Tắt Setup App, xoá thư mục `~/.retail-billing/mysql-data` rồi bấm CHẠY — MySQL riêng được khởi tạo lại |
-| `check-seed` báo một quy tắc `SAI` | Cột `Hop_dong` trong bảng kết quả chỉ ra mục nào của `docs/plan/15` đang bị vi phạm. Bấm **Nạp lại database** là về 0. R12 (91 ngày liên tục) sai riêng một mình thường chỉ vì database được nạp từ nhiều ngày trước |
+The app has three layers: **ui → dao → db → MySQL**. The UI never writes SQL, and the DAO
+never opens a window. Every SQL call uses `PreparedStatement` or `CallableStatement`.
 
-Danh sách lỗi JDBC đầy đủ hơn nằm ở [docs/02-JDBC.md](docs/02-JDBC.md) mục 8.
+### How a checkout is saved
+
+`InvoiceDao.createInvoice` runs all steps on one connection with auto-commit off:
+
+1. `sp_create_invoice_header` → makes the invoice ID
+2. `sp_add_invoice_line` for each cart line → copies price, tax and discount
+3. `sp_add_payment` for each payment → writes `Payment` and its child table
+4. `sp_settle_invoice` → checks that payments = total, sets PAID
+5. `commit()`
+
+If any step fails, `rollback()` undoes everything and the cart stays on screen with the error message.
 
 ---
 
-## Dựng lại Setup App và launcher (chỉ người bảo trì)
+## Scripts (optional)
 
-`SetupApp.jar`, `Setup.exe` và `Setup.app` đã được commit sẵn nên người dùng không cần dựng lại.
+| Script | When to use it |
+|---|---|
+| `check-seed` | Check the 17 data rules from a terminal (same as the **Check seed** button) |
+| `check-contracts` | Run `tools/check/ContractCheck.java`: about 145 automatic tests of the UI rules. Needs MySQL running and the sample data. It creates 3 test invoices and deletes them again |
+| `build-setup` | Rebuild `SetupApp.jar` (maintainer only — needs the Setup App source, which is not in git) |
+| `build-launcher` | Rebuild `Setup.exe` / the icons after editing `tools/launcher/` (maintainer only) |
 
-**`SetupApp.jar`** đóng gói từ `src/envsetup/` — thư mục này bị `.gitignore` bỏ qua (không đẩy mã nguồn công cụ lên repo), nên chỉ máy có mã nguồn mới đóng gói lại được:
+Windows: `powershell -ExecutionPolicy Bypass -File scripts\ps1\<name>.ps1`
+macOS / Linux: `bash scripts/bash/<name>.sh`
 
-```bash
-powershell -ExecutionPolicy Bypass -File scripts\ps1\build-setup.ps1
-```
+---
 
-```bash
-bash scripts/bash/build-setup.sh
-```
+## Problems?
 
-Bên trong: `envsetup.core` chứa toàn bộ logic (tải thư viện theo `pom.xml`, quản lý MySQL, vân tay SQL, tách câu lệnh theo `DELIMITER`, biên dịch bằng `javax.tools`), `envsetup.ui` chỉ là giao diện. SQL được chạy qua JDBC chứ không qua client `mysql`, nên máy chỉ có server (hoặc chưa có gì) vẫn chạy được.
+Most problems go away if you **press Run again**: the Setup App checks every step again and
+writes the exact reason in its log. Otherwise:
 
-**Launcher** chỉ cần dựng lại khi sửa `tools/launcher/WindowsLauncher.cs`, `app.manifest`, `IconGen.java` hoặc `Setup.app/Contents/MacOS/Setup`:
-
-```bash
-powershell -ExecutionPolicy Bypass -File scripts\ps1\build-launcher.ps1
-```
-
-```bash
-bash scripts/bash/build-launcher.sh
-```
-
-Vài điều đáng biết:
-
-- **Không cần cài thêm công cụ gì.** Trình biên dịch C# (`csc.exe`) nằm sẵn trong Windows từ bản 10, và `.icns` cho macOS được `IconGen.java` ghi tay bằng Java thuần nên máy Windows cũng tạo được, không cần `iconutil`.
-- **`Setup.exe` phải dựng trên Windows**, `Setup.app` thì dựng ở đâu cũng được vì nó chỉ là thư mục chứa `Info.plist` + script bash.
-- **Bit thực thi của `Setup.app/Contents/MacOS/Setup` phải nằm trong git.** Thiếu nó, máy Mac clone về sẽ báo "ứng dụng bị hỏng". Hai script build tự kiểm tra và sửa bằng `git update-index --chmod=+x`.
-- **XML trong `app.manifest` cấm hai dấu gạch ngang liền nhau trong comment.** `csc.exe` nhúng manifest mà không kiểm tra nên lỗi chỉ lộ ra lúc bấm đúp; script build kiểm tra hộ trước khi biên dịch.
+| Message | What to do |
+|---|---|
+| *"Cổng 3306 đang có một MySQL khác chạy sẵn..."* (port 3306 already has another MySQL) | Your computer has its own MySQL with another password. Put it in `config.properties` (see above) |
+| *"Không tải được ..."* (cannot download) | The network dropped. Press Run again; it continues the download |
+| Error in `sql/xx.sql line N` | The SQL file of this branch has an error (the log shows the statement and the MySQL error). Fix the file and press Run |
+| *"Biên dịch thất bại"* (compile failed) | Java error in `src/`; the log shows `file:line: error`. Fix it and press Run |
+| `Communications link failure` when you run `billing.Main` from an IDE | MySQL is not running. Open the Setup App and press Run once |
+| `UnsupportedClassVersionError ... class file version 69` | `SetupApp.jar` was built with a newer JDK. Rebuild it with `build-setup` (it uses `--release 21`) |
+| `Setup.exe` says `side-by-side configuration is incorrect` | `tools/launcher/app.manifest` has broken XML. Run `scripts\ps1\build-launcher.ps1`; it shows the error |
+| `check-seed` shows a rule as `SAI` (wrong) | The `Hop_dong` column says which business rule is broken. **Reload database** brings it back to 0. If only R12 fails, the database was usually loaded several days ago |

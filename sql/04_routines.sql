@@ -1,26 +1,7 @@
--- =====================================================================
---  04_routines.sql -- Retail Invoicing (Topic 19)
---  Doi chieu 01_schema.sql (15 bang) & 16 Business Rules (BR1 - BR16,
---  dinh nghia day du: docs/09-BUSINESS-RULES.md)
---  Chay sau 01_schema.sql: mysql -u root -p retail_billing < 04_routines.sql
--- =====================================================================
---  LUU Y:
---  1. Caller phai BEGIN/START TRANSACTION, goi create -> add lines ->
---     add payments -> settle -> COMMIT; neu loi thi ROLLBACK.
---  2. Khong luu cart nhap vao CSDL (BR3); header chi ton tai chua commit
---     trong transaction checkout.
---  QUY UOC CHUNG (CONTRACT VOI DEV JAVA BACKEND):
---  1. Tien to ham tra ve gia tri don (Scalar Function): fn_<ten_ham>
---  2. Tien to thu tuc (Stored Procedure):             sp_<ten_thu_tuc>
---  3. Tien to tham so dau vao / ra:                   p_<ten_tham_so>
---  4. Tien to bien noi bo:                            v_<ten_bien>
---  5. Ten cot tra ve (Alias) trong cau SELECT giu co dinh de Java
---     anh xa vao Model/JTable.
--- =====================================================================
+-- 04_routines.sql -- Functions, procedures, triggers and views
 
 USE retail_billing;
 
--- Xoa cac ham, thu tuc va trigger cu neu da ton tai de tranh loi khi chay lai
 DROP FUNCTION IF EXISTS fn_get_product_price;
 DROP FUNCTION IF EXISTS fn_active_promo_pct;
 DROP FUNCTION IF EXISTS fn_line_discount;
@@ -105,15 +86,9 @@ DROP VIEW IF EXISTS vw_cash_change_due;
 DROP VIEW IF EXISTS vw_invoice_line_total;
 DELIMITER $$
 
--- =====================================================================
--- PHAN 1: HAM SQL (STORED FUNCTIONS - TRA VE GIA TRI DON)
--- =====================================================================
+-- PART 1: FUNCTIONS
 
--- ---------------------------------------------------------------------
--- 1.1 fn_get_product_price (BR6, BR8):
---     Tim gia hieu luc cua san pham tai mot ngay (Valid_From_Date <= p_date
---     gan nhat).
--- ---------------------------------------------------------------------
+-- 1.1 fn_get_product_price (BR6, BR8): product price on a given date
 CREATE FUNCTION fn_get_product_price(
     p_barcode VARCHAR(20),
     p_date    DATE
@@ -134,12 +109,7 @@ BEGIN
     RETURN v_price;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.2 fn_active_promo_pct (BR11):
---     Phan tram giam cua khuyen mai TOT NHAT dang ap dung cho san pham
---     tai mot ngay (khong cong don). Khong co khuyen mai -> 0.00.
--- ---------------------------------------------------------------------
+-- 1.2 fn_active_promo_pct (BR11): best promotion percent on a given date
 CREATE FUNCTION fn_active_promo_pct(
     p_barcode VARCHAR(20),
     p_date    DATE
@@ -162,11 +132,7 @@ BEGIN
     RETURN COALESCE(v_pct, 0.00);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.3 fn_line_discount (BR5, BR9, BR11):
---     Tien giam cua ca dong hang tai ngay ban.
--- ---------------------------------------------------------------------
+-- 1.3 fn_line_discount (BR5, BR9, BR11): discount amount of a line
 CREATE FUNCTION fn_line_discount(
     p_barcode    VARCHAR(20),
     p_date       DATE,
@@ -181,10 +147,7 @@ BEGIN
                  * fn_active_promo_pct(p_barcode, p_date) / 100, 2);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.4 fn_next_payment_id: Tu dong sinh ma thanh toan tiep theo (PAY-xxxx)
--- ---------------------------------------------------------------------
+-- 1.4 fn_next_payment_id: next payment ID (PAY-xxxx)
 CREATE FUNCTION fn_next_payment_id()
 RETURNS VARCHAR(20)
 NOT DETERMINISTIC
@@ -200,14 +163,7 @@ BEGIN
     RETURN CONCAT('PAY-', LPAD(v_max_seq + 1, 4, '0'));
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.5 fn_return_refund (BR16):
---     Tien hoan lai cho p_quantity don vi cua MOT dong hoa don theo don
---     gia thuc te sau chiet khau:
---     Effective_Price = ((Quantity * Unit_Price) - Discount) / Quantity
---     Amount_Refunded = Return_Quantity * Effective_Price
--- ---------------------------------------------------------------------
+-- 1.5 fn_return_refund (BR16): refund amount of one return
 CREATE FUNCTION fn_return_refund(
     p_invoice_id  VARCHAR(30),
     p_line_number INT,
@@ -229,10 +185,7 @@ BEGIN
     RETURN COALESCE(v_refund, 0.00);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.6 fn_next_return_id: So thu tu lan tra ke tiep cua mot dong hoa don
--- ---------------------------------------------------------------------
+-- 1.6 fn_next_return_id: next return number of an invoice line
 CREATE FUNCTION fn_next_return_id(
     p_invoice_id  VARCHAR(30),
     p_line_number INT
@@ -252,11 +205,7 @@ BEGIN
     RETURN v_max + 1;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.7 fn_invoice_amount_due (BR9): Tong so tien hoa don phai thu
---     (Don gia da bao gom thue VAT nen khong cong them thue rieng)
--- ---------------------------------------------------------------------
+-- 1.7 fn_invoice_amount_due (BR9): total amount due of an invoice
 CREATE FUNCTION fn_invoice_amount_due(
     p_invoice_id VARCHAR(30)
 )
@@ -274,10 +223,7 @@ BEGIN
     RETURN COALESCE(v_due, 0.00);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.8 fn_invoice_amount_paid (BR12, BR14): Tong so tien da ghi nhan
--- ---------------------------------------------------------------------
+-- 1.8 fn_invoice_amount_paid (BR12, BR14): total amount paid of an invoice
 CREATE FUNCTION fn_invoice_amount_paid(
     p_invoice_id VARCHAR(30)
 )
@@ -295,10 +241,7 @@ BEGIN
     RETURN COALESCE(v_paid, 0.00);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.9 fn_line_returned_qty: Tong so luong da tra cua mot dong hoa don
--- ---------------------------------------------------------------------
+-- 1.9 fn_line_returned_qty: total returned quantity of a line
 CREATE FUNCTION fn_line_returned_qty(
     p_invoice_id  VARCHAR(30),
     p_line_number INT
@@ -318,10 +261,7 @@ BEGIN
     RETURN COALESCE(v_qty, 0.000);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.10 fn_line_refund: Tong tien da hoan cua mot dong hoa don
--- ---------------------------------------------------------------------
+-- 1.10 fn_line_refund: total refund of a line
 CREATE FUNCTION fn_line_refund(
     p_invoice_id  VARCHAR(30),
     p_line_number INT
@@ -341,10 +281,7 @@ BEGIN
     RETURN COALESCE(v_refund, 0.00);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.11 fn_invoice_refund: Tong tien da hoan cua ca hoa don
--- ---------------------------------------------------------------------
+-- 1.11 fn_invoice_refund: total refund of an invoice
 CREATE FUNCTION fn_invoice_refund(
     p_invoice_id VARCHAR(30)
 )
@@ -362,12 +299,7 @@ BEGIN
     RETURN COALESCE(v_refund, 0.00);
 END$$
 
-
--- ---------------------------------------------------------------------
--- 1.12 fn_invoice_in_revenue (BR3, BR16):
---      1 = 'PAID' (tinh doanh thu thuan sau khi tru Return neu co)
---      0 = 'VOIDED' hoac khong tim thay hoa don
--- ---------------------------------------------------------------------
+-- 1.12 fn_invoice_in_revenue (BR3, BR16): 1 if the invoice counts as revenue
 CREATE FUNCTION fn_invoice_in_revenue(
     p_invoice_id VARCHAR(30)
 )
@@ -380,14 +312,9 @@ BEGIN
     RETURN IF(v_status = 'PAID', 1, 0);
 END$$
 
+-- PART 2: LOOKUP AND PRODUCT PROCEDURES
 
--- =====================================================================
--- PHAN 2: THU TUC DANH MUC & TRA CUU (LOOKUP & PRODUCTS)
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 2.1 sp_lookup_counters: Danh sach quay thu ngan kem dia chi shop
--- ---------------------------------------------------------------------
+-- 2.1 sp_lookup_counters: list counters with shop address
 CREATE PROCEDURE sp_lookup_counters()
 BEGIN
     SELECT c.Counter_ID,
@@ -397,10 +324,7 @@ BEGIN
     ORDER BY c.Counter_ID;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.2 sp_lookup_cashiers: Danh sach thu ngan
--- ---------------------------------------------------------------------
+-- 2.2 sp_lookup_cashiers: list cashiers
 CREATE PROCEDURE sp_lookup_cashiers()
 BEGIN
     SELECT Cashier_ID, Name
@@ -408,11 +332,7 @@ BEGIN
     ORDER BY Cashier_ID;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.2b sp_lookup_managers (BR3, BR15): Nhan vien co Role = MANAGER -- danh
---      sach nguoi duoc chon de duyet huy hoa don / tra hang.
--- ---------------------------------------------------------------------
+-- 2.2b sp_lookup_managers (BR3, BR15): list managers
 CREATE PROCEDURE sp_lookup_managers()
 BEGIN
     SELECT Cashier_ID, Name
@@ -421,10 +341,7 @@ BEGIN
     ORDER BY Cashier_ID;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.3 sp_lookup_customers: Danh sach khach hang thanh vien
--- ---------------------------------------------------------------------
+-- 2.3 sp_lookup_customers: list member customers
 CREATE PROCEDURE sp_lookup_customers()
 BEGIN
     SELECT Customer_ID,
@@ -433,10 +350,7 @@ BEGIN
     ORDER BY Customer_ID;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.4 sp_search_customers_by_phone (BR10): Tim khach hang theo tien to SDT
--- ---------------------------------------------------------------------
+-- 2.4 sp_search_customers_by_phone (BR10): find customers by phone prefix
 CREATE PROCEDURE sp_search_customers_by_phone(
     IN p_prefix VARCHAR(20)
 )
@@ -450,10 +364,7 @@ BEGIN
     LIMIT   20;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.5 sp_get_all_products: Lay toan bo danh muc san pham
--- ---------------------------------------------------------------------
+-- 2.5 sp_get_all_products: list all products
 CREATE PROCEDURE sp_get_all_products()
 BEGIN
     SELECT Barcode, Name, Unit, Tax_Rate
@@ -461,11 +372,7 @@ BEGIN
     ORDER BY Name;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.6 sp_add_price_history (BR6, BR8):
---     Them moc gia moi (append-only), Valid_From_Date > moi moc cu.
--- ---------------------------------------------------------------------
+-- 2.6 sp_add_price_history (BR6, BR8): add a new price
 CREATE PROCEDURE sp_add_price_history(
     IN p_barcode         VARCHAR(20),
     IN p_valid_from_date DATE,
@@ -510,12 +417,7 @@ BEGIN
     SET @retail_price_write = NULL;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 2.7 sp_get_active_promo (BR11):
---     Tra cuu chuong trinh khuyen mai tot nhat dang ap dung cho san pham
---     tai ngay p_date; neu bang nhau thi chon Expiry_Date som nhat.
--- ---------------------------------------------------------------------
+-- 2.7 sp_get_active_promo (BR11): best promotion of a product on a date
 CREATE PROCEDURE sp_get_active_promo(
     IN p_barcode VARCHAR(20),
     IN p_date    DATE
@@ -532,14 +434,9 @@ BEGIN
     LIMIT 1;
 END$$
 
+-- PART 3: INVOICE VIEW PROCEDURES
 
--- =====================================================================
--- PHAN 3: THU TUC XEM THONG TIN HOA DON
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 3.1 sp_get_recent_invoices: Danh sach hoa don kem tong tien
--- ---------------------------------------------------------------------
+-- 3.1 sp_get_recent_invoices: list invoices with totals
 CREATE PROCEDURE sp_get_recent_invoices(
     IN p_days INT
 )
@@ -565,10 +462,7 @@ BEGIN
     ORDER BY i.`Date` DESC, i.`Time` DESC;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.2 sp_get_invoice_header: Phan dau va cac tong tien cua mot hoa don
--- ---------------------------------------------------------------------
+-- 3.2 sp_get_invoice_header: header and totals of one invoice
 CREATE PROCEDURE sp_get_invoice_header(
     IN p_invoice_id VARCHAR(30)
 )
@@ -599,12 +493,7 @@ BEGIN
              s.Shop_ID, s.Address, c.Name, cu.Name;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.3 sp_get_invoice_lines (BR9):
---     Cac dong san pham chi tiet cua hoa don, tra ve l.Tax_Rate da khoa
---     cung (snapshot) tren Invoice_Line tai thoi diem ban.
--- ---------------------------------------------------------------------
+-- 3.3 sp_get_invoice_lines (BR9): lines of one invoice
 CREATE PROCEDURE sp_get_invoice_lines(
     IN p_invoice_id VARCHAR(30)
 )
@@ -623,10 +512,7 @@ BEGIN
     ORDER BY l.Line_Number;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.4 sp_get_invoice_payments (BR12, BR13): Chi tiet thanh toan hoa don
--- ---------------------------------------------------------------------
+-- 3.4 sp_get_invoice_payments (BR12, BR13): payments of one invoice
 CREATE PROCEDURE sp_get_invoice_payments(
     IN p_invoice_id VARCHAR(30)
 )
@@ -651,10 +537,7 @@ BEGIN
     ORDER BY p.Payment_ID;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.5 sp_get_invoice_adjusted (BR16): Hoa don dieu chinh = Invoice_Line - Return
--- ---------------------------------------------------------------------
+-- 3.5 sp_get_invoice_adjusted (BR16): invoice after returns
 CREATE PROCEDURE sp_get_invoice_adjusted(
     IN p_invoice_id VARCHAR(30)
 )
@@ -682,10 +565,7 @@ BEGIN
     ORDER BY l.Line_Number;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.6 sp_get_returnable_lines (BR16): Cac dong hang & SL con tra duoc
--- ---------------------------------------------------------------------
+-- 3.6 sp_get_returnable_lines (BR16): lines and quantity that can still be returned
 CREATE PROCEDURE sp_get_returnable_lines(
     IN p_invoice_id VARCHAR(30)
 )
@@ -709,10 +589,7 @@ BEGIN
     ORDER BY l.Line_Number;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.7 sp_get_invoice_edit_fields: Cac truong tho cua mot hoa don
--- ---------------------------------------------------------------------
+-- 3.7 sp_get_invoice_edit_fields: raw fields of one invoice
 CREATE PROCEDURE sp_get_invoice_edit_fields(
     IN p_invoice_id VARCHAR(30)
 )
@@ -728,10 +605,7 @@ BEGIN
     WHERE   i.Invoice_ID = p_invoice_id;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 3.8 sp_get_invoice_line_edit_fields: 4 truong tho cua mot dong hang
--- ---------------------------------------------------------------------
+-- 3.8 sp_get_invoice_line_edit_fields: raw fields of one invoice line
 CREATE PROCEDURE sp_get_invoice_line_edit_fields(
     IN p_invoice_id  VARCHAR(30),
     IN p_line_number INT
@@ -746,15 +620,9 @@ BEGIN
       AND   l.Line_Number = p_line_number;
 END$$
 
+-- PART 4: REPORT PROCEDURES (Q2, Q3, Q4, Q5 and BONUS)
 
--- =====================================================================
--- PHAN 4: THU TUC BAO CAO (REPORTS - Q2, Q3, Q4, Q5 & BONUS)
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 4.1 sp_report_daily_takings (Q2):
---     Doanh thu thuan theo ngay cua tung shop trong 7 ngay gan nhat
--- ---------------------------------------------------------------------
+-- 4.1 sp_report_daily_takings (Q2): daily revenue by shop
 CREATE PROCEDURE sp_report_daily_takings()
 BEGIN
     SELECT  s.Shop_ID                                     AS Cua_hang,
@@ -773,11 +641,7 @@ BEGIN
     ORDER BY i.`Date` DESC, s.Shop_ID;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 4.2 sp_report_price_rise (Q3):
---     San pham tang gia > 10% trong nam nay
--- ---------------------------------------------------------------------
+-- 4.2 sp_report_price_rise (Q3): products with price increase > 10%
 CREATE PROCEDURE sp_report_price_rise()
 BEGIN
     SELECT  p.Barcode                                                      AS Ma_vach,
@@ -800,11 +664,7 @@ BEGIN
     ORDER BY Tang_phan_tram DESC;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 4.3 sp_report_best_cashier (Q4):
---     Thu ngan co gio hang trung binh cao nhat (hoa don PAID, tru hoan tra)
--- ---------------------------------------------------------------------
+-- 4.3 sp_report_best_cashier (Q4): cashier with the highest average invoice
 CREATE PROCEDURE sp_report_best_cashier()
 BEGIN
     SELECT  c.Cashier_ID           AS Ma_TN,
@@ -824,11 +684,7 @@ BEGIN
     ORDER BY Gio_hang_TB DESC;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 4.4 sp_report_big_returns (Q5, BR16):
---     Hoa don PAID bi tra hang qua 50% gia tri goc (sau chiet khau)
--- ---------------------------------------------------------------------
+-- 4.4 sp_report_big_returns (Q5, BR16): invoices with more than half returned
 CREATE PROCEDURE sp_report_big_returns()
 BEGIN
     SELECT  i.Invoice_ID                                 AS Ma_HD,
@@ -850,10 +706,7 @@ BEGIN
     ORDER BY Phan_tram_tra DESC;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 4.5 sp_report_old_price_proof (BR8): Chung minh hoa don cu giu gia cu
--- ---------------------------------------------------------------------
+-- 4.5 sp_report_old_price_proof (BR8): proof that old invoices keep old prices
 CREATE PROCEDURE sp_report_old_price_proof()
 BEGIN
     SELECT  p.Name                                     AS San_pham,
@@ -870,10 +723,7 @@ BEGIN
     ORDER BY p.Name, l.Unit_Price;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 4.6 sp_report_price_30_days (BR6, BR11): Bien dong gia + KM 30 ngay
--- ---------------------------------------------------------------------
+-- 4.6 sp_report_price_30_days (BR6, BR11): price and promotion changes in 30 days
 CREATE PROCEDURE sp_report_price_30_days(
     IN p_barcode VARCHAR(20)
 )
@@ -904,17 +754,9 @@ BEGIN
     ORDER BY t.Ngay;
 END$$
 
+-- PART 5: CREATE, UPDATE AND DELETE PROCEDURES (IN TRANSACTIONS)
 
--- =====================================================================
--- PHAN 5: THU TUC GHI, SUA, XOA DU LIEU TRONG TRANSACTION
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 5.1 sp_create_invoice_header (BR1, BR2, BR3, BR4):
---     - Sinh ma <Shop_ID>-<Counter_ID>-<YYYYMMDD>-<SEQ> tu dong (BR1).
---     - Lay ngay/gio tu dong ho server (BR2).
---     - Bat buoc chay trong transaction, khong luu hoa don nhap (BR3).
--- ---------------------------------------------------------------------
+-- 5.1 sp_create_invoice_header (BR1, BR2, BR3, BR4): create an invoice header
 CREATE PROCEDURE sp_create_invoice_header(
     IN  p_date        DATE,
     IN  p_time        TIME,
@@ -1003,13 +845,7 @@ BEGIN
     SET @retail_create_invoice = NULL;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.2 sp_add_invoice_line (BR5, BR7, BR8, BR9, BR11):
---     - Tu dong cong don so luong neu san pham da co tren hoa don (BR7).
---     - Tu dong lay don gia & khuyen mai cao nhat tu he thong (BR5/BR8/BR11).
---     - Khoa cung Tax_Rate tu Product (BR9).
--- ---------------------------------------------------------------------
+-- 5.2 sp_add_invoice_line (BR5, BR7, BR8, BR9, BR11): add a line to an invoice
 CREATE PROCEDURE sp_add_invoice_line(
     IN p_invoice_id  VARCHAR(30),
     IN p_line_number INT,
@@ -1101,11 +937,7 @@ BEGIN
     END IF;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.3 sp_add_payment (BR12, BR13):
---     Ghi nhan thanh toan da phuong thuc va re nhanh vao bang con ISA.
--- ---------------------------------------------------------------------
+-- 5.3 sp_add_payment (BR12, BR13): add a payment
 CREATE PROCEDURE sp_add_payment(
     IN p_payment_id VARCHAR(20),
     IN p_invoice_id VARCHAR(30),
@@ -1182,11 +1014,7 @@ BEGIN
     SET @retail_payment_write = NULL;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.4 sp_settle_invoice (BR3, BR14):
---     Chot hoa don truoc khi COMMIT: phai co >= 1 dong hang va da thu du.
--- ---------------------------------------------------------------------
+-- 5.4 sp_settle_invoice (BR3, BR14): finish an invoice
 CREATE PROCEDURE sp_settle_invoice(
     IN p_invoice_id VARCHAR(30)
 )
@@ -1226,10 +1054,7 @@ BEGIN
     END IF;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.5 sp_void_invoice (BR3): Huy hoa don sau thanh toan boi MANAGER
--- ---------------------------------------------------------------------
+-- 5.5 sp_void_invoice (BR3): a manager cancels a paid invoice
 CREATE PROCEDURE sp_void_invoice(
     IN p_invoice_id    VARCHAR(30),
     IN p_supervisor_id VARCHAR(10)
@@ -1265,9 +1090,6 @@ BEGIN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invoice is already VOIDED';
     END IF;
 
-    -- BR16: hoa don da tra hang phai giu nguyen PAID. Huy no se loai ca phan
-    -- khach con giu khoi doanh thu (fn_invoice_in_revenue = 0) trong khi tien
-    -- hoan da chi -- doanh thu thuan bi tru HAI lan.
     IF EXISTS (SELECT 1 FROM `Return` WHERE Invoice_ID = p_invoice_id) THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'Invoice has returns and must stay PAID; it cannot be voided (BR16)';
@@ -1278,12 +1100,7 @@ BEGIN
     SET @retail_manager_void = NULL;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.6 sp_add_return (BR7, BR15, BR16):
---     Ghi nhan luot tra hang, bat buoc MANAGER duyet, hoa don PAID,
---     so luong nguyen voi hang dong goi, va khong vuot SL con lai.
--- ---------------------------------------------------------------------
+-- 5.6 sp_add_return (BR7, BR15, BR16): record a return
 CREATE PROCEDURE sp_add_return(
     IN p_invoice_id  VARCHAR(30),
     IN p_line_number INT,
@@ -1366,10 +1183,7 @@ BEGIN
     SET @retail_return_write = NULL;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.7 sp_delete_return: Chan xoa lich su tra hang de bao toan audit
--- ---------------------------------------------------------------------
+-- 5.7 sp_delete_return: block deleting returns
 CREATE PROCEDURE sp_delete_return(
     IN  p_invoice_id  VARCHAR(30),
     IN  p_line_number INT,
@@ -1381,10 +1195,7 @@ BEGIN
         SET MESSAGE_TEXT = 'Return records are immutable for audit; use an approved correction workflow';
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.8 sp_delete_invoice: Chan xoa hoa don da chot ngoai maintenance wipe
--- ---------------------------------------------------------------------
+-- 5.8 sp_delete_invoice: block deleting finished invoices
 CREATE PROCEDURE sp_delete_invoice(
     IN p_invoice_id VARCHAR(30)
 )
@@ -1393,12 +1204,7 @@ BEGIN
         SET MESSAGE_TEXT = 'Finalized invoices and their payment/return history cannot be deleted; use maintenance wipe only';
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.9 sp_update_invoice_header (BR2, BR3, BR4, BR10):
---     Chi cho phep gan/cap nhat khach hang thanh vien (Customer_ID);
---     cam sua Date, Time, Status, Counter_ID, Cashier_ID.
--- ---------------------------------------------------------------------
+-- 5.9 sp_update_invoice_header (BR2, BR3, BR4, BR10): edit an invoice header
 CREATE PROCEDURE sp_update_invoice_header(
     IN p_invoice_id  VARCHAR(30),
     IN p_date        DATE,
@@ -1442,10 +1248,7 @@ BEGIN
     WHERE  Invoice_ID = p_invoice_id;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.10 sp_update_invoice_line (BR8): Cam sua dong hoa don sau checkout
--- ---------------------------------------------------------------------
+-- 5.10 sp_update_invoice_line (BR8): block editing lines after checkout
 CREATE PROCEDURE sp_update_invoice_line(
     IN p_invoice_id  VARCHAR(30),
     IN p_line_number INT,
@@ -1459,10 +1262,7 @@ BEGIN
         SET MESSAGE_TEXT = 'Invoice lines are immutable after checkout; price and discount cannot be edited (BR8)';
 END$$
 
-
--- ---------------------------------------------------------------------
--- 5.11 sp_delete_invoice_line (BR16): Cam xoa dong hoa don sau checkout
--- ---------------------------------------------------------------------
+-- 5.11 sp_delete_invoice_line (BR16): block deleting lines after checkout
 CREATE PROCEDURE sp_delete_invoice_line(
     IN p_invoice_id  VARCHAR(30),
     IN p_line_number INT
@@ -1472,14 +1272,9 @@ BEGIN
         SET MESSAGE_TEXT = 'A finalized invoice line cannot be deleted; preserve the original sale and return history (BR16)';
 END$$
 
+-- PART 6: DATA CLEANUP PROCEDURES
 
--- =====================================================================
--- PHAN 6: DUNG CU DON DU LIEU (15 BANG THEO 01_schema.sql)
--- =====================================================================
-
--- ---------------------------------------------------------------------
--- 6.1 sp_wipe_transactions: Xoa 7 bang giao dich, giu 8 bang danh muc
--- ---------------------------------------------------------------------
+-- 6.1 sp_wipe_transactions: delete the 7 transaction tables, keep the 8 catalog tables
 CREATE PROCEDURE sp_wipe_transactions()
 BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -1499,10 +1294,7 @@ BEGIN
     SET @retail_maintenance = NULL;
 END$$
 
-
--- ---------------------------------------------------------------------
--- 6.2 sp_wipe_all_data: Xoa toan bo 15 bang theo nguoc chieu khoa ngoai
--- ---------------------------------------------------------------------
+-- 6.2 sp_wipe_all_data: delete all 15 tables
 CREATE PROCEDURE sp_wipe_all_data()
 BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
@@ -1528,12 +1320,9 @@ BEGIN
     SET @retail_maintenance = NULL;
 END$$
 
+-- PART 7: TRIGGERS FOR THE 16 BUSINESS RULES
 
--- =====================================================================
--- PHAN 7: TRIGGERS -- CHOT CHAN CAP CSDL CHO 16 BUSINESS RULES
--- =====================================================================
-
--- BR6/BR8: Price_History la append-only, bat bien voi UPDATE/DELETE
+-- BR6/BR8: Price_History rows cannot be updated or deleted
 CREATE TRIGGER trg_price_history_bi
 BEFORE INSERT ON Price_History
 FOR EACH ROW
@@ -1562,7 +1351,7 @@ BEGIN
     END IF;
 END$$
 
--- BR1/BR2: Dong ho server la chuan duy nhat, ma hoa don dung dinh dang
+-- BR1/BR2: server clock is used, invoice ID must have the right format
 CREATE TRIGGER trg_invoice_bi
 BEFORE INSERT ON Invoice
 FOR EACH ROW
@@ -1593,7 +1382,7 @@ BEGIN
     END IF;
 END$$
 
--- BR1/BR2/BR3/BR4: Bat bien thong tin goc cua hoa don; chi MANAGER huy duoc PAID -> VOIDED
+-- BR1/BR2/BR3/BR4: invoice header cannot change; only a manager can void a paid invoice
 CREATE TRIGGER trg_invoice_bu
 BEFORE UPDATE ON Invoice
 FOR EACH ROW
@@ -1616,7 +1405,7 @@ BEGIN
     END IF;
 END$$
 
--- BR5/BR7/BR8/BR9/BR11: Khoa cung gia, thue, khuyen mai tot nhat luc them dong
+-- BR5/BR7/BR8/BR9/BR11: lock price, tax and best promotion when a line is added
 CREATE TRIGGER trg_invoice_line_bi
 BEFORE INSERT ON Invoice_Line
 FOR EACH ROW
@@ -1719,8 +1508,7 @@ BEGIN
     END IF;
 END$$
 
--- BR7/BR15/BR16: Tra hang phai co MANAGER duyet, hoa don PAID, ngay tra >= ngay mua,
--- so luong nguyen voi hang dong goi, va tong tra luy ke <= so luong da mua.
+-- BR7/BR15/BR16: return rules (manager approval, paid invoice, valid date and quantity)
 CREATE TRIGGER trg_return_bi
 BEFORE INSERT ON `Return`
 FOR EACH ROW
@@ -1802,9 +1590,7 @@ BEGIN
     END IF;
 END$$
 
--- =====================================================================
--- PAYMENT ISA: Total + Disjoint & BR12 / BR13
--- =====================================================================
+-- Payment types: each payment has exactly one type (BR12, BR13)
 CREATE TRIGGER trg_payment_bi
 BEFORE INSERT ON Payment
 FOR EACH ROW
@@ -1902,7 +1688,7 @@ BEGIN IF COALESCE(@retail_maintenance, 0) <> 1 THEN SIGNAL SQLSTATE '45000' SET 
 
 DELIMITER ;
 
--- View 1: Change_Due theo từng giao dịch thanh toán tiền mặt
+-- View 1: change given back for each cash payment
 CREATE OR REPLACE VIEW vw_cash_change_due AS
 SELECT ca.Payment_ID,
        p.Invoice_ID,
@@ -1912,7 +1698,7 @@ SELECT ca.Payment_ID,
 FROM Cash_Payment ca
 JOIN Payment p ON p.Payment_ID = ca.Payment_ID;
 
--- View 2: Total theo từng dòng hóa đơn
+-- View 2: total of each invoice line
 CREATE OR REPLACE VIEW vw_invoice_line_total AS
 SELECT l.Invoice_ID,
        l.Line_Number,

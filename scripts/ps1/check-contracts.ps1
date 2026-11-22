@@ -3,10 +3,9 @@
 # ---------------------------------------------------------------------
 #  Kiem nhung thu "sai thi khong ai thay": doc so tien / so luong, cong
 #  thuc giam gia, hop dong tien mat, ma QR, tra hang va cac luat audit sau khi chot.
-#  Dac ta: docs/plan/14 muc 3.
 #
 #  CHI cac kich ban KHONG can bam chuot. Cac kich ban tuong tac Swing
-#  van phai kiem bang tay -- xem docs/plan/14 muc 9.3.
+#  van phai kiem bang tay.
 #
 #  Yeu cau: MySQL dang chay, database retail_billing co du lieu seed.
 #  Co ghi vao database: lap 3 hoa don that roi XOA chung. Khong cham seed.

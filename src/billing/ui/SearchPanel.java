@@ -11,16 +11,7 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Tab 5: Tra cứu dữ liệu (Search Form)
- * Chọn bảng, xem dữ liệu hoặc tìm kiếm theo từ khóa.
- * Giao diện giống tab 2: bảng read-only, sắp xếp cột, định dạng số.
- *
- * Phiên bản nâng cao: Tìm kiếm đa tiêu chí (Multi-criteria Filter)
- */
 public class SearchPanel extends JPanel {
-
-    // UI components
     private final JComboBox<String> cbTables;
     private final JTextField tfSearch;
     private final JButton btSearch;
@@ -28,41 +19,14 @@ public class SearchPanel extends JPanel {
     private final JTable table;
     private final JLabel lbRowCount;
 
-    // =================================================================
-    //  TRẦN SỐ DÒNG (khối 6)
-    // =================================================================
-    //  Tab này là TRÌNH XEM BẢNG TỔNG QUÁT và plan/14 mục 2.3 đã chốt rằng
-    //  SQL thô ở đây là CÓ CHỦ Ý -- nên khối 6 không viết lại nó. Việc tối
-    //  thiểu và đủ: một trần + một nhãn nói ra khi bảng bị cắt.
-    //
-    //  Trước khối 6 cả hai câu là `SELECT * FROM <bang>` không LIMIT. Với
-    //  seed 91 ngày, chọn bảng Invoice_Line là nạp ~1.200 dòng và chọn
-    //  Payment là ~650 (plan/15 lỗi #21).
-    //
-    //  LẤY LIMIT + 1 RỒI BỎ DÒNG CUỐI: đó là cách biết "còn nữa" mà không
-    //  phải chạy thêm một câu COUNT(*) trên cùng bảng. Nhãn nói "1.000+"
-    //  chứ không bịa ra một tổng mà ta chưa đếm.
     private static final int ROW_LIMIT = 1000;
     private boolean lastResultTruncated = false;
 
-    // ĐỊNH DẠNG SỐ: KHÔNG CÒN BẢN CHÉP Ở ĐÂY.
-    // Lớp này từng giữ HAI trong bốn bản chép của cả dự án: bộ DecimalFormat ở
-    // đây, và một DecimalFormat("#0.##") dựng mới mỗi lần gọi trong
-    // formatValue() cho riêng cột Tax_Rate -- bản duy nhất biết định dạng phần
-    // trăm, nhưng lại đi qua double (plan/14 lỗi #22).
-    //
-    // Giờ mọi phép định dạng đi qua Ui, và cảnh báo biên dịch
-    // `new Locale("vi","VN")` đã deprecated -- cảnh báo cuối cùng của dự án
-    // ngoài nhóm [serial]/[this-escape] của Swing -- biến mất cùng bộ format.
-
-    // Dynamic filter panel with CardLayout
     private final JPanel filterCardPanel;
     private final CardLayout cardLayout;
 
-    // Map table name to filter panel index (we'll store panels in an array aligned with combo box items)
     private final List<JPanel> filterPanels;
 
-    // We'll also keep references to the specific filter panels for easy access to their state
     private PaymentFilterPanel paymentFilterPanel;
     private InvoiceFilterPanel invoiceFilterPanel;
     private ProductFilterPanel productFilterPanel;
@@ -72,36 +36,28 @@ public class SearchPanel extends JPanel {
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Initialize filter card panel and layout
         filterCardPanel = new JPanel();
         cardLayout = new CardLayout();
         filterCardPanel.setLayout(cardLayout);
 
-        // Initialize filterPanels list (empty for now)
         filterPanels = new ArrayList<>();
 
-        // Create the specific filter panels and add them to filterPanels and to the cardLayout
         String[] tableNames = {
                 "Product", "Invoice", "Invoice_Line", "Price_History",
                 "Promotion", "Applies_To", "Return", "Customer", "Cashier",
                 "Shop", "Counter", "Payment", "Cash_Payment", "Card_Payment", "EWallet_Payment"
         };
-        // Sort table names alphabetically
         java.util.Arrays.sort(tableNames);
         for (String tableName : tableNames) {
             filterPanels.add(createFilterPanel(tableName));
         }
-        // Add all filter panels to the card layout
         for (int i = 0; i < filterPanels.size(); i++) {
             filterCardPanel.add(filterPanels.get(i), String.valueOf(i));
         }
 
-        // === Toolbar ===
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        cbTables = new JComboBox<>(tableNames); // reuse the same array
+        cbTables = new JComboBox<>(tableNames);
         cbTables.setPreferredSize(new Dimension(220, 28));
-        // O chon van giu TEN BANG (dung de truy van), nhung nhan vien chi thay
-        // ten de hieu -- khong thay "Invoice_Line", "EWallet_Payment"...
         cbTables.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index,
@@ -114,11 +70,8 @@ public class SearchPanel extends JPanel {
         cbTables.addActionListener(e -> {
             String tableName = (String) cbTables.getSelectedItem();
             int index = cbTables.getSelectedIndex();
-            // Switch to the corresponding filter panel
             cardLayout.show(filterCardPanel, String.valueOf(index));
-            // Reset filter panel to default state
             resetFilterPanel(index);
-            // Load table data with default filters
             loadTableData(tableName);
         });
 
@@ -140,22 +93,17 @@ public class SearchPanel extends JPanel {
 
         add(toolbar, BorderLayout.NORTH);
 
-        // === Filter and Table Panel ===
         JPanel filterAndTablePanel = new JPanel(new BorderLayout(5, 5));
 
-        // Filter panel with CardLayout (already initialized above)
         filterAndTablePanel.add(filterCardPanel, BorderLayout.NORTH);
 
-        // === Table ===
-        table = Ui.readOnlyTable(); // Same look as tab 2
-        table.setAutoCreateRowSorter(true); // Enable column sorting (3-state: ASC, DESC, UNSORTED)
-        // Note: Default behavior clicks: ASC -> DESC -> UNSORTED -> ASC ...
+        table = Ui.readOnlyTable();
+        table.setAutoCreateRowSorter(true);
 
         filterAndTablePanel.add(new JScrollPane(table), BorderLayout.CENTER);
 
         add(filterAndTablePanel, BorderLayout.CENTER);
 
-        // === Footer ===
         JPanel footer = new JPanel(new BorderLayout(5, 0));
         lbRowCount = new JLabel("Tổng số hàng: 0 dòng");
         lbRowCount.setFont(new Font("Consolas", Font.PLAIN, 12));
@@ -163,13 +111,10 @@ public class SearchPanel extends JPanel {
         footer.add(Box.createHorizontalGlue(), BorderLayout.CENTER);
         add(footer, BorderLayout.SOUTH);
 
-        // Load first table by default
         loadTableData((String) cbTables.getSelectedItem());
-        // Initialize the first filter panel to default state
         resetFilterPanel(0);
     }
 
-    /** Ten de hieu cho nhan vien cua mot bang trong o chon. */
     static String tableLabel(String table) {
         switch (table) {
             case "Product":         return I18n.msg("Sản phẩm", "Products");
@@ -191,11 +136,6 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /**
-     * Creates a filter panel for the given table name.
-     * @param tableName the name of the table
-     * @return a panel containing filter chips and controls for that table
-     */
     private JPanel createFilterPanel(String tableName) {
         switch (tableName) {
             case "Payment":
@@ -211,7 +151,6 @@ public class SearchPanel extends JPanel {
                 returnFilterPanel = new ReturnFilterPanel();
                 return returnFilterPanel;
             default:
-                // For other tables, we can provide a simple placeholder or just a label
                 JPanel panel = new JPanel();
                 panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
                 panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -220,18 +159,11 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    // =================================================================
-    // SPECIFIC FILTER PANEL CLASSES
-    // =================================================================
-
-    /** Filter panel for Payment table */
     class PaymentFilterPanel extends JPanel {
-        // Payment type: all, cash, card, ewallet
         private final JToggleButton rbAllPay;
         private final JToggleButton rbCash;
         private final JToggleButton rbCard;
         private final JToggleButton rbEWallet;
-        // Amount range: all, <100k, 100k-500k, >500k, custom range
         private final JComboBox<String> cbAmountRange;
         private final JTextField tfMin;
         private final JTextField tfMax;
@@ -240,7 +172,6 @@ public class SearchPanel extends JPanel {
             setLayout(new BoxLayout(PaymentFilterPanel.this, BoxLayout.Y_AXIS));
             setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            // Row 1: Payment Type chips
             JPanel typeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             typeRow.add(new JLabel("Hình thức thanh toán: "));
             ButtonGroup paymentTypeGroup = new ButtonGroup();
@@ -258,7 +189,6 @@ public class SearchPanel extends JPanel {
             typeRow.add(rbEWallet);
             add(typeRow);
 
-            // Row 2: Amount range
             JPanel amountRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             amountRow.add(new JLabel("Số tiền: "));
             String[] amountRanges = {"Tất cả", "< 100k", "100k - 500k", "> 500k", "Khoảng"};
@@ -266,7 +196,6 @@ public class SearchPanel extends JPanel {
             amountRow.add(cbAmountRange);
             add(amountRow);
 
-            // Min and max fields for custom range (initially hidden)
             JLabel lbMin = new JLabel("Từ: ");
             tfMin = new JTextField(6);
             JLabel lbMax = new JLabel("Đến: ");
@@ -276,10 +205,9 @@ public class SearchPanel extends JPanel {
             amountRangePanel.add(tfMin);
             amountRangePanel.add(lbMax);
             amountRangePanel.add(tfMax);
-            amountRangePanel.setVisible(false); // Initially hidden
+            amountRangePanel.setVisible(false);
             add(amountRangePanel);
 
-            // Show min/max fields when "Khoảng" is selected
             cbAmountRange.addItemListener(new ItemListener() {
                 @Override
                 public void itemStateChanged(ItemEvent e) {
@@ -288,7 +216,6 @@ public class SearchPanel extends JPanel {
                 }
             });
 
-            // Add action listeners to all interactive components to trigger search
             rbAllPay.addItemListener(e -> performSearch());
             rbCash.addItemListener(e -> performSearch());
             rbCard.addItemListener(e -> performSearch());
@@ -298,9 +225,6 @@ public class SearchPanel extends JPanel {
             tfMax.addActionListener(e -> performSearch());
         }
 
-        /**
-         * Reset all controls to default state.
-         */
         public void resetToDefault() {
             rbAllPay.setSelected(true);
             rbCash.setSelected(false);
@@ -311,17 +235,10 @@ public class SearchPanel extends JPanel {
             tfMax.setText("");
         }
 
-        /**
-         * Returns the WHERE clause fragment and parameters for this filter panel.
-         * @return a pair of (whereFragment, paramsList) where whereFragment is a string
-         *         that can be appended to a WHERE clause (without the leading "WHERE"),
-         *         and paramsList is a list of parameter values for PreparedStatement.
-         */
         public Pair<String, List<Object>> getWhereFragment() {
             StringBuilder where = new StringBuilder();
             List<Object> params = new ArrayList<>();
 
-            // Payment type
             if (!rbAllPay.isSelected()) {
                 if (rbCash.isSelected()) {
                     where.append("EXISTS (SELECT 1 FROM Cash_Payment WHERE Cash_Payment.Payment_ID = Payment.Payment_ID) AND ");
@@ -332,7 +249,6 @@ public class SearchPanel extends JPanel {
                 }
             }
 
-            // Amount range
             String amountRange = (String) cbAmountRange.getSelectedItem();
             if (!"Tất cả".equals(amountRange)) {
                 switch (amountRange) {
@@ -359,17 +275,14 @@ public class SearchPanel extends JPanel {
                                 params.add(max);
                             }
                         } catch (NumberFormatException ex) {
-                            // Ignore invalid input
                         }
                         break;
                 }
             }
 
-            // Remove trailing " AND " if any
             if (where.length() > 0 && where.toString().endsWith(" AND ")) {
                 where.setLength(where.length() - 5);
             }
-            // If no conditions, return empty string and empty params
             if (where.length() == 0) {
                 return new Pair<>("", new ArrayList<>());
             }
@@ -377,16 +290,11 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Filter panel for Invoice table */
     class InvoiceFilterPanel extends JPanel {
-        // Status: all, completed, voided. Chip "Đang lập" (OPEN) đã bị bỏ
-        // cùng với trạng thái OPEN (01_schema.sql mục 9).
         private final JToggleButton rbAllStatus;
         private final JToggleButton rbPaid;
         private final JToggleButton rbVoided;
-        // Date: all, today, last 7 days, this month
         private final JComboBox<String> cbDate;
-        // Customer type: all, walk-in, member
         private final JToggleButton rbAllCustomer;
         private final JToggleButton rbWalkIn;
         private final JToggleButton rbMember;
@@ -395,7 +303,6 @@ public class SearchPanel extends JPanel {
             setLayout(new BoxLayout(InvoiceFilterPanel.this, BoxLayout.Y_AXIS));
             setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            // Row 1: Status chips
             JPanel statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             statusRow.add(new JLabel("Trạng thái hóa đơn: "));
             ButtonGroup statusGroup = new ButtonGroup();
@@ -410,7 +317,6 @@ public class SearchPanel extends JPanel {
             statusRow.add(rbVoided);
             add(statusRow);
 
-            // Row 2: Date
             JPanel dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             dateRow.add(new JLabel("Thời gian: "));
             String[] dateOptions = {"Tất cả", "Hôm nay", "7 ngày qua", "Tháng này"};
@@ -418,7 +324,6 @@ public class SearchPanel extends JPanel {
             dateRow.add(cbDate);
             add(dateRow);
 
-            // Row 3: Customer type
             JPanel customerRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             customerRow.add(new JLabel("Loại khách: "));
             ButtonGroup customerGroup = new ButtonGroup();
@@ -433,7 +338,6 @@ public class SearchPanel extends JPanel {
             customerRow.add(rbMember);
             add(customerRow);
 
-            // Add action listeners to all interactive components to trigger search
             rbAllStatus.addItemListener(e -> performSearch());
             rbPaid.addItemListener(e -> performSearch());
             rbVoided.addItemListener(e -> performSearch());
@@ -443,9 +347,6 @@ public class SearchPanel extends JPanel {
             rbMember.addItemListener(e -> performSearch());
         }
 
-        /**
-         * Reset all controls to default state.
-         */
         public void resetToDefault() {
             rbAllStatus.setSelected(true);
             rbPaid.setSelected(false);
@@ -456,20 +357,10 @@ public class SearchPanel extends JPanel {
             rbMember.setSelected(false);
         }
 
-        /**
-         * Returns the WHERE clause fragment and parameters for this filter panel.
-         * @return a pair of (whereFragment, paramsList) where whereFragment is a string
-         *         that can be appended to a WHERE clause (without the leading "WHERE"),
-         *         and paramsList is a list of parameter values for PreparedStatement.
-         */
         public Pair<String, List<Object>> getWhereFragment() {
             StringBuilder where = new StringBuilder();
             List<Object> params = new ArrayList<>();
 
-            // Status -- mã trạng thái lấy từ InvoiceStatus, không gõ literal
-            // (plan/13 lỗi #6: bộ giá trị này từng bị chép 3 lần). Dùng tham số
-            // '?' thay vì nối chuỗi: hàm này ĐÃ có danh sách params cho các bộ
-            // lọc khác nên đây là dùng đúng cơ chế đang có.
             if (!rbAllStatus.isSelected()) {
                 InvoiceStatus want = rbPaid.isSelected()   ? InvoiceStatus.PAID
                                    : rbVoided.isSelected() ? InvoiceStatus.VOIDED
@@ -480,7 +371,6 @@ public class SearchPanel extends JPanel {
                 }
             }
 
-            // Date
             String dateOption = (String) cbDate.getSelectedItem();
             switch (dateOption) {
                 case "Tất cả":
@@ -494,10 +384,8 @@ public class SearchPanel extends JPanel {
                 case "Tháng này":
                     where.append("YEAR(Invoice.Date) = YEAR(CURDATE()) AND MONTH(Invoice.Date) = MONTH(CURDATE()) AND ");
                     break;
-                // Note: No default case because all options are covered
             }
 
-            // Customer type
             if (!rbAllCustomer.isSelected()) {
                 if (rbWalkIn.isSelected()) {
                     where.append("(Invoice.Customer_ID IS NULL OR TRIM(Invoice.Customer_ID) = '') AND ");
@@ -506,11 +394,9 @@ public class SearchPanel extends JPanel {
                 }
             }
 
-            // Remove trailing " AND " if any
             if (where.length() > 0 && where.toString().endsWith(" AND ")) {
                 where.setLength(where.length() - 5);
             }
-            // If no conditions, return empty string and empty params
             if (where.length() == 0) {
                 return new Pair<>("", new ArrayList<>());
             }
@@ -518,12 +404,8 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Filter panel for Product table */
     class ProductFilterPanel extends JPanel {
-        // Unit: all, PIECE, KG, LITER, PACK, BOX
         private final JComboBox<String> cbUnit;
-        // Price range: all, <20k, 20k-50k, >50k, custom range? spec only gives three ranges.
-        // We'll implement as combo with options: All, <20k, 20k-50k, >50k
         private final JComboBox<String> cbPriceRange;
         private final JComboBox<String> cbTaxRate;
 
@@ -531,7 +413,6 @@ public class SearchPanel extends JPanel {
             setLayout(new BoxLayout(ProductFilterPanel.this, BoxLayout.Y_AXIS));
             setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            // Row 1: Unit
             JPanel unitRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             unitRow.add(new JLabel("Đơn vị tính: "));
             String[] units = {"Tất cả", "PIECE", "KG", "LITER", "PACK", "BOX"};
@@ -539,14 +420,12 @@ public class SearchPanel extends JPanel {
             unitRow.add(cbUnit);
             add(unitRow);
 
-            // Row 2: Price range
             JPanel priceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             priceRow.add(new JLabel("Khoáng giá sản phẩm: "));
             String[] priceRanges = {"Tất cả", "< 20k", "20k - 50k", "> 50k"};
             cbPriceRange = new JComboBox<>(priceRanges);
             priceRow.add(cbPriceRange);
             add(priceRow);
-            // Row 3: Tax rate
             JPanel taxRateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             taxRateRow.add(new JLabel("Thuế suất: "));
             String[] taxRates = {"Tất cả", "< 5%", "5% - 8%", "8% - 10%", "> 10%"};
@@ -554,7 +433,6 @@ public class SearchPanel extends JPanel {
             taxRateRow.add(cbTaxRate);
             add(taxRateRow);
 
-            // Add action listeners
             cbUnit.addActionListener(e -> performSearch());
             cbPriceRange.addActionListener(e -> performSearch());
             cbTaxRate.addActionListener(e -> performSearch());
@@ -570,30 +448,14 @@ public class SearchPanel extends JPanel {
             StringBuilder where = new StringBuilder();
             List<Object> params = new ArrayList<>();
 
-            // Unit
             String unit = (String) cbUnit.getSelectedItem();
             if (!"Tất cả".equals(unit)) {
                 where.append("Product.Unit = ? AND ");
                 params.add(unit);
             }
 
-            // Price range: need to get latest price for each product.
-            // We'll join with Price_History to get the price where Valid_From_Date is the max <= current date.
             String priceRange = (String) cbPriceRange.getSelectedItem();
             if (!"Tất cả".equals(priceRange)) {
-                // We'll use a subquery to get the latest price for each product.
-                // We'll build a condition like:
-                // EXISTS (SELECT 1 FROM Price_History ph WHERE ph.Barcode = Product.Barcode AND ph.Valid_From_Date = (SELECT MAX(ph2.Valid_From_Date) FROM Price_History ph2 WHERE ph2.Barcode = Product.Barcode AND ph2.Valid_From_Date <= CURDATE()) AND ph.Price < 20000)
-                // But we need to handle different ranges.
-                // We'll build a generic condition: we will compute the latest price and then compare.
-                // Since we cannot easily compute in WHERE without repeating subquery, we'll do:
-                // WHERE (SELECT ph.Price FROM Price_History ph WHERE ph.Barcode = Product.Barcode ORDER BY ph.Valid_From_Date DESC LIMIT 1) < 20000
-                // MySQL supports LIMIT in subquery? Yes, but we need to correlate.
-                // We'll do:
-                // WHERE (SELECT ph.Price FROM Price_History ph WHERE ph.Barcode = Product.Barcode AND ph.Valid_From_Date <= CURDATE() ORDER BY ph.Valid_From_Date DESC LIMIT 1) < 20000
-                // We'll build the condition based on the selected range.
-
-                // We'll build a subquery string that returns the latest price.
                 String latestPriceSubquery = "(SELECT ph.Price FROM Price_History ph WHERE ph.Barcode = Product.Barcode AND ph.Valid_From_Date <= CURDATE() ORDER BY ph.Valid_From_Date DESC LIMIT 1)";
 
                 if (priceRange.equals("< 20k")) {
@@ -609,7 +471,6 @@ public class SearchPanel extends JPanel {
                 }
             }
 
-            // Tax rate
             String taxRate = (String) cbTaxRate.getSelectedItem();
             if (!"Tất cả".equals(taxRate)) {
                 if (taxRate.equals("< 5%")) {
@@ -629,7 +490,6 @@ public class SearchPanel extends JPanel {
                 }
             }
 
-            // Remove trailing " AND " if any
             if (where.length() > 0 && where.toString().endsWith(" AND ")) {
                 where.setLength(where.length() - 5);
             }
@@ -640,18 +500,14 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Filter panel for Return table */
     class ReturnFilterPanel extends JPanel {
-        // Return date: all, today, this week, this month
         private final JComboBox<String> cbDate;
-        // Return quantity: all, =1, >1
         private final JComboBox<String> cbQuantity;
 
         ReturnFilterPanel() {
             setLayout(new BoxLayout(ReturnFilterPanel.this, BoxLayout.Y_AXIS));
             setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-            // Row 1: Return date
             JPanel dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             dateRow.add(new JLabel("Thời gian trả hàng: "));
             String[] dateOptions = {"Tất cả", "Hôm nay", "Tuần này", "Tháng này"};
@@ -659,7 +515,6 @@ public class SearchPanel extends JPanel {
             dateRow.add(cbDate);
             add(dateRow);
 
-            // Row 2: Return quantity
             JPanel quantityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
             quantityRow.add(new JLabel("Số lượng hoàn trả: "));
             String[] quantityOptions = {"Tất cả", "= 1", "> 1"};
@@ -667,7 +522,6 @@ public class SearchPanel extends JPanel {
             quantityRow.add(cbQuantity);
             add(quantityRow);
 
-            // Add action listeners
             cbDate.addActionListener(e -> performSearch());
             cbQuantity.addActionListener(e -> performSearch());
         }
@@ -681,7 +535,6 @@ public class SearchPanel extends JPanel {
             StringBuilder where = new StringBuilder();
             List<Object> params = new ArrayList<>();
 
-            // Return date
             String dateOption = (String) cbDate.getSelectedItem();
             switch (dateOption) {
                 case "Tất cả":
@@ -695,10 +548,8 @@ public class SearchPanel extends JPanel {
                 case "Tháng này":
                     where.append("YEAR(Return_Date) = YEAR(CURDATE()) AND MONTH(Return_Date) = MONTH(CURDATE()) AND ");
                     break;
-                // Note: No default case because all options are covered
             }
 
-            // Return quantity
             String quantityOption = (String) cbQuantity.getSelectedItem();
             switch (quantityOption) {
                 case "= 1":
@@ -707,24 +558,17 @@ public class SearchPanel extends JPanel {
                 case "> 1":
                     where.append("Return_Quantity > 1 AND ");
                     break;
-                // Note: No default case because all options are covered
             }
 
-            // Remove trailing " AND " if any
             if (where.length() > 0 && where.toString().endsWith(" AND ")) {
                 where.setLength(where.length() - 5);
             }
-            // If no conditions, return empty string and empty params
             if (where.length() == 0) {
                 return new Pair<>("", new ArrayList<>());
             }
             return new Pair<>(where.toString(), params);
         }
     }
-
-    // =================================================================
-    // HELPER METHODS
-    // =================================================================
 
     private JToggleButton createToggleButton(String text, boolean selected) {
         JToggleButton button = new JToggleButton(text);
@@ -734,17 +578,13 @@ public class SearchPanel extends JPanel {
         return button;
     }
 
-    /** Load all data from the selected table and display formatted */
     private void loadTableData(String tableName) {
         if (tableName == null || tableName.isEmpty()) return;
 
-        // LIMIT ROW_LIMIT + 1: dòng thừa thứ 1001 chỉ dùng để BIẾT là còn nữa,
-        // populateTable bỏ nó đi.
         try (Connection conn = Db.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(
                      "SELECT * FROM `" + tableName + "` LIMIT " + (ROW_LIMIT + 1))) {
-
             populateTable(rs);
         } catch (SQLException ex) {
             Ui.error(this, ex);
@@ -752,7 +592,6 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Perform search based on structured filters and keyword */
     private void performSearch() {
         String tableName = (String) cbTables.getSelectedItem();
         if (tableName == null || tableName.isEmpty()) return;
@@ -760,7 +599,6 @@ public class SearchPanel extends JPanel {
         StringBuilder where = new StringBuilder();
         List<Object> params = new ArrayList<>();
 
-        // Add structured filters based on table
         switch (tableName) {
             case "Payment":
                 if (paymentFilterPanel != null) {
@@ -799,44 +637,43 @@ public class SearchPanel extends JPanel {
                 }
                 break;
             default:
-                // For other tables, we only have keyword search (if any)
                 break;
         }
 
-        // Add keyword search if not empty
         String keyword = tfSearch.getText().trim();
         if (!keyword.isEmpty()) {
-            // We need to search across string-like columns; we'll get them dynamically
-            // For simplicity, we'll search across all columns that are CHAR/VARCHAR etc.
-            // We'll reuse the logic from the original performSearch method but only for keyword.
             try (Connection conn = Db.getConnection();
                  Statement stmt = conn.createStatement();
-                 ResultSet rs = stmt.executeQuery("SELECT * FROM `" + tableName + "` LIMIT 1")) {
+                 ResultSet rs = stmt.executeQuery("SELECT * FROM `" + tableName + "` LIMIT 0")) {
                 ResultSetMetaData meta = rs.getMetaData();
                 int colCount = meta.getColumnCount();
-                List<String> searchableCols = new ArrayList<>();
+                String numericKeyword = normalizeNumericKeyword(keyword);
+                List<String> conditions = new ArrayList<>();
+                List<Object> keywordParams = new ArrayList<>();
                 for (int i = 1; i <= colCount; i++) {
+                    String col = "`" + meta.getColumnLabel(i) + "`";
                     int type = meta.getColumnType(i);
-                    if (type == Types.CHAR || type == Types.VARCHAR ||
-                            type == Types.LONGVARCHAR || type == Types.NCHAR ||
-                            type == Types.NVARCHAR || type == Types.LONGNVARCHAR) {
-                        searchableCols.add(meta.getColumnLabel(i));
+                    if (isTextType(type)) {
+                        conditions.add(col + " LIKE ?");
+                        keywordParams.add("%" + keyword + "%");
+                    } else if (isNumericType(type)) {
+                        if (numericKeyword != null) {
+                            conditions.add("CAST(" + col + " AS CHAR) LIKE ?");
+                            keywordParams.add("%" + numericKeyword + "%");
+                        }
+                    } else if (isDateType(type)) {
+                        conditions.add("CAST(" + col + " AS CHAR) LIKE ?");
+                        keywordParams.add("%" + keyword + "%");
                     }
                 }
-                if (!searchableCols.isEmpty()) {
-                    if (where.length() > 0) {
-                        where.append(" AND ");
-                    }
-                    where.append("(");
-                    for (int i = 0; i < searchableCols.size(); i++) {
-                        if (i > 0) where.append(" OR ");
-                        where.append("`").append(searchableCols.get(i)).append("` LIKE ?");
-                    }
-                    // Note: we need to close the parenthesis
-                    where.append(")");
-                    for (int i = 0; i < searchableCols.size(); i++) {
-                        params.add("%" + keyword + "%");
-                    }
+                if (where.length() > 0) {
+                    where.append(" AND ");
+                }
+                if (conditions.isEmpty()) {
+                    where.append("1 = 0");
+                } else {
+                    where.append("(").append(String.join(" OR ", conditions)).append(")");
+                    params.addAll(keywordParams);
                 }
             } catch (SQLException ex) {
                 Ui.error(this, ex);
@@ -844,25 +681,20 @@ public class SearchPanel extends JPanel {
             }
         }
 
-        // If no WHERE clause, we select all
         String sql = "SELECT * FROM `" + tableName + "`";
         if (where.length() > 0) {
             sql += " WHERE " + where.toString();
         }
 
-        // Add ORDER BY based on sort selection (if any)
         String orderBy = getOrderByClause(tableName);
         if (orderBy != null && !orderBy.isEmpty()) {
             sql += " ORDER BY " + orderBy;
         }
 
-        // Cùng trần với loadTableData: một bộ lọc rộng (hoặc không lọc gì) trên
-        // Invoice_Line vẫn là ~1.200 dòng.
         sql += " LIMIT " + (ROW_LIMIT + 1);
 
         try (Connection conn = Db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            // Set parameters
             for (int i = 0; i < params.size(); i++) {
                 ps.setObject(i + 1, params.get(i));
             }
@@ -875,17 +707,49 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Get ORDER BY clause for the given table based on the current filter panel selection */
+    private static boolean isTextType(int type) {
+        return type == Types.CHAR || type == Types.VARCHAR || type == Types.LONGVARCHAR
+                || type == Types.NCHAR || type == Types.NVARCHAR || type == Types.LONGNVARCHAR;
+    }
+
+    private static boolean isNumericType(int type) {
+        return type == Types.NUMERIC || type == Types.DECIMAL || type == Types.DOUBLE
+                || type == Types.FLOAT || type == Types.REAL || type == Types.INTEGER
+                || type == Types.SMALLINT || type == Types.TINYINT || type == Types.BIGINT
+                || type == Types.BIT || type == Types.BOOLEAN;
+    }
+
+    private static boolean isDateType(int type) {
+        return type == Types.DATE || type == Types.TIME || type == Types.TIMESTAMP
+                || type == Types.TIME_WITH_TIMEZONE || type == Types.TIMESTAMP_WITH_TIMEZONE;
+    }
+
+    static String normalizeNumericKeyword(String keyword) {
+        String s = keyword.replace(" ", "").replace("%", "");
+        if (s.startsWith("-")) {
+            s = s.substring(1);
+        }
+        if (s.isEmpty() || !s.matches("[0-9.,]+")) {
+            return null;
+        }
+        if (s.contains(",")) {
+            s = s.replace(".", "").replace(',', '.');
+        } else if (s.matches("\\d{1,3}(\\.\\d{3})+")) {
+            s = s.replace(".", "");
+        }
+        if (!s.matches("\\d*(\\.\\d*)?") || s.equals(".")) {
+            return null;
+        }
+        return keyword.trim().startsWith("-") ? "-" + s : s;
+    }
+
     private String getOrderByClause(String tableName) {
-        // We removed sorting rows, so no ORDER BY.
         return "";
     }
 
-    /** Reload current table (show all data) */
     private void reloadCurrentTable() {
         String tableName = (String) cbTables.getSelectedItem();
         if (tableName != null && !tableName.isEmpty()) {
-            // Reset filter panel to default state
             int index = cbTables.getSelectedIndex();
             resetFilterPanel(index);
             loadTableData(tableName);
@@ -893,27 +757,22 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Fill table with formatted data from ResultSet */
     private void populateTable(ResultSet rs) throws SQLException {
         ResultSetMetaData meta = rs.getMetaData();
         int colCount = meta.getColumnCount();
 
-        // Prepare column names
         String[] columnNames = new String[colCount];
         for (int i = 1; i <= colCount; i++) {
             columnNames[i - 1] = meta.getColumnLabel(i);
         }
 
-        // Prepare data rows with formatting
         DefaultTableModel model = new DefaultTableModel(columnNames, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // read-only
+                return false;
             }
         };
 
-        // Chỉ nhận ROW_LIMIT dòng; dòng thứ ROW_LIMIT + 1 (nếu câu SQL trả về)
-        // là tín hiệu "còn nữa", không phải dữ liệu để hiện.
         lastResultTruncated = false;
         while (rs.next()) {
             if (model.getRowCount() >= ROW_LIMIT) {
@@ -930,42 +789,29 @@ public class SearchPanel extends JPanel {
         }
 
         table.setModel(model);
-        Ui.autoSize(table); // Adjust column widths to content (like tab 2)
+        Ui.autoSize(table);
         updateRowCount();
     }
 
-    /** Format a value according to its SQL type and column name for display */
     private String formatValue(Object value, int sqlType, String columnName) {
         if (value == null) {
             return "";
         }
 
-        // LOGIC CHON NHOM GIU NGUYEN, chi doi CHO DINH DANG sang Ui.
-        // Lop nay la mot trinh xem bang tong quat (14 bang), nen no khong co
-        // hop dong chi so cot nhu tab 3 -- no doan nhom theo TEN COT va kieu
-        // SQL. Cach doan do khong sai, no chi khong duoc phep tu dung
-        // DecimalFormat rieng (plan/14 muc 5.9c).
-
-        // Tax_Rate va Discount_Percent la PHAN TRAM, dinh dang qua Ui.percent.
         if (columnName != null && (columnName.equalsIgnoreCase("Tax_Rate")
                 || columnName.equalsIgnoreCase("Discount_Percent"))) {
             return Ui.percent(value);
         }
 
-        // So luong la DECIMAL(10,3) -- khong phai so nguyen (plan/12 muc 3.2).
-        // INV-0002 dong 1 ban 1,5 KG thit ba chi; lam tron thanh "2" la noi doi
-        // ve du lieu dang nam trong database.
         String upper = columnName == null ? "" : columnName.toUpperCase();
         if (upper.equals("QUANTITY") || upper.equals("RETURN_QUANTITY")) {
             return Ui.qty(value);
         }
 
-        // Treat ID-like columns as integer (no currency symbol)
         if (isQuantityColumn(columnName)) {
             return Ui.integer(value);
         }
 
-        // Numeric types: treat as currency if fractional, else integer
         switch (sqlType) {
             case Types.NUMERIC:
             case Types.DECIMAL:
@@ -978,24 +824,15 @@ public class SearchPanel extends JPanel {
             case Types.TINYINT:
             case Types.BIGINT:
                 return Ui.integer(value);
-            // Date/time types: show as string (default formatting)
             case Types.DATE:
             case Types.TIME:
             case Types.TIMESTAMP:
                 return value.toString();
-            // Other types: default string representation
             default:
                 return value.toString();
         }
     }
 
-    /**
-     * Update row count label.
-     *
-     * <p>Một bảng bị cắt mà không nói là đang nói sai: nhãn "Tổng số hàng:
-     * 1.000 dòng" trên một bảng có 1.205 dòng là một con số sai. Khi chạm
-     * trần, nhãn phải nói ra điều đó (plan/15 mục 5.5).
-     */
     private void updateRowCount() {
         int rows = table.getModel().getRowCount();
         if (lastResultTruncated) {
@@ -1006,7 +843,6 @@ public class SearchPanel extends JPanel {
         }
     }
 
-    /** Reset the filter panel for the given index to default state */
     private void resetFilterPanel(int index) {
         JPanel panel = filterPanels.get(index);
         if (panel instanceof PaymentFilterPanel) {
@@ -1018,21 +854,11 @@ public class SearchPanel extends JPanel {
         } else if (panel instanceof ReturnFilterPanel) {
             ((ReturnFilterPanel) panel).resetToDefault();
         }
-        // For other panels (default message panels), there is no state to reset.
     }
 
-    /**
-     * Helper to check if a column should be treated as a plain integer / code
-     * rather than currency.
-     *
-     * QUANTITY va RETURN_QUANTITY DA BI BO khoi danh sach nay: chung la
-     * DECIMAL(10,3) va duoc formatValue() xu ly rieng truoc khi goi vao day
-     * (plan/12 muc 5.8).
-     */
     private boolean isQuantityColumn(String columnName) {
         if (columnName == null) return false;
         String upper = columnName.toUpperCase();
-        // Common integer / code columns
         return upper.equals("LINE_NUMBER") ||
                upper.equals("RETURN_ID") ||
                upper.equals("INVOICE_ID") ||
@@ -1047,11 +873,6 @@ public class SearchPanel extends JPanel {
                upper.endsWith("_ID");
     }
 
-    /**
-     * Simple pair class to hold two related objects.
-     * @param <F> type of first element
-     * @param <S> type of second element
-     */
     private class Pair<F, S> {
         public final F first;
         public final S second;

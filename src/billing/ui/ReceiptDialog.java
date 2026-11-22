@@ -8,12 +8,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.math.BigDecimal;
 
-/**
- * Phiếu in hóa đơn -- đọc LẠI từ database sau khi lưu (header + lines + payments),
- * nên con số trên phiếu đúng là con số đã nằm trong MySQL.
- */
 public class ReceiptDialog {
-
     private record Data(QueryResult header, QueryResult lines, QueryResult payments) { }
 
     public static void show(Component parent, InvoiceDao dao, String invoiceId) {
@@ -58,12 +53,9 @@ public class ReceiptDialog {
     }
 
     private static String buildHtml(Data d) {
-        // Cột của sp_get_invoice_header: 0 Ma_HD, 1 Ngay, 2 Gio, 3 Trang_thai, 4 Quay, 5 Shop, 6 Dia_chi,
-        // 7 Thu_ngan, 8 Khach_hang, 9 Tong_truoc_giam, 10 Tong_giam, 11 Tong_phai_tra, 12 Tien_hoan, 13 Tong_sau_dieu_chinh
         Object[] h = d.header().rows.get(0);
         BigDecimal due = Ui.dec(h[11]), refund = Ui.dec(h[12]);
 
-        // Thanh toán: 0 Ma_TT, 1 So_tien, 2 Phuong_thuc, 3 Chi_tiet, 4 Tien_khach_dua (chỉ tiền mặt)
         BigDecimal recorded = BigDecimal.ZERO, tendered = BigDecimal.ZERO, change = BigDecimal.ZERO;
         StringBuilder pays = new StringBuilder();
         for (Object[] p : d.payments().rows) {
@@ -71,7 +63,7 @@ public class ReceiptDialog {
             BigDecimal ch = p[4] == null ? BigDecimal.ZERO : Ui.dec(p[4]).subtract(amount).max(BigDecimal.ZERO);
             recorded = recorded.add(amount);
             if (p[4] != null) tendered = tendered.add(Ui.dec(p[4]));
-            change = change.add(ch);                // tiền thối cộng theo TỪNG dòng tiền mặt
+            change = change.add(ch);
             pays.append(tr("lrrrl", esc(Ui.val(str(p[2]))), "<b>" + Ui.money(amount) + "</b>",
                     p[4] == null ? "" : Ui.money(p[4]), p[4] == null ? "" : Ui.money(ch), esc(str(p[3]))));
         }
@@ -88,7 +80,6 @@ public class ReceiptDialog {
          .append(kv(I18n.msg("Quầy", "Counter"), str(h[4]))).append(kv(I18n.msg("Thu ngân", "Cashier"), str(h[7])))
          .append(kv(I18n.msg("Khách hàng", "Customer"), Ui.val(str(h[8])))).append(DASH);
 
-        // Dòng hàng: 0 Dong, 1 San_pham, 2 SL, 3 DVT, 4 Don_gia, 5 Giam_gia, 6 Thanh_tien, 7 VAT_pct
         s.append("<table width='100%' cellpadding='3' cellspacing='0' style='font-size:12px;'>")
          .append(th("lrlrrrr", I18n.msg("Mặt hàng", "Item"), I18n.msg("SL", "Qty"), I18n.msg("ĐVT", "Unit"),
                     I18n.msg("Đơn giá", "Price"), I18n.msg("Giảm", "Discount"), I18n.msg("Thành tiền", "Total"), "VAT %"));
@@ -127,8 +118,6 @@ public class ReceiptDialog {
     private static String statusBlock(String raw, BigDecimal missing, BigDecimal refund) {
         InvoiceStatus st = InvoiceStatus.of(raw);
         String text = raw, color = "#555555";
-        // Trả hàng KHÔNG đổi trạng thái (BR16): hóa đơn có trả hàng vẫn là PAID, tổng
-        // sau điều chỉnh in ở khung tổng tiền. VOIDED chỉ còn nghĩa "Manager đã hủy" (BR3).
         if (st == InvoiceStatus.PAID) {
             text  = missing.signum() > 0 ? I18n.msg("ĐÃ THANH TOÁN -- còn thiếu ", "PAID -- remaining ") + Ui.money(missing)
                   : refund.signum() > 0  ? I18n.msg("ĐÃ THANH TOÁN (CÓ TRẢ HÀNG) -- XEM TỔNG SAU TRẢ HÀNG",
@@ -153,7 +142,6 @@ public class ReceiptDialog {
         return "<tr><td>" + b + label + eb + "</td><td align='right' nowrap>" + b + value + eb + "</td></tr>";
     }
 
-    /** align: một ký tự cho mỗi cột, 'l' = trái (được xuống dòng, vd tên hàng), 'r' = phải (số, không xuống dòng). */
     private static String th(String align, String... cols) {
         StringBuilder s = new StringBuilder("<tr style='color:#666666;'>");
         for (int i = 0; i < cols.length; i++) {

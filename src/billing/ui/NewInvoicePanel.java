@@ -25,35 +25,19 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Tab 1 -- LẬP HÓA ĐƠN, bốn khung:
- *   1. Thông tin hóa đơn: quầy, thu ngân, ngày bán (đồng hồ SERVER, BR2), khách (tìm theo số điện thoại)
- *   2. Thêm sản phẩm: giá hôm nay (fn_get_product_price) + khuyến mãi tốt nhất (sp_get_active_promo)
- *   3. Các dòng hàng -- giỏ chỉ nằm trong RAM cho tới khi lưu (BR3: không lưu nháp)
- *   4. Thanh toán -- một hóa đơn có thể trả bằng NHIỀU phương thức (BR12)
- * Bấm CREATE INVOICE -> InvoiceDao.createInvoice() ghi tất cả trong MỘT transaction.
- *
- * Giá / giảm giá / VAT trong giỏ là bản XEM TRƯỚC: sp_add_invoice_line tự tính lại
- * theo ngày của server khi lưu (BR8). Nên giỏ cũng tính theo ngày của server
- * (LookupDao.serverDate), và được tính lại một lần ngay trước khi lưu -- giỏ mở qua
- * nửa đêm hoặc giá đổi giữa chừng thì thu ngân thấy số mới TRƯỚC khi thu tiền.
- */
 public class NewInvoicePanel extends JPanel {
-
     private static String saveLabel() { return I18n.text("LƯU HÓA ĐƠN", "CREATE INVOICE"); }
 
     private final ProductDao productDao = new ProductDao();
     private final LookupDao  lookupDao  = new LookupDao();
     private final InvoiceDao invoiceDao = new InvoiceDao();
-    private final Runnable   onSaved;                       // lưu xong -> tab Invoices tải lại
+    private final Runnable   onSaved;
 
-    // Khung 1
     private final JComboBox<IdName> cbCounter = new JComboBox<>();
     private final JComboBox<IdName> cbCashier = new JComboBox<>();
     private final CustomerPicker    customer  = new CustomerPicker(lookupDao);
     private final JLabel   lbDate   = new JLabel(I18n.msg("(đang tải...)", "(loading...)"));
     private final JButton  btReload = new JButton(I18n.text("Tải lại", "Reload"));
-    // Khung 2 + 3
     private final JComboBox<Product> cbProduct = new JComboBox<>();
     private final JTextField tfQty     = new JTextField("1", 6);
     private final JLabel     lbHint    = new JLabel(" ");
@@ -62,7 +46,6 @@ public class NewInvoicePanel extends JPanel {
     private final JButton    btEditQty = new JButton(I18n.text("Sửa số lượng", "Edit quantity"));
     private final JButton    btDelLine = new JButton(I18n.text("Xóa dòng", "Remove line"));
     private final JTable     tbCart    = Ui.readOnlyTable();
-    // Khung 4
     private final JComboBox<PayMethod> cbMethod = new JComboBox<>(PayMethod.values());
     private final JLabel     lbAmount = new JLabel();
     private final JTextField tfAmount = new JTextField(12);
@@ -80,7 +63,7 @@ public class NewInvoicePanel extends JPanel {
     private final List<CartLine>     cart     = new ArrayList<>();
     private final List<PaymentEntry> payments = new ArrayList<>();
     private final Border qtyBorder = tfQty.getBorder();
-    private boolean busy;                                   // đang chờ SQL -> khóa các nút ghi
+    private boolean busy;
 
     public NewInvoicePanel(Runnable onSaved) {
         this.onSaved = onSaved;
@@ -95,8 +78,6 @@ public class NewInvoicePanel extends JPanel {
         refreshCartTable();
         refreshPayTable();
 
-        // Nhãn ghép số liệu (tổng tiền, gợi ý giá...) tự vẽ lại khi đổi ngôn ngữ, không để bộ
-        // dịch từ điển đoán; bảng giỏ hàng / thanh toán đổ lại với tiêu đề theo ngôn ngữ mới.
         for (JLabel l : List.of(lbDate, lbHint, lbQtyWarn, lbAmount, lbTotal, lbPaid, lbLeft, lbChange)) {
             I18n.markDynamicText(l);
         }
@@ -110,10 +91,6 @@ public class NewInvoicePanel extends JPanel {
             refreshPayTable();
         });
     }
-
-    // =================================================================
-    //  BỐ CỤC
-    // =================================================================
 
     private JComponent buildHeader() {
         cbCounter.setPreferredSize(new Dimension(260, 26));
@@ -167,7 +144,6 @@ public class NewInvoicePanel extends JPanel {
               + "<code>500.000</code> | <code>1.234,50</code> | <code>500000</code>. Enter = thêm thanh toán.</html>",
                 "<html><b>.</b> separates THOUSANDS, <b>,</b> is the decimal separator: "
               + "<code>500.000</code> | <code>1.234,50</code> | <code>500000</code>. Enter = add the payment.</html>"));
-        // Ô chọn phương thức: hiện nhãn theo ngôn ngữ (displayLabel), không phải chuỗi SQL "Tien mat".
         cbMethod.setRenderer(new DefaultListCellRenderer() {
             @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                                                                     boolean selected, boolean focus) {
@@ -178,7 +154,7 @@ public class NewInvoicePanel extends JPanel {
         });
         btQr.setToolTipText(I18n.text("Mã VietQR cho số tiền trong ô -- chỉ dùng với Ví điện tử",
                                       "VietQR code for the amount in the field -- e-wallet only"));
-        btQr.setVisible(QrPaymentDialog.isEnabled());          // qr.enabled=false -> ẩn hẳn
+        btQr.setVisible(QrPaymentDialog.isEnabled());
         JPanel pay = new JPanel(new GridLayout(0, 1));
         pay.setBorder(BorderFactory.createTitledBorder(I18n.text("4. Thanh toán (một hóa đơn có thể có NHIỀU dòng thanh toán)",
                 "4. Payment (one invoice can have SEVERAL payment lines)")));
@@ -211,16 +187,16 @@ public class NewInvoicePanel extends JPanel {
         btReload.addActionListener(e -> loadLookups());
         ((AbstractDocument) tfQty.getDocument()).setDocumentFilter(QTY_FILTER);
         tfQty.getDocument().addDocumentListener(Ui.onChange(this::validateQtyField));
-        cbProduct.addActionListener(e -> validateQtyField());     // đổi sản phẩm = đổi đơn vị tính
+        cbProduct.addActionListener(e -> validateQtyField());
         btAdd.addActionListener(e -> addToCart());
-        tfQty.addActionListener(e -> addToCart());                // Enter = thêm
+        tfQty.addActionListener(e -> addToCart());
         btEditQty.addActionListener(e -> editQuantity());
         btDelLine.addActionListener(e -> removeSelectedLine());
         tbCart.getSelectionModel().addListSelectionListener(e -> updateButtons());
 
         cbMethod.addActionListener(e -> onMethodChanged());
         btAddPay.addActionListener(e -> addPaymentFromField());
-        tfAmount.addActionListener(e -> addPaymentFromField());   // Enter = thêm thanh toán
+        tfAmount.addActionListener(e -> addPaymentFromField());
         btPayAll.addActionListener(e -> payRestInCash());
         btDelPay.addActionListener(e -> removeSelectedPayment());
         btClrPay.addActionListener(e -> { payments.clear(); refreshPayTable(); });
@@ -232,10 +208,6 @@ public class NewInvoicePanel extends JPanel {
         btSave.addActionListener(e -> save());
         updateButtons();
     }
-
-    // =================================================================
-    //  KHUNG 1: danh mục (chạy NGOÀI EDT)
-    // =================================================================
 
     private record Lookups(List<IdName> counters, List<IdName> cashiers, List<Product> products, LocalDate today) { }
 
@@ -256,18 +228,13 @@ public class NewInvoicePanel extends JPanel {
         items.forEach(cb::addItem);
     }
 
-    private LocalDate lastDate;                             // ngày server lần đọc gần nhất
+    private LocalDate lastDate;
 
     private void showDate(LocalDate d) {
         lastDate = d;
         lbDate.setText(d.toString() + I18n.msg("  (theo máy chủ)", "  (server clock)"));
     }
 
-    // =================================================================
-    //  KHUNG 2: số lượng
-    // =================================================================
-
-    /** Chặn ngay khi gõ: chỉ chữ số và MỘT dấu , hoặc . -- gõ sai thì kêu bíp. */
     private static final DocumentFilter QTY_FILTER = new DocumentFilter() {
         @Override public void insertString(FilterBypass fb, int offset, String text, AttributeSet a) throws BadLocationException {
             replace(fb, offset, 0, text, a);
@@ -285,7 +252,6 @@ public class NewInvoicePanel extends JPanel {
         return p == null ? null : p.unit;
     }
 
-    /** Kiểm khi đang gõ: sai đơn vị / quá 10.000 -> viền đỏ + dòng cảnh báo, chưa chặn gì. */
     private void validateQtyField() {
         String t = tfQty.getText().trim().replace(',', '.');
         if (t.isEmpty()) { showQtyError(null); return; }
@@ -305,10 +271,6 @@ public class NewInvoicePanel extends JPanel {
         lbQtyWarn.setText(message == null ? " " : message);
     }
 
-    /**
-     * Đọc + kiểm số lượng trước khi thêm / sửa: định dạng (Ui.readQuantity), rồi luật đơn vị
-     * (CashRules). existingQty != null: cộng dồn vào dòng có sẵn -> tổng vẫn phải <= 10.000.
-     */
     private BigDecimal readQty(String text, String unit, BigDecimal existingQty, boolean isEdit) {
         BigDecimal q = Ui.readQuantity(this, text, null, unit);
         if (q == null) {
@@ -336,14 +298,6 @@ public class NewInvoicePanel extends JPanel {
                         + ") exceeds 10,000 per line.");
     }
 
-    // =================================================================
-    //  KHUNG 2: giá theo ngày + khuyến mãi -> dòng hàng
-    // =================================================================
-
-    /**
-     * Giá + khuyến mãi của sản phẩm TẠI một ngày (2 câu SQL). price == null: chưa có giá trước ngày đó.
-     * date luôn là ngày của SERVER (BR2) -- cùng ngày mà sp_add_invoice_line sẽ dùng khi lưu.
-     */
     private record Priced(LocalDate date, BigDecimal price, BigDecimal pct, String note) { }
 
     private Priced priceAt(Product p, LocalDate date) {
@@ -355,16 +309,10 @@ public class NewInvoicePanel extends JPanel {
         return new Priced(date, price, pct, promo[0] + " (-" + pct.stripTrailingZeros().toPlainString() + "%)");
     }
 
-    /** Hỏi ngày của server rồi định giá -- chạy NGOÀI EDT. */
     private Priced priceToday(Product p) {
         return priceAt(p, lookupDao.serverDate());
     }
 
-    /**
-     * Giảm giá của CẢ DÒNG = SL x đơn giá x % / 100, làm tròn 2 số lẻ (BR11).
-     * Khớp TỪNG ĐỒNG với fn_line_discount / sp_add_invoice_line bên SQL --
-     * ContractCheck #77 chốt điều đó bằng số. Sửa một bên thì phải sửa bên kia.
-     */
     static BigDecimal lineDiscount(BigDecimal qty, BigDecimal price, BigDecimal pct) {
         if (pct == null || pct.signum() == 0) return BigDecimal.ZERO;
         return qty.multiply(price).multiply(pct).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
@@ -379,11 +327,6 @@ public class NewInvoicePanel extends JPanel {
         return null;
     }
 
-    /**
-     * Thêm vào giỏ. Cùng sản phẩm -> LUÔN cộng dồn vào dòng cũ (BR7: mỗi sản phẩm
-     * tối đa một dòng; database chặn bằng UNIQUE(Invoice_ID, Barcode)). Cả dòng được
-     * định giá lại theo giá + khuyến mãi hôm nay, đúng như sp_add_invoice_line làm.
-     */
     private void addToCart() {
         Product p = (Product) cbProduct.getSelectedItem();
         if (p == null) {
@@ -405,7 +348,7 @@ public class NewInvoicePanel extends JPanel {
                         I18n.msg("Chưa có giá hôm nay", "No Price Today"));
                 return;
             }
-            CartLine same = findLine(p.barcode);           // đọc lại: giỏ có thể đổi trong lúc chờ SQL
+            CartLine same = findLine(p.barcode);
             String extra = "";
             if (same != null) {
                 int i = cart.indexOf(same);
@@ -434,7 +377,6 @@ public class NewInvoicePanel extends JPanel {
         });
     }
 
-    /** Sửa số lượng dòng đang chọn -- giá và khuyến mãi được tính lại theo ngày của server. */
     private void editQuantity() {
         int row = tbCart.getSelectedRow();
         if (row < 0 || row >= cart.size()) {
@@ -464,7 +406,7 @@ public class NewInvoicePanel extends JPanel {
                 return;
             }
             int i = cart.indexOf(line);
-            if (i < 0) return;                              // dòng đã bị xóa trong lúc chờ
+            if (i < 0) return;
             CartLine edited = priceLine(line.product, newQty, pr);
             if (exceedsMoneyCap(edited, i)) return;
             cart.set(i, edited);
@@ -483,7 +425,6 @@ public class NewInvoicePanel extends JPanel {
         recalculatePaymentsIfNeeded();
     }
 
-    /** Tổng hóa đơn không được vượt trần DECIMAL(12,2). replaceIndex = dòng sẽ bị thay (-1: thêm mới). */
     private boolean exceedsMoneyCap(CartLine line, int replaceIndex) {
         BigDecimal t = line.lineTotal();
         for (int i = 0; i < cart.size(); i++) if (i != replaceIndex) t = t.add(cart.get(i).lineTotal());
@@ -502,16 +443,11 @@ public class NewInvoicePanel extends JPanel {
                 + (pr.note().isEmpty() ? I18n.msg("  (không có khuyến mãi)", "  (no promotion)") : "  " + pr.note()) + extra);
     }
 
-    // =================================================================
-    //  KHUNG 4: thanh toán
-    // =================================================================
-
     private PayMethod method() {
         PayMethod m = (PayMethod) cbMethod.getSelectedItem();
         return m == null ? PayMethod.CASH : m;
     }
 
-    /** Tiền mặt: ô trống để gõ tiền khách ĐƯA. Thẻ / ví: điền sẵn số còn thiếu. */
     private void onMethodChanged() {
         lbAmount.setText(method().amountFieldLabel() + ":");
         tfAmount.setText(!method().hasChange() && remaining().signum() > 0 ? Ui.moneyInput(remaining()) : "");
@@ -549,19 +485,12 @@ public class NewInvoicePanel extends JPanel {
         }
     }
 
-    /** Một lần thanh toán đã tách: tiền GHI NHẬN và tiền khách ĐƯA (null với thẻ / ví). */
     record Split(BigDecimal recorded, BigDecimal tendered) {
-        /** Tiền thối của lần thanh toán này -- chỉ tiền mặt mới có (BR13). */
         BigDecimal change() {
             return tendered == null ? BigDecimal.ZERO : tendered.subtract(recorded).max(BigDecimal.ZERO);
         }
     }
 
-    /**
-     * HỢP ĐỒNG TIỀN MẶT:
-     *   Tiền mặt:  recorded = min(số gõ, còn thiếu) ; tendered = số gõ   (thừa thì thối)
-     *   Thẻ / ví:  recorded = số gõ ; tendered = null ; vượt số còn thiếu -> null = TỪ CHỐI
-     */
     static Split splitPayment(PayMethod m, BigDecimal typed, BigDecimal remaining) {
         if (m.hasChange()) return new Split(typed.min(remaining), typed);
         return typed.compareTo(remaining) > 0 ? null : new Split(typed, null);
@@ -569,7 +498,6 @@ public class NewInvoicePanel extends JPanel {
 
     private boolean addPayment(PayMethod m, BigDecimal typed) { return addPayment(m, typed, null, null); }
 
-    /** @param walletProvider / walletRef chi tiết ví điện tử có sẵn (từ mã QR); null = tự điền. */
     private boolean addPayment(PayMethod m, BigDecimal typed, String walletProvider, String walletRef) {
         if (cart.isEmpty()) {
             Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào nên chưa có gì để thu!",
@@ -597,7 +525,7 @@ public class NewInvoicePanel extends JPanel {
                     I18n.msg("Số tiền quá lớn", "Amount Too High"));
             return false;
         }
-        if (m.hasChange()) {                                    // khách đưa dư có hợp lý không?
+        if (m.hasChange()) {
             CashRules.TenderCheck tc = CashRules.checkTendered(typed, left);
             if (tc.verdict == CashRules.Verdict.REJECT) {
                 Ui.warn(this, tc.message, I18n.msg("Số tiền không hợp lý", "Unreasonable Amount"));
@@ -613,7 +541,7 @@ public class NewInvoicePanel extends JPanel {
         String d1 = null, d2 = null;
         if (m == PayMethod.CARD) {
             String[] card = askCardDetails(split.recorded());
-            if (card == null) return false;                     // người dùng hủy
+            if (card == null) return false;
             d1 = card[0];
             d2 = card[1];
         } else if (m == PayMethod.EWALLET) {
@@ -626,7 +554,6 @@ public class NewInvoicePanel extends JPanel {
         return true;
     }
 
-    /** Hỏi 4 số cuối + mã chuẩn chi in trên phiếu máy POS; sai thì hỏi lại. @return null = hủy */
     private String[] askCardDetails(BigDecimal amount) {
         JTextField last4 = new JTextField(6), auth = new JTextField(8);
         while (Ui.ask(this, I18n.msg("Thông tin thẻ ngân hàng", "Bank Card Details"), last4,
@@ -662,12 +589,6 @@ public class NewInvoicePanel extends JPanel {
         refreshPayTable();
     }
 
-    /**
-     * Nút "Tạo mã QR": mã VietQR cho số tiền đang gõ trong ô (chỉ với Ví điện tử). Số tiền được
-     * kiểm theo luật của ví TRƯỚC khi sinh mã: ví không có tiền thối, nên mã QR mang số tiền lớn
-     * hơn số còn thiếu là mã không ghi nhận được (BR13). Xác nhận đã nhận tiền -> thêm một dòng
-     * thanh toán ví điện tử, nhà cung cấp "VietQR", mã giao dịch lấy từ mã QR.
-     */
     private void showQr() {
         if (cart.isEmpty()) {
             Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào.", "The invoice has no items yet!"),
@@ -703,11 +624,10 @@ public class NewInvoicePanel extends JPanel {
             return;
         }
         QrPaymentDialog.Result res = QrPaymentDialog.show(this, amount);
-        if (res == null) return;                                 // người dùng hủy
+        if (res == null) return;
         if (addPayment(PayMethod.EWALLET, res.amount, "VietQR", res.transactionRef)) tfAmount.setText("");
     }
 
-    /** Nút "Thối tiền": tách tiền thối thành các tờ. */
     private void showChangeBreakdown() {
         BigDecimal change = totalChange();
         if (change.signum() <= 0) {
@@ -729,11 +649,6 @@ public class NewInvoicePanel extends JPanel {
         JOptionPane.showMessageDialog(this, ta, I18n.msg("Thối tiền", "Change"), JOptionPane.INFORMATION_MESSAGE);
     }
 
-    /**
-     * Tổng hóa đơn GIẢM sau khi sửa / xóa dòng mà đã thu nhiều hơn: bớt phần thừa trên các dòng
-     * TIỀN MẶT từ dưới lên (tiền khách đưa giữ nguyên -> tiền thối tăng). Chỉ có thẻ / ví thì
-     * không có đường thối -> báo để thu ngân "Clear all" rồi nhập lại.
-     */
     private void recalculatePaymentsIfNeeded() {
         BigDecimal excess = totalRecorded().subtract(totalDue());
         if (excess.signum() <= 0) return;
@@ -761,16 +676,6 @@ public class NewInvoicePanel extends JPanel {
         return false;
     }
 
-    // =================================================================
-    //  LƯU
-    // =================================================================
-
-    /**
-     * Bước 1 của lưu: định giá lại CẢ GIỎ theo ngày của server, ngay trước khi ghi.
-     * Có dòng nào đổi giá / khuyến mãi (giỏ mở qua nửa đêm, giá mới vừa có hiệu lực)
-     * -> cập nhật giỏ, báo thu ngân và DỪNG: số tiền vừa thu là theo giá cũ, phải
-     * kiểm lại trước khi bấm lưu lần nữa. Không đổi gì -> sang bước 2 (doSave).
-     */
     private void save() {
         if (cart.isEmpty()) { warnNoItems(); return; }
         List<CartLine> snapshot = new ArrayList<>(cart);
@@ -786,7 +691,7 @@ public class NewInvoicePanel extends JPanel {
                 CartLine old = snapshot.get(i);
                 Priced pr = prices.get(i);
                 int idx = cart.indexOf(old);
-                if (idx < 0) continue;                      // dòng bị xóa trong lúc chờ
+                if (idx < 0) continue;
                 if (pr.price() == null) {
                     Ui.warn(this, I18n.msg("\"" + old.product.name + "\" chưa có giá hiệu lực vào ngày " + pr.date()
                                            + ".\nVui lòng xóa dòng đó khỏi hóa đơn!",
@@ -819,7 +724,6 @@ public class NewInvoicePanel extends JPanel {
         });
     }
 
-    /** Bước 2: kiểm ở giao diện (đủ dòng, đủ tiền) rồi gọi createInvoice NGOÀI EDT; xong thì in hóa đơn. */
     private void doSave() {
         if (cart.isEmpty()) { warnNoItems(); return; }
         if (payments.isEmpty()) {
@@ -867,7 +771,7 @@ public class NewInvoicePanel extends JPanel {
             }
         }
 
-        CustomerRef cus = customer.getSelected();               // null = khách vãng lai
+        CustomerRef cus = customer.getSelected();
         List<CartLine> lines = new ArrayList<>(cart);
         List<PaymentEntry> pays = new ArrayList<>(payments);
         setBusy(true);
@@ -876,7 +780,7 @@ public class NewInvoicePanel extends JPanel {
                 () -> invoiceDao.createInvoice(counter.id, cashier.id, cus == null ? null : cus.id, lines, pays),
                 () -> { setBusy(false); btSave.setText(saveLabel()); },
                 id -> {
-                    ReceiptDialog.show(this, invoiceDao, id);  // đọc LẠI từ database rồi in
+                    ReceiptDialog.show(this, invoiceDao, id);
                     resetForm();
                     if (onSaved != null) onSaved.run();
                 });
@@ -904,7 +808,6 @@ public class NewInvoicePanel extends JPanel {
         refreshPayTable();
     }
 
-    /** Cho cửa sổ chính hỏi trước khi đóng app mà bỏ giỏ hàng chưa lưu. */
     public boolean hasPendingWork() { return !cart.isEmpty() || !payments.isEmpty(); }
 
     public String pendingWorkSummary() {
@@ -918,10 +821,6 @@ public class NewInvoicePanel extends JPanel {
         Ui.warn(this, I18n.msg("Hóa đơn chưa có dòng hàng nào!", "The invoice has no items yet!"),
                 I18n.msg("Chưa có dòng hàng", "No Items Yet"));
     }
-
-    // =================================================================
-    //  VẼ LẠI
-    // =================================================================
 
     private void setBusy(boolean b) {
         busy = b;

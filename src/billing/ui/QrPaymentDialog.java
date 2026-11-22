@@ -9,36 +9,7 @@ import java.awt.image.BufferedImage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-/**
- * ====================================================================
- *  QrPaymentDialog -- mã VietQR cho một số tiền, và nút xác nhận
- * ====================================================================
- *
- *  <p>Tách khỏi {@code NewInvoicePanel} ({@code handleQrPayment} +
- *  {@code showQrDialog}, 90 dòng) và sửa ba điều app đang nói không đúng:
- *
- *  <ul>
- *    <li><b>Tài khoản lấy từ cấu hình và CÓ TÁC DỤNG</b> (plan/14 lỗi #27).
- *        Bản cũ có ba lỗi xếp lên nhau: {@code getResourceAsStream} với
- *        classpath {@code out;lib\*} trả {@code null} nên {@code props.load}
- *        ném NPE; {@code config.properties} không có khoá {@code qr.*} nào; và
- *        ba field đọc được cũng không được truyền cho {@code VietQRHelper}.
- *        Giờ đọc qua {@link AppConfig} -- lớp khối 2 đã dựng đúng đường, đọc
- *        bằng {@code FileInputStream} nên KHÔNG phụ thuộc classpath.</li>
- *    <li><b>Số tiền không bị cắt phần lẻ im lặng:</b>
- *        {@code setScale(0, HALF_UP)} TRƯỚC {@code longValue()}. Bản cũ gọi
- *        {@code amount.longValue()} nên {@code 198.000,50} vào mã QR thành
- *        {@code 198000}.</li>
- *    <li><b>Nói thật rằng đối soát là thủ công.</b> Nút <i>Xác nhận</i> là
- *        người bấm, không phải cổng thanh toán -- hộp thoại ghi rõ điều đó.</li>
- *  </ul>
- *
- *  <p>Hộp thoại CÓ CHA ({@code getWindowAncestor}), khác
- *  {@code new JDialog((Frame) null, ...)} của bản cũ (lỗi #29).
- */
 public class QrPaymentDialog {
-
-    /** Kết quả: người dùng đã xác nhận nhận tiền, kèm mã giao dịch. */
     public static class Result {
         public final BigDecimal amount;
         public final String     transactionRef;
@@ -49,23 +20,15 @@ public class QrPaymentDialog {
         }
     }
 
-    /** {@code qr.enabled=false} -> nút <i>Tao ma QR</i> ẩn hẳn, không mờ. */
     public static boolean isEnabled() {
         return AppConfig.getBoolean("qr.enabled", true);
     }
 
-    /**
-     * Hiện mã QR cho {@code amount}. Trả {@code null} nếu người dùng huỷ.
-     *
-     * @param amount số tiền cần thu, đã được chỗ gọi kiểm {@code > 0}
-     */
     public static Result show(Component parent, BigDecimal amount) {
         String bin     = AppConfig.get("qr.bank.bin",     VietQRHelper.DEFAULT_BIN);
         String account = AppConfig.get("qr.account.no",   VietQRHelper.DEFAULT_ACCOUNT);
         String holder  = AppConfig.get("qr.account.name", "");
 
-        // setScale TRUOC longValue: con so trong ma QR phai bang con so hien
-        // tren hop thoai, va bang con so se ghi vao Payment.
         BigDecimal rounded = amount.setScale(0, RoundingMode.HALF_UP);
         String ref = "TXN" + (System.currentTimeMillis() % 10000000);
 
@@ -105,7 +68,6 @@ public class QrPaymentDialog {
                           new Font("Segoe UI", Font.ITALIC, 12), Color.GRAY));
         dialog.add(info, BorderLayout.SOUTH);
 
-        // Mảng 1 phần tử: hàm trong lambda không gán được biến địa phương.
         final Result[] out = new Result[1];
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));

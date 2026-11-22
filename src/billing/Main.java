@@ -6,19 +6,8 @@ import billing.ui.MainWindow;
 
 import javax.swing.*;
 
-/**
- * ====================================================================
- *  ĐIỂM KHỞI ĐỘNG CỦA APP
- * ====================================================================
- *  Việc đầu tiên: thử kết nối MySQL. Nếu hỏng thì báo lỗi rõ ràng ngay
- *  thay vì để app mở ra rồi mỗi nút bấm lại văng một exception khó hiểu.
- *  Sau khi kết nối thành công: mở thẳng cửa sổ chính (MainWindow).
- */
 public class Main {
-
     public static void main(String[] args) {
-
-        // Giao diện theo phong cách Windows thay vì giao diện Java mặc định
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignore) { }
@@ -43,12 +32,8 @@ public class Main {
             return;
         }
 
-        // Đánh dấu mốc mở đầu phiên trong logs/sql.log -- file đó chứa nhật ký
-        // của nhiều ngày, không có dòng mốc thì không biết câu nào thuộc phiên nào.
-        // Xem tab "5. SQL Log" của Setup App.
         SqlLog.appStart(Db.getUrl());
 
         SwingUtilities.invokeLater(() -> new MainWindow().setVisible(true));
     }
 }
-

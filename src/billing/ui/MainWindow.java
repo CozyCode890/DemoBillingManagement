@@ -5,19 +5,10 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
-/**
- * ====================================================================
- *  MainWindow -- Cửa sổ chính của ứng dụng
- * ====================================================================
- *  Gom 4 màn hình vào các tab.
- *  Có thanh trạng thái hiển thị trạng thái hệ thống và nút đổi ngôn ngữ.
- */
 public class MainWindow extends JFrame {
-
     private final InvoiceViewPanel viewPanel   = new InvoiceViewPanel();
     private final SearchPanel      searchPanel = new SearchPanel();
 
-    /** Giữ làm field để kiểm tra giỏ hàng chưa lưu trước khi đóng ứng dụng. */
     private final NewInvoicePanel newInvoice;
 
     private final JLabel    lbStatus   = new JLabel();
@@ -33,7 +24,6 @@ public class MainWindow extends JFrame {
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(Ui.BOLD);
 
-        // Lưu hóa đơn xong thì danh sách bên tab 3 tự tải lại.
         newInvoice = new NewInvoicePanel(viewPanel::reload);
 
         tabs.addTab(I18n.text("1. Lập hóa đơn", "1. Create Billing"), newInvoice);
@@ -65,11 +55,6 @@ public class MainWindow extends JFrame {
         I18n.install(this);
     }
 
-    // ------------------------------------------------------------------
-    //  Thanh trạng thái
-    // ------------------------------------------------------------------
-
-    /** Thanh trạng thái dưới đáy cửa sổ: Trạng thái + Đổi ngôn ngữ */
     private JComponent statusBar() {
         JPanel bar = new JPanel(new BorderLayout());
         bar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(210, 210, 210)));

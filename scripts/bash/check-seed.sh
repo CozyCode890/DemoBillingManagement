@@ -5,7 +5,6 @@
 # ---------------------------------------------------------------------
 #  Khoi 5 chot bon hop dong cua GIAO DIEN bang code (check-contracts.sh).
 #  Khoi 6 chot nam hop dong cua DU LIEU bang SQL: sql/05_invariants.sql.
-#  Dac ta: docs/plan/15 muc 3 va muc 4.7.
 #
 #  Chay duoc BAT CU LUC NAO, khong chi sau khi nap seed -- ke ca sau khi
 #  nguoi dung da bam chuot sua/xoa du lieu bang giao dien. Do la diem khac
@@ -76,7 +75,7 @@ echo -e "${CYAN}--- Kiem 17 bat bien cua du lieu (sp_check_seed) ---${NC}"
 #   (lan dau, hoac moi khi SQL doi) la sp_check_seed bien mat roi tao lai.
 #   De script tu nap thi no chay duoc sau BAT KY duong dung database nao --
 #   va khong phai them mot buoc vao hai duong nap do (duong cua Setup App
-#   thi khoi 6 cam khong duoc sua -- docs/plan/15 muc 4.1 diem 2).
+#   thi khoi 6 cam khong duoc sua).
 # File nay chi CREATE mot thu tuc va co DROP ... IF EXISTS o dau, nen nap
 # lai bao nhieu lan cung xong va khong cham mot dong du lieu nao.
 set +e
@@ -123,5 +122,5 @@ if [ "$TOTAL" -eq 0 ]; then
     exit 0
 fi
 echo -e "${RED}[LOI] Co $TOTAL vi pham -- xem cac dong 'SAI' o bang tren.${NC}"
-echo -e "${YELLOW}      Cot Hop_dong chi ra muc nao cua docs/plan/15 dang bi vi pham.${NC}"
+echo -e "${YELLOW}      Cot Hop_dong chi ra business rule (BR) nao dang bi vi pham.${NC}"
 exit 1

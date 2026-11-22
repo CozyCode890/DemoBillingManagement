@@ -1,21 +1,5 @@
 package billing.model;
 
-/**
- * Trang thai hoa don -- BAN CHEP DUY NHAT cua bo gia tri trong Java.
- *
- * Truoc khoi 4, bo ba gia tri nay bi chep 3 lan: ENUM trong 01_schema.sql,
- * mang String[] trong EditInvoiceDialog, va literal 'PAID'/'VOIDED' trong
- * cau WHERE cua SearchPanel. Them mot trang thai la phai sua ba cho, ma
- * khong cho nao bao neu quen (plan/13 loi #6).
- *
- * Vong doi: hoa don ra doi o PAID (sp_create_invoice_header + sp_settle_invoice
- *           kiem "co dong hang, thu du tien" -- thieu thi ROLLBACK)
- *           PAID -> VOIDED (sp_void_invoice: nut "Huy hoa don", hoac tra hang)
- *           VOIDED khong co duong ra (plan/13 muc 3.2).
- *
- * Trang thai OPEN (thu thieu tien van luu) DA BI BO: ENUM cua cot Status
- * chi con ('PAID','VOIDED') -- 01_schema.sql muc 9.
- */
 public enum InvoiceStatus {
     PAID  ("Da thanh toan"),
     VOIDED("Da huy");
@@ -24,20 +8,12 @@ public enum InvoiceStatus {
 
     InvoiceStatus(String label) { this.label = label; }
 
-    /** Ma luu trong database, dung bang ten hang so. */
     public String code()  { return name(); }
 
-    /** Nhan tieng Viet khong dau de hien tren giao dien. */
     public String label() { return label; }
 
-    /** Nhan kem ma, vi du "Da thanh toan (PAID)". */
     public String display() { return label + " (" + name() + ")"; }
 
-    /**
-     * Doc tu chuoi lay tu database. Tra null khi khong khop -- KHONG nem
-     * IllegalArgumentException nhu Enum.valueOf: mot gia tri la trong cot
-     * Status khong duoc phep lam sap man hinh xem hoa don.
-     */
     public static InvoiceStatus of(String raw) {
         if (raw == null) return null;
         for (InvoiceStatus s : values()) {
@@ -46,7 +22,6 @@ public enum InvoiceStatus {
         return null;
     }
 
-    /** Hien o JComboBox / JLabel: nhan kem ma, khong phai ten hang so tho. */
     @Override
     public String toString() { return display(); }
 }

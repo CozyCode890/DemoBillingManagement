@@ -1,28 +1,4 @@
--- =====================================================================
---  05_invariants.sql -- Kiem tra bat bien du lieu cho Retail Invoicing (Topic 19)
---  Chay bang:  mysql -u root -p retail_billing < 05_invariants.sql
---              roi:  CALL sp_check_seed(@v); SELECT @v;
---  Doi chieu 01_schema.sql, 02_seed.sql, 04_routines.sql va 16 Business
---  Rules BR1 - BR16 (docs/09-BUSINESS-RULES.md).
---  17 quy tac R1..R17 la BAT BIEN DU LIEU, khong phai 17 business rule:
---  mot BR co the can nhieu bat bien (vi du BR3 -> R3, R4, R17).
---  Moi quy tac tra ve SO DONG VI PHAM -- tat ca phai bang 0.
--- =====================================================================
---  VI SAO LA MOT FILE RIENG, KHONG NAM TRONG 04_routines.sql:
---  04_routines.sql la HOP DONG voi tang Java -- moi routine
---  trong do co mot cho goi trong app. sp_check_seed khong co: no la mot
---  dung cu kiem, giong tools/check/ContractCheck.java cua khoi 5, chi khac
---  la bat bien ve DU LIEU thi kiem bang SQL ngan hon nhieu.
---
---  Chay duoc BAT CU LUC NAO, ke ca sau khi nguoi dung da bam chuot lam ban
---  database -- do la diem khac quan trong nhat so voi "kiem luc nap seed".
---
---  KHONG DUNG SIGNAL, dung OUT p_violations (plan/15 muc 4.7):
---  mot thu tuc vua tra bang vua SIGNAL thi phia Java nhan exception SAU KHI
---  da doc xong bang, va chi goi phai bat loi o giua vong lap doc ket qua.
---  Voi OUT, script doc MOT SO NGUYEN de quyet dinh exit code, con
---  ContractCheck doc CA HAI: bang de in ra, so de cong vao fail.
--- =====================================================================
+-- 05_invariants.sql -- Data checks
 
 USE retail_billing;
 
@@ -30,17 +6,9 @@ DROP PROCEDURE IF EXISTS sp_check_seed;
 
 DELIMITER $$
 
--- ---------------------------------------------------------------------
--- sp_check_seed: chay cac quy tac kiem tra bat bien du lieu, tra ve
---                bang ket qua tung quy tac va tong so vi pham qua OUT.
---
---   Doc ket qua: cot Vi_pham phai bang 0 o TAT CA CAC DONG. Dong nao
---   khac 0 thi cot Hop_dong chi ra Business Rule / pham vi vi pham.
--- ---------------------------------------------------------------------
+-- sp_check_seed: run all data checks and return the violations
 CREATE PROCEDURE sp_check_seed(OUT p_violations INT)
 BEGIN
-    -- So ngay ma seed cam ket phu kin, PHAI khop tham so p_days cua
-    -- CALL sp_seed_demo_data(...) o cuoi 02_seed.sql (mac dinh 90 => 91 ngay).
     DECLARE v_days INT DEFAULT 90;
 
     DROP TEMPORARY TABLE IF EXISTS tmp_check_seed;
@@ -52,10 +20,7 @@ BEGIN
         Hop_dong VARCHAR(28)  NOT NULL
     ) ENGINE=InnoDB;
 
-    -- -----------------------------------------------------------------
-    -- R1 -- BR6 / BR8: Don gia cua moi dong hang BANG gia hieu luc tai
-    --       ngay ban (Valid_From_Date <= Invoice.Date gan nhat).
-    -- -----------------------------------------------------------------
+    -- R1 -- BR6 / BR8: line price equals the product price on the sale date
     INSERT INTO tmp_check_seed VALUES (1, 'R1',
         'Don gia = gia tai ngay ban (fn_get_product_price)',
         (SELECT COUNT(*)
@@ -65,10 +30,7 @@ BEGIN
             OR  l.Unit_Price <> fn_get_product_price(l.Barcode, i.`Date`)),
         'BR6 / BR8');
 
-    -- -----------------------------------------------------------------
-    -- R2 -- BR5 / BR9 / BR11: Tien giam cua moi dong hang BANG cong thuc
-    --       khuyen mai tot nhat (khong cong don) tai ngay ban.
-    -- -----------------------------------------------------------------
+    -- R2 -- BR5 / BR9 / BR11: line discount matches the formula
     INSERT INTO tmp_check_seed VALUES (2, 'R2',
         'Giam gia = cong thuc tai ngay ban (fn_line_discount)',
         (SELECT COUNT(*)
@@ -78,9 +40,7 @@ BEGIN
                                                l.Quantity, l.Unit_Price)),
         'BR5 / BR9 / BR11');
 
-    -- -----------------------------------------------------------------
-    -- R3 -- BR3 / BR14: 'PAID' nghia la DA THU DU VA CO >= 1 DONG HANG.
-    -- -----------------------------------------------------------------
+    -- R3 -- BR3 / BR14: a PAID invoice is fully paid and has at least 1 line
     INSERT INTO tmp_check_seed VALUES (3, 'R3',
         'PAID thi da thu du tien VA co dong hang',
         (SELECT COUNT(*)
@@ -92,10 +52,7 @@ BEGIN
                  < fn_invoice_amount_due(i.Invoice_ID))),
         'BR3 / BR14');
 
-    -- -----------------------------------------------------------------
-    -- R4 -- BR3 / BR14: Hoa don 'VOIDED' cung da duoc thu du tien truoc
-    --       khi bi huy (huy hoa don khong xoa lich su Payment).
-    -- -----------------------------------------------------------------
+    -- R4 -- BR3 / BR14: a VOIDED invoice was also fully paid before
     INSERT INTO tmp_check_seed VALUES (4, 'R4',
         'VOIDED cung da thu du tien luc lap (khong xoa Payment)',
         (SELECT COUNT(*)
@@ -107,9 +64,7 @@ BEGIN
               < fn_invoice_amount_due(i.Invoice_ID)),
         'BR3 / BR14');
 
-    -- -----------------------------------------------------------------
-    -- R5 -- BR13: Tien khach dua >= tien ghi nhan voi thanh toan tien mat.
-    -- -----------------------------------------------------------------
+    -- R5 -- BR13: cash tendered >= amount for cash payments
     INSERT INTO tmp_check_seed VALUES (5, 'R5',
         'Tien khach dua >= tien ghi nhan (Cash_Payment)',
         (SELECT COUNT(*)
@@ -118,10 +73,7 @@ BEGIN
          WHERE  c.Tendered_Amount < p.Amount),
         'BR13');
 
-    -- -----------------------------------------------------------------
-    -- R6 -- BR12 / BR13 (Payment ISA Total & Disjoint): moi dong Payment
-    --       nam o DUNG MOT trong ba bang con (Cash, Card, EWallet).
-    -- -----------------------------------------------------------------
+    -- R6 -- BR12 / BR13: each payment has exactly one type
     INSERT INTO tmp_check_seed VALUES (6, 'R6',
         'Moi Payment nam o dung MOT bang con (ISA Total & Disjoint)',
         (SELECT COUNT(*)
@@ -134,9 +86,7 @@ BEGIN
               + (ew.Payment_ID IS NOT NULL) <> 1),
         'BR12 / BR13');
 
-    -- -----------------------------------------------------------------
-    -- R7 -- BR7 / BR16: Tong so luong tra cua moi dong hang <= so mua.
-    -- -----------------------------------------------------------------
+    -- R7 -- BR7 / BR16: total returned quantity <= quantity bought
     INSERT INTO tmp_check_seed VALUES (7, 'R7',
         'Tong SL tra cua mot dong <= SL da mua',
         (SELECT COUNT(*)
@@ -149,9 +99,7 @@ BEGIN
          WHERE  t.da_tra > l.Quantity),
         'BR7 / BR16');
 
-    -- -----------------------------------------------------------------
-    -- R8 -- BR2 / BR16: Ngay tra hang nam trong [ngay ban, hom nay].
-    -- -----------------------------------------------------------------
+    -- R8 -- BR2 / BR16: return date is between sale date and today
     INSERT INTO tmp_check_seed VALUES (8, 'R8',
         'Ngay ban <= ngay tra <= hom nay',
         (SELECT COUNT(*)
@@ -161,10 +109,7 @@ BEGIN
             OR  r.Return_Date > CURDATE()),
         'BR2 / BR16');
 
-    -- -----------------------------------------------------------------
-    -- R9 -- BR15 / BR16: Hoa don co luot tra hang giu trang thai PAID
-    --       VA nguoi duyet tra hang (Approved_By) phai la MANAGER.
-    -- -----------------------------------------------------------------
+    -- R9 -- BR15 / BR16: invoices with returns stay PAID
     INSERT INTO tmp_check_seed VALUES (9, 'R9',
         'Hoa don tra hang phai PAID VA do MANAGER duyet',
         (SELECT COUNT(*)
@@ -175,18 +120,13 @@ BEGIN
             OR  c.Role   <> 'MANAGER'),
         'BR15 / BR16');
 
-    -- -----------------------------------------------------------------
-    -- R10 -- BR2: Khong co hoa don o ngay tuong lai so voi dong ho server.
-    -- -----------------------------------------------------------------
+    -- R10 -- BR2: no invoice is in the future
     INSERT INTO tmp_check_seed VALUES (10, 'R10',
         'Khong co hoa don o ngay tuong lai',
         (SELECT COUNT(*) FROM Invoice WHERE `Date` > CURDATE()),
         'BR2');
 
-    -- -----------------------------------------------------------------
-    -- R11 -- BR1: Ma hoa don dung dinh dang <Shop>-<Counter>-<YYYYMMDD>-<SEQ>
-    --        khop voi Counter_ID -> Shop_ID va Invoice.Date.
-    -- -----------------------------------------------------------------
+    -- R11 -- BR1: invoice ID has the format <Shop>-<Counter>-<YYYYMMDD>-<SEQ>
     INSERT INTO tmp_check_seed VALUES (11, 'R11',
         'Ma hoa don khop <Shop>-<Counter>-<YYYYMMDD>-<SEQ>',
         (SELECT COUNT(*)
@@ -198,10 +138,7 @@ BEGIN
                 )),
         'BR1');
 
-    -- -----------------------------------------------------------------
-    -- R12 -- Do phu du lieu seed: moi ngay trong [CURDATE() - v_days, CURDATE()]
-    --        deu co it nhat 1 hoa don (v_days + 1 ngay).
-    -- -----------------------------------------------------------------
+    -- R12 -- every day in the seed window has at least 1 invoice
     INSERT INTO tmp_check_seed VALUES (12, 'R12',
         CONCAT(v_days + 1, ' ngay gan nhat deu co hoa don'),
         (SELECT (v_days + 1) - COUNT(DISTINCT `Date`)
@@ -210,9 +147,7 @@ BEGIN
                            AND CURDATE()),
         'Seed Coverage');
 
-    -- -----------------------------------------------------------------
-    -- R13 -- BR16: Return_ID cua moi dong hoa don lien tuc tu 1 (1..n).
-    -- -----------------------------------------------------------------
+    -- R13 -- BR16: return numbers of each line go 1, 2, ..., n
     INSERT INTO tmp_check_seed VALUES (13, 'R13',
         'Return_ID cua moi dong lien tuc tu 1',
         (SELECT COUNT(*)
@@ -223,9 +158,7 @@ BEGIN
          WHERE  t.so_luot <> t.so_lon_nhat),
         'BR16');
 
-    -- -----------------------------------------------------------------
-    -- R14 -- BR11: Expiry_Date cua khuyen mai >= Promo_End_date.
-    -- -----------------------------------------------------------------
+    -- R14 -- BR11: promotion Expiry_Date >= Promo_End_date
     INSERT INTO tmp_check_seed VALUES (14, 'R14',
         'Expiry_Date cua khuyen mai >= Promo_End_date',
         (SELECT COUNT(*)
@@ -234,10 +167,7 @@ BEGIN
          WHERE  p.Expiry_Date < a.Promo_End_date),
         'BR11');
 
-    -- -----------------------------------------------------------------
-    -- R15 -- BR4 / BR10: Cashier_ID va Customer_ID (neu co) phai ton tai
-    --        hop le, khong rong/ky tu trang.
-    -- -----------------------------------------------------------------
+    -- R15 -- BR4 / BR10: Cashier_ID and Customer_ID (if any) must exist
     INSERT INTO tmp_check_seed VALUES (15, 'R15',
         'Cashier_ID hop le va Customer_ID (neu co) khong rong',
         (SELECT COUNT(*)
@@ -249,10 +179,7 @@ BEGIN
                 AND (TRIM(i.Customer_ID) = '' OR cu.Customer_ID IS NULL))),
         'BR4 / BR10');
 
-    -- -----------------------------------------------------------------
-    -- R16 -- BR7 / BR9: Don vi dong goi (PIECE/PACK/BOX) phai la so nguyen
-    --        va thanh tien dong >= 0.
-    -- -----------------------------------------------------------------
+    -- R16 -- BR7 / BR9: packed units (PIECE/PACK/BOX) must have whole quantities
     INSERT INTO tmp_check_seed VALUES (16, 'R16',
         'SL nguyen cho hang dong goi va thanh tien dong >= 0',
         (SELECT COUNT(*)
@@ -263,21 +190,16 @@ BEGIN
             OR  (l.Quantity * l.Unit_Price - l.Discount) < 0),
         'BR7 / BR9');
 
-    -- -----------------------------------------------------------------
-    -- R17 -- BR3 (Zero Draft Clutter): Trang thai hoa don chi thuoc PAID/VOIDED, khong
-    --        co trang thai nhap/Draft hay hoa don PAID bi xoa sach dong hang.
-    -- -----------------------------------------------------------------
+    -- R17 (BR17): invoice status is only PAID or VOIDED, no draft in DB
     INSERT INTO tmp_check_seed VALUES (17, 'R17',
         'Trang thai chi PAID/VOIDED (khong luu Draft trong CSDL)',
         (SELECT COUNT(*)
          FROM   Invoice i
          WHERE  i.Status NOT IN ('PAID', 'VOIDED')
             OR  TRIM(COALESCE(i.Status, '')) = ''),
-        'BR3');
+        'BR17');
 
-    -- -----------------------------------------------------------------
-    -- Bang ket qua + tong so vi pham qua tham so OUT.
-    -- -----------------------------------------------------------------
+    -- Result table and total number of violations
     SELECT  Quy_tac                                  AS Quy_tac,
             Noi_dung                                 AS Noi_dung,
             Vi_pham                                  AS Vi_pham,

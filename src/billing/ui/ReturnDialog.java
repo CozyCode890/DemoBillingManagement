@@ -11,21 +11,14 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Hộp thoại TRẢ HÀNG. Mỗi dòng của hóa đơn (sp_get_returnable_lines) là một hàng của bảng;
- * gõ số lượng vào cột "SL trả" -> kiểm (<= số còn lại) -> SQL tính tiền hoàn (fn_return_refund)
- * -> chọn Manager duyệt (BR15) -> Xác nhận -> InvoiceDao.processReturn(): một transaction.
- * Hóa đơn gốc GIỮ NGUYÊN 'PAID' (BR16), nên phần còn lại vẫn trả được ở lần sau.
- */
 public class ReturnDialog extends JDialog {
-
     private static final int QTY_COL = 6, REFUND_COL = 7;
 
     private final InvoiceDao dao;
     private final String invoiceId;
-    private final List<Object[]> lines;     // Dong, San_pham, DVT, SL_mua, SL_da_tra, SL_con_lai, Don_gia, Giam_gia, Thanh_tien
-    private final BigDecimal[] qty;         // số lượng trả đã kiểm của từng dòng (null = không trả)
-    private final BigDecimal[] refund;      // tiền hoàn SQL tính cho số lượng đó
+    private final List<Object[]> lines;
+    private final BigDecimal[] qty;
+    private final BigDecimal[] refund;
     private final DefaultTableModel model;
     private final JTable table;
     private final JLabel lbTotal = new JLabel(Ui.money(BigDecimal.ZERO));
@@ -33,7 +26,6 @@ public class ReturnDialog extends JDialog {
     private final JComboBox<IdName> cbApprover;
     private boolean updating, saved;
 
-    /** @param managers nhân viên Role = MANAGER (sp_lookup_managers) -- người được chọn để duyệt */
     public ReturnDialog(Window owner, InvoiceDao dao, String invoiceId, String header,
                         QueryResult returnable, List<IdName> managers) {
         super(owner, I18n.msg("Trả hàng -- hóa đơn ", "Return items -- invoice ") + invoiceId, ModalityType.APPLICATION_MODAL);
@@ -48,7 +40,6 @@ public class ReturnDialog extends JDialog {
                 I18n.text("Dòng", "Line"), I18n.text("Sản phẩm", "Product"), I18n.text("ĐVT", "Unit"),
                 I18n.text("SL mua", "Bought"), I18n.text("SL đã trả", "Returned"), I18n.text("SL còn lại", "Remaining"),
                 I18n.text("SL trả", "Return qty"), I18n.text("Tiền hoàn", "Refund")}, 0) {
-            // Dòng đã trả hết (còn lại 0) thì không gõ được nữa.
             @Override public boolean isCellEditable(int r, int c) { return c == QTY_COL && Ui.dec(lines.get(r)[5]).signum() > 0; }
         };
         for (Object[] r : lines) {
@@ -95,7 +86,6 @@ public class ReturnDialog extends JDialog {
 
     private int lineNo(int row) { return Integer.parseInt(String.valueOf(lines.get(row)[0])); }
 
-    /** Thu ngân vừa gõ số lượng trả cho một dòng: kiểm <= số còn lại, rồi hỏi SQL tiền hoàn. */
     private void onQtyEdited(int row) {
         String text = String.valueOf(model.getValueAt(row, QTY_COL)).trim();
         BigDecimal q = null, r = null;
@@ -103,7 +93,7 @@ public class ReturnDialog extends JDialog {
             q = Ui.readQuantity(this, text, Ui.dec(lines.get(row)[5]), String.valueOf(lines.get(row)[2]));
             if (q != null) {
                 try {
-                    r = dao.returnRefund(invoiceId, lineNo(row), q);   // Java KHÔNG tự tính tiền hoàn
+                    r = dao.returnRefund(invoiceId, lineNo(row), q);
                 } catch (Exception ex) {
                     Ui.error(this, ex);
                     q = null;
@@ -126,7 +116,7 @@ public class ReturnDialog extends JDialog {
     }
 
     private void confirm() {
-        if (table.isEditing()) table.getCellEditor().stopCellEditing();     // chốt ô đang gõ dở
+        if (table.isEditing()) table.getCellEditor().stopCellEditing();
         IdName approver = (IdName) cbApprover.getSelectedItem();
         if (approver == null) {
             Ui.warn(this, I18n.msg("Vui lòng chọn quản lý duyệt lần trả hàng này!",
